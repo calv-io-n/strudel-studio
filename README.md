@@ -41,7 +41,7 @@ Normal installation does not download a browser or configure optional tools. Pyt
 
 **Neon Drive** is a 46-second synth-pop arrangement: four editable patterns, two lanes, and two mapped performance controls.
 
-[![Watch the captioned Studio walkthrough](docs/media/walkthrough-poster.png)](https://github.com/calv-io-n/strudel/blob/master/docs/media/walkthrough.webm)
+[![Watch the captioned Studio walkthrough](docs/media/walkthrough-poster.png)](docs/media/walkthrough.webm)
 
 [Watch or download the captioned walkthrough](docs/media/walkthrough.webm) · [Read the demo guide](patterns/sets/neon-drive/README.md)
 
