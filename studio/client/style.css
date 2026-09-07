@@ -282,3 +282,39 @@ dialog input { width: 100%; }
 
 .source-link { padding: 7px 8px; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
 .source-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Pattern identity follows its clips in both appearances. */
+[data-color="blue"] { --pattern-color:#528ee8}
+[data-color="cyan"] { --pattern-color:#29a7c6}
+[data-color="teal"] { --pattern-color:#2b9c8e}
+[data-color="green"] { --pattern-color:#6b9e47}
+[data-color="amber"] { --pattern-color:#bd962e}
+[data-color="orange"] { --pattern-color:#d48243}
+[data-color="rose"] { --pattern-color:#cf6c88}
+[data-color="violet"] { --pattern-color:#9a7bd6}
+
+#tabs [data-tab] { border-top:3px solid var(--pattern-color); touch-action:none}
+
+#ruler { margin-left:180px}
+.track-row { display:flex; position:relative}
+.track-header { position:sticky; left:0; z-index:4; flex:0 0 180px; width:180px; box-sizing:border-box; background:var(--panel,#eee); border-bottom:1px solid var(--border,#888); padding:8px; display:flex; gap:4px; align-items:center; flex-wrap:wrap}
+.track-header strong { width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.track-header[aria-current=true] { box-shadow:inset 3px 0 var(--accent,#528ee8)}
+.track-header button { font-size:11px; padding:3px 7px}
+.track-row .lane { flex:1; background-size:var(--grid,64px) 100%; min-width:0}
+.clip[data-color] { background:color-mix(in srgb,var(--pattern-color) 24%,var(--panel,#fff)); border:1px solid var(--pattern-color); border-left:4px solid var(--pattern-color); color:var(--text,#222); touch-action:none; overflow:hidden}
+.clip[data-muted=true] { opacity:.55; border-style:dashed}
+.clip:focus-visible { outline:2px solid var(--text,#222); outline-offset:2px}
+.drag-ghost { position:absolute; pointer-events:none; z-index:8; opacity:.8; padding:8px}
+.drag-ghost[data-invalid=true] { border-color:#d44; background:#d443}
+.snap-guide { position:absolute; top:0; bottom:0; width:2px; background:var(--text,#222); pointer-events:none; z-index:9}
+.color-picker { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin:16px 0}
+.color-picker button { border-top:8px solid var(--pattern-color); text-transform:capitalize}
+.color-picker [aria-pressed=true] { outline:2px solid currentColor}
+#sequencer-scroll { overflow:auto; max-height:calc(var(--drawer-height,300px) - 90px)}
+
+
+.track-row .lane { background-image:linear-gradient(to right,transparent calc(100% - 1px),var(--line) calc(100% - 1px)); background-size:var(--grid,64px) 100%}
+.track-header { height:60px; padding:4px 8px}
+.clip small { color:inherit}
+.clip { min-width:0; padding:6px 4px}

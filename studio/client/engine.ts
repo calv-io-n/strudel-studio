@@ -6,7 +6,7 @@ import * as draw from '@strudel/draw';
 import * as fonts from '@strudel/soundfonts';
 import { transpiler } from '@strudel/transpiler';
 import { SlotTimeline, slotName } from '../shared/slots';
-import { arrangement, PatternTimeline, type Pattern } from '../shared/arrangement';
+import { arrangement, MuteTimeline, PatternTimeline, type Pattern } from '../shared/arrangement';
 import type { Asset, Project } from '../shared/model';
 import type { StudioEditor } from './editor';
 import { soundCatalog, soundKey } from './completions';
@@ -36,6 +36,12 @@ export class Engine {
   private compiling?: StudioEditor;
   private compilingBusy = false;
   private compositionCompile = false;
+  private mutes = new MuteTimeline();
+  pendingMuteCycle: number | undefined;
+  updateMutes() {
+    if (this.started && this.target === 'composition') this.pendingMuteCycle = this.mutes.queue(this.project().clips, this.project().tracks, this.repl.scheduler.lastEnd);
+    this.changed();
+  }
   private patterns = new PatternTimeline();
   private applied = new Map<string, number>();
   target: string | 'composition' | undefined;
@@ -122,7 +128,7 @@ export class Engine {
         if (target !== 'composition') cps = this.compiler.scheduler.cps;
       }
       if (epoch !== this.epoch) return;
-      const pattern = target === 'composition' ? arrangement(clips, next) : next.get(target)!;
+      const pattern = target === 'composition' ? arrangement(clips, next, this.mutes) : next.get(target)!;
       // Check queries before replacing a working performance.
       pattern.queryArc(0, 1);
       if (!Number.isFinite(cps) || cps <= 0) throw new Error('Tempo must be greater than zero.');
@@ -131,6 +137,7 @@ export class Engine {
         // Applying a tempo change with lookahead needs a separate clock transition.
         // Keep the running tempo; new code tempo takes effect on the next Play.
       } else {
+        this.mutes.reset(this.project().clips, this.project().tracks);
         this.patterns.reset(pattern);
         this.repl.scheduler.setCps(cps);
         this.target = target;
@@ -149,7 +156,8 @@ export class Engine {
     }
   }
   tick() {
-    this.patterns.settle(this.cycle);
+    this.patterns.settle(this.cycle); this.mutes.settle(this.cycle);
+    if (this.pendingMuteCycle !== undefined && this.cycle >= this.pendingMuteCycle) { this.pendingMuteCycle = undefined; this.changed(); }
     if (this.pendingCycle !== undefined && this.cycle >= this.pendingCycle) this.pendingCycle = undefined;
     if (this.started && this.cycle >= this.endCycle) this.stop();
   }
@@ -207,7 +215,7 @@ export class Engine {
   }
   stop() {
     this.epoch++;
-    this.pendingCycle = undefined;
+    this.pendingCycle = undefined; this.pendingMuteCycle = undefined;
     this.repl.scheduler.stop(); draw.cleanupDraw(true);
     this.noteRequests.clear();
     for (const number of this.notes.keys()) this.noteOff(number);

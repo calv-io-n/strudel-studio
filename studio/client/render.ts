@@ -56,7 +56,7 @@ window.addEventListener('message', async event => {
     const offline = new OfflineAudioContext(2, Math.ceil(seconds * 44100), 44100);
     audio.setAudioContext(offline); audio.setSuperdoughAudioController(null); audio.resetGlobalEffects();
     await audio.initAudio();
-    const pattern = target === 'composition' ? arrangement(project.clips, patterns) : patterns.get(target)!;
+    const pattern = target === 'composition' ? arrangement(project.clips.map(c => ({ ...c, muted: c.muted || project.tracks.some(t => t.id === c.trackId && t.muted) })), patterns) : patterns.get(target)!;
     // Schedule in onset order, a cycle at a time, to preserve cut groups without a huge event list.
     let rendering: Promise<AudioBuffer> | undefined;
     for (let cycle = 0; cycle < end; cycle++) {

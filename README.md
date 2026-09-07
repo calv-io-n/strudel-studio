@@ -13,11 +13,11 @@
   <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/license-AGPL--3.0--or--later-88b5f3?style=flat-square&amp;labelColor=202630"></a>
 </p>
 
-**A focused place to turn code into music.** Write independent patterns, arrange two layers into a song, shape them with MIDI, and export a stereo WAV. Your sessions stay on your machine.
+**A focused place to turn code into music.** Write independent patterns, arrange colored tracks into a song, shape them with MIDI, and export a stereo WAV. Your sessions stay on your machine.
 
 Strudel Studio is an **independent application built with [Strudel](https://strudel.cc)**, the open-source live-coding music environment. This repository adds a local studio workflow; it is not the upstream Strudel REPL or an official Strudel release.
 
-![Neon Drive in Strudel Studio: dark editor with the Lead pattern above a two-lane arrangement of Rhythm, Chords, Lead and Breakdown clips.](docs/media/studio-dark.png)
+![Neon Drive in Strudel Studio: dark editor with the Lead pattern above a colored track arrangement of Rhythm, Chords, Lead and Breakdown clips.](docs/media/studio-dark.png)
 
 *One editor. Tools when you need them. Neon Drive running entirely from synthesizers—no samples, account, or API key.*
 
@@ -39,7 +39,9 @@ Normal installation does not download a browser or configure optional tools. Pyt
 
 ## Hear the demo
 
-**Neon Drive** is a 46-second synth-pop arrangement: four editable patterns, two lanes, and two mapped performance controls.
+Right-click tabs to choose their colors. Arrange clips across up to 16 named tracks, mute tracks or clips, and snap movement to 1, ½, or ¼ cycle.
+
+**Neon Drive** is a 46-second synth-pop arrangement: four color-coded patterns, two tracks, and two mapped performance controls.
 
 [![Watch the captioned Studio walkthrough](docs/media/walkthrough-poster.png)](docs/media/walkthrough.webm)
 
@@ -57,7 +59,7 @@ The demo installer preserves existing sessions. The walkthrough is a visual guid
 | Workflow | In Studio |
 | --- | --- |
 | Write | Named tabs, code completion, inline sliders |
-| Arrange | Two lanes, whole-cycle clips, shared tempo |
+| Arrange | Up to 16 named tracks, clip colors, muting, selectable snapping |
 | Perform | Virtual controls, optional MIDI hardware, live parameters |
 | Keep | Autosaved sessions, recovery drafts, stereo WAV export |
 
@@ -88,7 +90,17 @@ Exported pattern code preserves one pattern; exported WAV preserves the sound. N
 
 ## Build with us
 
-Start with [CONTRIBUTING.md](CONTRIBUTING.md), the [architecture guide](docs/architecture.md), or a focused [bug report](https://github.com/calv-io-n/strudel/issues/new/choose).
+Start with [CONTRIBUTING.md](CONTRIBUTING.md), the [architecture guide](docs/architecture/README.md), or a focused [bug report](https://github.com/calv-io-n/strudel/issues/new/choose).
+
+Our documentation separates intent, decisions, and implementation:
+
+| Directory | Purpose | How to contribute |
+| --- | --- | --- |
+| [docs/design/](docs/design/README.md) | **Target build** — what the product should become. [strudel-studio.md](docs/design/strudel-studio.md) is the main target. | Propose intended behavior and acceptance criteria here. Keep implementation status in architecture docs; explain target changes in your PR. |
+| [docs/adr/](docs/adr/README.md) | **Changes from the design** — decisions to depart from the target, with reasons and consequences. | Copy the ADR template, link the affected design section, describe the departure and alternatives, and submit it with the change. Preserve accepted decision history; supersede an old record when changing the decision. |
+| [docs/architecture/](docs/architecture/README.md) | **As built** — how the current code actually works. | Update affected components, state flows, persistence rules, and limitations in the implementation PR. Link source files and validation; describe planned work in design instead. |
+
+For a feature, start from the target design. If the implementation departs from it, include an ADR; if the target itself evolves, update the design and record the decision. Once code changes, update the as-built documentation to match. See the directory READMEs and [contribution guide](CONTRIBUTING.md) for the workflow.
 
 ```bash
 npm run studio:build

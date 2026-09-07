@@ -6,12 +6,12 @@ This is preparation for the first GitHub release, not a published release announ
 
 **Strudel Studio — a local-first music workspace built with Strudel.**
 
-Write independent pattern tabs, arrange two layers on a shared clock, perform with virtual or optional physical MIDI, and render stereo WAV without leaving the editor. The included Neon Drive demo introduces the workflow without an account, API key, or downloaded samples.
+Write independent pattern tabs, arrange named tracks on a shared clock, perform with virtual or optional physical MIDI, and render stereo WAV without leaving the editor. The included Neon Drive demo introduces the workflow without an account, API key, or downloaded samples.
 
 Highlights:
 
 - Named tabs and contextual rename/duplicate actions.
-- Two-lane, whole-cycle composition and explicit Apply changes during playback.
+- Up to 16 colored composition tracks with muting and fractional snapping and explicit Apply changes during playback.
 - Inline sliders, MIDI Learn, virtual controls, and optional Linux/ALSA hardware routing.
 - Local session autosave, recovery drafts, and migration from earlier project files.
 - Optional ElevenLabs generation with a user-supplied server key.
@@ -32,7 +32,7 @@ Improve setup feedback and accessibility based on reports; validate additional p
 - Review and merge only after CI passes and the licensing/security review has no unresolved release blockers.
 - Enable GitHub private vulnerability reporting, then verify the Security tab's reporting link. The current policy includes a no-details contact-request fallback until enabled.
 - Require the `Linux / Node 24` check for protected `master` updates. Do not create a required check before the workflow exists on the default branch.
-- Update the repository description to “A local-first music workspace built with Strudel: patterns, two-lane composition, MIDI and WAV export.” Suggested topics: `strudel`, `live-coding`, `music`, `midi`, `web-audio`.
+- Update the repository description to “A local-first music workspace built with Strudel: patterns, multitrack composition, MIDI and WAV export.” Suggested topics: `strudel`, `live-coding`, `music`, `midi`, `web-audio`.
 - Review original-content provenance and third-party notices before tagging. Do not add downloaded/generated audio without a rights review.
 - Confirm README media and source links on `master`, then publish a release from the reviewed commit using the draft notes above. No tag or release is created by this preparation PR.
 

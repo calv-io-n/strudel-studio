@@ -12,7 +12,7 @@ test('Neon Drive contains a complete four-tab arrangement and stable playable co
   assert.deepEqual(ProjectSchema.parse(project), project);
   assert.equal(project.bpm, 168); assert.equal(project.tabs.length, 4); assert.equal(project.clips.length, 6);
   assert.equal(Math.max(...project.clips.map(c => c.start + c.length)), 32);
-  assert.deepEqual(project.clips.filter(c => c.lane === 1).map(c => [c.start, c.length]), [[0, 4], [4, 12], [16, 4], [20, 12]]);
+  assert.deepEqual(project.clips.filter(c => c.trackId === 'track-2').map(c => [c.start, c.length]), [[0, 4], [4, 12], [16, 4], [20, 12]]);
   assert.equal(project.bindings.length, 2);
   for (const binding of project.bindings) {
     assert.equal(binding.target.kind, 'slider');

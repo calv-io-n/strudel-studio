@@ -1,3 +1,5 @@
+import { palette } from '../shared/model';
+import { installCompositionGestures } from './composition';
 import './style.css';
 import { newProject, ProjectSchema, type Asset, type Binding, type BridgeStatus, type Job, type MidiEvent, type Project, type Tab, type Clip, type Target } from '../shared/model';
 import { parseMidi, Pickup, scaleCC } from '../shared/midi';
@@ -26,7 +28,7 @@ app.innerHTML = `
     <div class="library-heading"><h2>Your sounds</h2><button id="refresh-assets" class="quiet">Refresh</button></div><div id="assets" class="asset-list"></div>
     <section id="assignment" class="assignment" hidden><button id="insert-sound" class="primary">Insert into pattern</button><details><summary>Assign to a control or slot</summary><h2>Assign selected sound</h2><label for="assign-target">Destination</label><select id="assign-target"></select><button id="assign">Assign sound</button><button id="learn-trigger">Learn a trigger key</button><p class="hint">Pads play one-shots. Slots swap sounds on the next cycle.</p></details></section>
   </aside>
-  <section class="editor-panel panel"><div class="tabbar"><div id="tabs" role="tablist" aria-label="Patterns"></div><button id="new-tab" aria-label="New pattern">+</button><details id="tab-menu"><summary aria-label="Pattern actions">•••</summary><div><button id="rename-tab">Rename pattern</button><button id="duplicate-tab">Duplicate pattern</button><button id="add-to-composition">Add to composition</button><button id="close-tab">Close pattern</button></div></details></div><div id="editor"></div><div id="mapping-context" hidden></div><div class="editor-footer"><span id="slider-hint">Select an inline slider to map it</span><span id="cycle">Cycle 0</span></div></section>
+  <section class="editor-panel panel"><div class="tabbar"><div id="tabs" role="tablist" aria-label="Patterns"></div><button id="new-tab" aria-label="New pattern">+</button><details id="tab-menu"><summary aria-label="Pattern actions">•••</summary><div><button id="color-tab">Color…</button><button id="rename-tab">Rename pattern</button><button id="duplicate-tab">Duplicate pattern</button><button id="add-to-composition">Add to composition</button><button id="close-tab">Close pattern</button></div></details></div><div id="editor"></div><div id="mapping-context" hidden></div><div class="editor-footer"><span id="slider-hint">Select an inline slider to map it</span><span id="cycle">Cycle 0</span></div></section>
   <aside class="mapping-panel panel"><div class="panel-heading"><h2>Control mappings</h2><span id="mapping-count">0</span></div><section class="mapping-setup" aria-label="Slider mapping"><label for="slider-target">Inline slider</label><select id="slider-target"><option value="">Select a slider…</option></select><button id="learn-slider" class="primary">MIDI Learn</button><button id="cancel-learn" hidden>Cancel learning</button><div id="selected-bindings"></div><p id="learn-status" class="hint" role="status">Select a slider, then move a knob or fader.</p><details><summary>Enter mapping manually</summary><form id="manual-map"><label>Device profile<select id="manual-profile"></select></label><div class="form-row"><label>Channel<input id="manual-channel" type="number" min="1" max="16" value="1" required></label><label>CC number<input id="manual-number" type="number" min="0" max="127" value="20" required></label></div><button type="submit">Bind slider</button></form></details></section><div id="bindings"></div>
     <section class="slots-section"><div class="library-heading"><h2>Sound slots</h2><button id="add-slot" class="quiet">Add</button></div><div id="slots"></div></section>
     <details class="devices" open><summary>MIDI devices</summary><p id="bridge-status" class="hint"></p><button id="reconnect">Reconnect MIDI</button><div id="profiles"></div><div class="form-row"><select id="available-ports" aria-label="Available MIDI inputs"></select><button id="add-profile">Connect</button></div></details>
@@ -36,10 +38,10 @@ app.innerHTML = `
 </main>
 <footer class="drawer-bar"><button data-drawer="composition" aria-expanded="false" aria-controls="composition-content">Composition</button><button data-drawer="midi" aria-expanded="false" aria-controls="midi-content">Virtual MIDI</button><button data-drawer="export" aria-expanded="false" aria-controls="export-content">Export</button><span class="footer-hint">Select a slider to map a control</span></footer>
 <section id="drawer" hidden><div id="drawer-resize" role="separator" tabindex="0" aria-label="Resize tools" aria-orientation="horizontal" aria-valuemin="180" aria-valuemax="600" aria-valuenow="300"></div>
-<div id="composition-content" hidden><div class="composition-toolbar"><h2>Composition</h2><label>Tempo <input id="bpm" type="number" min="20" max="300" value="120"> BPM</label><span id="arrangement-status">Edit while stopped · 4 beats per cycle</span></div><div id="sequencer-scroll"><div id="sequencer"><div id="ruler"></div><div class="lane" data-lane="0" aria-label="Lane 1"></div><div class="lane" data-lane="1" aria-label="Lane 2"></div><div id="playhead" hidden></div></div></div></div>
+<div id="composition-content" hidden><div class="composition-toolbar"><h2>Composition</h2><label>Tempo <input id="bpm" type="number" min="20" max="300" value="120"> BPM</label><button id="add-track">Add track</button><label>Snap <select id="snap"><option value="1">1 cycle</option><option value="0.5">½ cycle</option><option value="0.25">¼ cycle</option></select></label><span id="arrangement-status">Edit while stopped · 4 beats per cycle</span></div><div id="sequencer-scroll"><div id="sequencer"><div id="ruler"></div><div id="tracks"></div><div id="playhead" hidden></div></div></div></div>
 <div id="midi-content" hidden></div><div id="export-content" hidden></div></section>
 <dialog id="edit-dialog"><form method="dialog"><h2 id="edit-title"></h2><label id="edit-label">Name<input id="edit-name" maxlength="80" required></label><p id="edit-description"></p><div class="form-row"><button type="button" value="cancel">Cancel</button><button type="submit" value="confirm" class="primary">Confirm</button></div></form></dialog>
-<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Lane<select id="clip-lane" aria-label="Lane"><option value="0">Lane 1</option><option value="1">Lane 2</option></select></label><div class="form-row"><label>Start cycle<input id="clip-start" type="number" min="0" max="4096" required></label><label>Length<input id="clip-length" type="number" min="1" max="4096" required></label></div><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="save" class="primary">Save clip</button></div></form></dialog>
+<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Start cycle<input id="clip-start" step="0.25" type="number" min="0" max="4096" required></label><label>Length<input id="clip-length" step="0.25" type="number" min="0.25" max="4096" required></label></div><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>`;
 
@@ -167,7 +169,8 @@ function renderTransport() {
   $('#evaluate').hidden = !engine.hasChanges;
   $('#evaluate').disabled = engine.busy;
   $('#bpm').disabled = playing || engine.busy;
-  $('#arrangement-status').textContent = playing ? 'Stop playback to edit clips' : 'Edit while stopped · 4 beats per cycle';
+  $('#add-track').disabled = playing || engine.busy || project.tracks.length >= 16;
+  $('#arrangement-status').textContent = engine.pendingMuteCycle !== undefined ? `Mute change at cycle ${engine.pendingMuteCycle}` : playing ? 'Stop playback to edit clips' : 'Edit while stopped · 4 beats per cycle';
 }
 
 function renderSliders() {
@@ -454,7 +457,7 @@ $('#dark-mode').onchange = () => {
   editors.forEach(instance => instance.setAppearance(dark));
 };
 function renderTabs() {
-  $('#tabs').innerHTML = project.tabs.map(tab => `<button role="tab" id="tab-${tab.id}" aria-selected="${tab.id === project.activeTabId}" aria-controls="editor-${tab.id}" tabindex="${tab.id === project.activeTabId ? 0 : -1}" draggable="true" data-tab="${tab.id}">${escape(tab.name)}</button>`).join('');
+  $('#tabs').innerHTML = project.tabs.map(tab => `<button role="tab" id="tab-${tab.id}" aria-selected="${tab.id === project.activeTabId}" aria-controls="editor-${tab.id}" tabindex="${tab.id === project.activeTabId ? 0 : -1}" data-color="${tab.color}" data-tab="${tab.id}">${escape(tab.name)}</button>`).join('');
   editors.forEach((instance, id) => { const root = instance.view.dom.parentElement!; root.hidden = id !== project.activeTabId; root.id = `editor-${id}`; root.setAttribute('role', 'tabpanel'); root.setAttribute('aria-labelledby', `tab-${id}`); });
 }
 function switchTab(id: string) {
@@ -464,7 +467,7 @@ function switchTab(id: string) {
 }
 function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start a new pattern\n$: note("c3 e3 g3").s("triangle").gain(0.2)\n') {
   if (project.tabs.length >= 50) throw new Error('A project can contain up to 50 patterns.');
-  const tab: Tab = { id: crypto.randomUUID(), name: name.slice(0, 80) || 'Pattern', code, anchors: [] };
+  const tab: Tab = { id: crypto.randomUUID(), name: name.slice(0, 80) || 'Pattern', code, anchors: [], color: palette[project.tabs.length % palette.length] };
   project.tabs.push(tab); switchTab(tab.id);
 }
 $('#new-tab').onclick = guard(() => createTab());
@@ -476,7 +479,6 @@ $('#tabs').onkeydown = e => {
   const next = e.key === 'Home' ? 0 : e.key === 'End' ? project.tabs.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + project.tabs.length) % project.tabs.length;
   switchTab(project.tabs[next].id); $(`#tab-${project.activeTabId}`).focus();
 };
-$('#tabs').ondragstart = e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) e.dataTransfer?.setData('text/plain', JSON.stringify({ tabId: id })); };
 $('#edit-dialog button[value="cancel"]').onclick = () => {
   ($('#edit-dialog') as unknown as HTMLDialogElement).close('cancel');
 };
@@ -514,6 +516,7 @@ function duplicateTab(id: string) {
     name = tab.name.slice(0, 80 - suffix.length) + suffix; index++;
   } while (project.tabs.some(t => t.name === name));
   createTab(name, getEditor(id).code);
+  project.tabs.find(t => t.id === project.activeTabId)!.color = tab.color; renderTabs(); dirty();
   $(`[data-tab="${project.activeTabId}"]`).focus();
 }
 async function addSession() {
@@ -562,7 +565,7 @@ function setDrawer(view?: 'composition' | 'midi' | 'export') {
 }
 function resizeDrawer(height: number) {
   drawerHeight = Math.min(600, Math.max(180, height));
-  $('#drawer').style.height = `${drawerHeight}px`; $('#drawer-resize').setAttribute('aria-valuenow', String(drawerHeight));
+  $('#drawer').style.height = `${drawerHeight}px`; $('#drawer').style.setProperty('--drawer-height', `${drawerHeight}px`); $('#drawer-resize').setAttribute('aria-valuenow', String(drawerHeight));
 }
 try { const saved = JSON.parse(localStorage.getItem('studio.drawer') || '{}'); resizeDrawer(Number(saved.height) || 300); if (['composition', 'midi', 'export'].includes(saved.view)) setDrawer(saved.view); } catch { /* default collapsed */ }
 document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.onclick = () => setDrawer(drawerView === b.dataset.drawer ? undefined : b.dataset.drawer as 'composition' | 'midi' | 'export'));
@@ -573,29 +576,61 @@ $('#drawer-resize').onpointerdown = e => {
 };
 $('#drawer-resize').onkeydown = e => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); resizeDrawer(drawerHeight + (e.key === 'ArrowUp' ? 20 : -20)); setDrawer(drawerView); } };
 function editArrangement() { if (engine.started || engine.busy) throw new Error('Stop playback to edit the composition.'); }
+let selectedTrack: string | undefined;
 function renderComposition() {
-  const length = Math.max(16, ...project.clips.map(c => c.start + c.length + 4));
-  $('#bpm').value = String(project.bpm); $('#sequencer').style.width = `${length * 64}px`;
+  if (!project.tracks.some(t => t.id === selectedTrack)) selectedTrack = project.tracks[0].id;
+  const length = Math.ceil(Math.max(16, ...project.clips.map(c => c.start + c.length + 4)));
+  $('#bpm').value = String(project.bpm); $('#snap').value = String(project.snap);
+  $('#sequencer').style.width = `${length * 64 + 180}px`;
+  $('#sequencer').style.setProperty('--grid', `${project.snap * 64}px`);
   $('#ruler').innerHTML = Array.from({ length }, (_, i) => `<span>${i}</span>`).join('');
-  document.querySelectorAll<HTMLElement>('.lane').forEach(lane => {
-    const clips = project.clips.filter(c => c.lane === Number(lane.dataset.lane));
-    lane.innerHTML = clips.map(c => `<button class="clip" draggable="${!engine.started}" data-clip="${c.id}" style="left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(project.tabs.find(t => t.id === c.tabId)?.name)} · lane ${c.lane + 1} · cycle ${c.start} · ${c.length} cycles"><strong>${escape(project.tabs.find(t => t.id === c.tabId)?.name)}</strong><small>${c.length} cycles</small><span class="clip-resize" data-resize="${c.id}" aria-hidden="true"></span></button>`).join('') || '<p class="lane-empty">Drag a pattern here, or use Pattern actions → Add to composition</p>';
-  });
+  $('#clip-lane').innerHTML = project.tracks.map(t => `<option value="${t.id}">${escape(t.name)}</option>`).join('');
+  $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
+    const tab = project.tabs.find(t => t.id === c.tabId)!;
+    return `<button class="clip" data-color="${tab.color}" data-muted="${c.muted || track.muted}" data-clip="${c.id}" style="left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · cycle ${c.start} · ${c.length} cycles${c.muted || track.muted ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${c.muted || track.muted ? 'Muted · ' : ''}${c.length} cycles</small><span class="clip-resize" data-resize="${c.id}" aria-hidden="true"></span></button>`;
+  }).join('') || '<p class="lane-empty">Drag a pattern here, or use Pattern actions → Add to composition</p>'}</div></div>`).join('');
   renderTransport();
 }
+function toggleClipMute(id: string) { const c = project.clips.find(c => c.id === id)!; c.muted = !c.muted; engine.updateMutes(); renderComposition(); dirty(); }
+$('#snap').onchange = () => { project.snap = Number($('#snap').value) as 1 | .5 | .25; renderComposition(); dirty(); };
+$('#add-track').onclick = guard(() => {
+  editArrangement(); if (project.tracks.length >= 16) throw new Error('Track limit reached (16).');
+  let n = 1; while (project.tracks.some(t => t.name === `Track ${n}`)) n++;
+  const track = { id: crypto.randomUUID(), name: `Track ${n}`, muted: false }; project.tracks.push(track); selectedTrack = track.id; renderComposition(); dirty();
+});
+$('#tracks').addEventListener('click', event => {
+  const el = event.target as HTMLElement, header = el.closest<HTMLElement>('[data-track]'); if (!header) return;
+  selectedTrack = header.dataset.track; document.querySelectorAll<HTMLElement>('[data-track]').forEach(h => h.setAttribute('aria-current', String(h.dataset.track === selectedTrack))); const track = project.tracks.find(t => t.id === selectedTrack)!;
+  if (el.closest('[data-track-mute]')) { track.muted = !track.muted; engine.updateMutes(); renderComposition(); dirty(); document.querySelector<HTMLElement>(`[data-track-mute="${track.id}"]`)?.focus(); }
+  else if (el.closest('[data-track-menu]')) {
+    const rect = el.getBoundingClientRect(), disabled = engine.started || engine.busy ? 'Stop playback to edit tracks.' : undefined;
+    contextMenu.open([
+      { label: 'Rename', disabled, run: guard(async () => { editArrangement(); const name = await askEdit('Rename track', track.name); if (name) { editArrangement(); track.name = name; renderComposition(); dirty(); } }) },
+      { label: 'Remove', disabled: disabled || (project.tracks.length === 1 ? 'Keep at least one track.' : undefined), run: guard(async () => { editArrangement(); if (project.clips.some(c => c.trackId === track.id) && !await askEdit(`Remove ${track.name}?`, undefined, 'This also removes all clips on this track.')) return; editArrangement(); project.tracks = project.tracks.filter(t => t.id !== track.id); project.clips = project.clips.filter(c => c.trackId !== track.id); renderComposition(); dirty(); }) },
+    ], rect.left, rect.bottom, () => document.querySelector(`[data-track-menu="${track.id}"]`));
+  }
+});
+function colorTab(id: string) {
+  const tab = project.tabs.find(t => t.id === id)!;
+  const dialog = document.createElement('dialog'); dialog.setAttribute('aria-label', `Color for ${tab.name}`);
+  dialog.innerHTML = `<h2>Pattern color</h2><div class="color-picker">${palette.map(color => `<button data-color="${color}" aria-pressed="${color === tab.color}">${color}</button>`).join('')}</div><button data-cancel>Cancel</button>`;
+  document.body.append(dialog); dialog.onclick = e => { const color = (e.target as HTMLElement).dataset.color; if (color) { tab.color = color as Tab['color']; renderTabs(); renderComposition(); dirty(); } if (color || (e.target as HTMLElement).hasAttribute('data-cancel')) dialog.close(); };
+  dialog.addEventListener('close', () => { dialog.remove(); document.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.focus(); }); dialog.showModal();
+}
+$('#color-tab').onclick = () => colorTab(project.activeTabId);
 function putClip(clip: Clip) {
   editArrangement();
-  if (!canPlace(project.clips, clip)) throw new Error('Use whole cycles and leave space between clips in the same lane.');
+  if (!canPlace(project.clips, clip)) throw new Error('Use quarter-cycle increments and leave space between clips in the same track.');
   if (!project.clips.some(c => c.id === clip.id) && project.clips.length >= 500) throw new Error('This project has reached its clip limit.');
   project.clips = [...project.clips.filter(c => c.id !== clip.id), clip]; renderComposition(); dirty();
 }
 let editingClip: string | undefined;
 function openClip(id: string) {
   editArrangement(); const clip = project.clips.find(c => c.id === id)!; editingClip = id;
-  $('#clip-lane').value = String(clip.lane); $('#clip-start').value = String(clip.start); $('#clip-length').value = String(clip.length); $('#clip-dialog').returnValue = ''; $('#clip-dialog').showModal();
+  $('#clip-lane').value = clip.trackId; $('#clip-start').value = String(clip.start); $('#clip-length').value = String(clip.length); $('#clip-mute').textContent = clip.muted ? 'Unmute' : 'Mute'; $('#clip-dialog').returnValue = ''; $('#clip-dialog').showModal();
 }
 function addToComposition(tabId: string) {
-  editArrangement(); const clip: Clip = { id: crypto.randomUUID(), tabId, lane: 0, start: Math.max(0, ...project.clips.filter(c => c.lane === 0).map(c => c.start + c.length)), length: 4 };
+  editArrangement(); const clip: Clip = { id: crypto.randomUUID(), tabId, trackId: selectedTrack ?? project.tracks[0].id, muted: false, start: Math.max(0, ...project.clips.filter(c => c.trackId === (selectedTrack ?? project.tracks[0].id)).map(c => c.start + c.length)), length: 4 };
   putClip(clip); setDrawer('composition'); openClip(clip.id);
 }
 $('#add-to-composition').onclick = guard(() => addToComposition(project.activeTabId));
@@ -612,34 +647,14 @@ function removeClip(id: string) {
 $('#clip-dialog').addEventListener('close', () => void guard(() => {
   const action = $('#clip-dialog').returnValue, clip = project.clips.find(c => c.id === editingClip); if (!clip || action === 'cancel') return;
   if (action === 'source') { switchTab(clip.tabId); return; }
+  if (action === 'mute') { toggleClipMute(clip.id); return; }
   editArrangement();
   if (action === 'duplicate') duplicateClip(clip.id);
   else if (action === 'remove') removeClip(clip.id);
-  else if (action === 'save') putClip({ ...clip, lane: Number($('#clip-lane').value) as 0 | 1, start: Number($('#clip-start').value), length: Number($('#clip-length').value) });
+  else if (action === 'save') putClip({ ...clip, trackId: $('#clip-lane').value, start: Number($('#clip-start').value), length: Number($('#clip-length').value) });
 })());
 $('#bpm').onchange = guard(() => { editArrangement(); const bpm = Number($('#bpm').value); if (bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); project.bpm = bpm; dirty(); });
-let resized = false;
-$('#sequencer').onclick = e => { if (resized) { resized = false; return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-clip]')?.dataset.clip; if (id) void guard(() => openClip(id))(); };
-$('#sequencer').ondragstart = e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-clip]')?.dataset.clip; if (engine.started || (e.target as HTMLElement).dataset.resize) { e.preventDefault(); return; } if (id) e.dataTransfer?.setData('text/plain', JSON.stringify({ clipId: id })); };
-$('#sequencer').ondragover = e => { if (!engine.started) e.preventDefault(); };
-$('#sequencer').ondrop = e => {
-  e.preventDefault(); const lane = (e.target as HTMLElement).closest<HTMLElement>('.lane'); if (!lane) return;
-  void guard(() => {
-    const data = JSON.parse(e.dataTransfer?.getData('text/plain') || '{}');
-    const original = project.clips.find(c => c.id === data.clipId);
-    const tabId = original?.tabId ?? data.tabId; if (!project.tabs.some(t => t.id === tabId)) return;
-    putClip({ id: original?.id ?? crypto.randomUUID(), tabId, lane: Number(lane.dataset.lane) as 0 | 1, start: Math.max(0, Math.round((e.clientX - lane.getBoundingClientRect().left) / 64)), length: original?.length ?? 4 });
-  })();
-};
-$('#sequencer').onpointerdown = e => {
-  if (e.button !== 0) return;
-  const handle = (e.target as HTMLElement).closest<HTMLElement>('[data-resize]'); if (!handle || engine.started) return;
-  e.preventDefault(); e.stopPropagation(); const clip = project.clips.find(c => c.id === handle.dataset.resize)!;
-  const x = e.clientX; let length = clip.length; handle.setPointerCapture(e.pointerId);
-  handle.onpointermove = event => { length = Math.max(1, Math.round(clip.length + (event.clientX - x) / 64)); handle.parentElement!.style.width = `${length * 64}px`; };
-  handle.onpointerup = () => { resized = true; void guard(() => putClip({ ...clip, length }))().then(renderComposition); };
-  handle.onpointercancel = renderComposition;
-};
+installCompositionGestures({ project: () => project, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
 
 const contextMenu = new ContextMenu();
 function showContextMenu(target: HTMLElement, x: number, y: number) {
@@ -651,6 +666,7 @@ function showContextMenu(target: HTMLElement, x: number, y: number) {
   if (item.dataset.tab) {
     const id = item.dataset.tab; selector = `[data-tab="${id}"]`;
     actions = [
+      action('Color…', () => colorTab(id)),
       action('Rename', () => renameTab(id)),
       action('Duplicate', () => duplicateTab(id), project.tabs.length >= 50 ? 'Pattern limit reached (50).' : undefined),
       action('Add to composition', () => addToComposition(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : undefined)),
@@ -660,6 +676,7 @@ function showContextMenu(target: HTMLElement, x: number, y: number) {
     const id = item.dataset.clip, clip = project.clips.find(c => c.id === id)!;
     selector = `[data-clip="${id}"]`;
     actions = [
+      action(clip.muted ? 'Unmute' : 'Mute', () => toggleClipMute(id)),
       action('Edit', () => openClip(id), stopped),
       action('Duplicate', () => duplicateClip(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : !duplicatePlacement(project.clips, clip, 'candidate') ? 'No room in this lane.' : undefined)),
       action('Open source pattern', () => switchTab(clip.tabId)),
@@ -697,7 +714,7 @@ async function boot() {
   renderAll(); await refreshProjects(); openSocket(); booted = true;
   if (hasDraft) dirty();
   setInterval(() => {
-    engine.tick(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = !engine.started || engine.target !== 'composition'; $('#playhead').style.left = `${engine.cycle * 64}px`;
+    engine.tick(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = !engine.started || engine.target !== 'composition'; $('#playhead').style.left = `${180 + engine.cycle * 64}px`;
     if (engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }
     if (++frame % 10 === 0 && socket?.readyState === WebSocket.OPEN) send({ type: 'snapshot', diagnostics: engine.diagnostics, sliders: editor.sliders.map((s) => ({ id: s.id, label: s.label, value: s.value })), slots: project.slots });
   }, 100);

@@ -69,7 +69,7 @@ test('sound selection switches by query cycle even across scheduler lookahead', 
 });
 test('project and generation validation reject invalid persisted or billable inputs', () => {
   assert.ok(ProjectSchema.safeParse(newProject()).success);
-  assert.equal(ProjectSchema.safeParse({ ...newProject(), version: 3 }).success, false);
+  assert.equal(ProjectSchema.safeParse({ ...newProject(), version: 4 }).success, false);
   assert.equal(GenerationSchema.safeParse({ prompt: ' ', duration: 1, loop: false }).success, false);
   assert.equal(GenerationSchema.safeParse({ prompt: 'sound', duration: 31, loop: false }).success, false);
 });

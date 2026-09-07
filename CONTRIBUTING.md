@@ -19,11 +19,19 @@ On Linux, browser system libraries can be installed with `npm run setup:browser-
 
 ## Choosing a change
 
-Read the [architecture](docs/architecture.md) and [design direction](docs/design/strudel-studio.md). Small fixes, clearer documentation, accessibility improvements, and reproducible bug reports are welcome. Discuss major feature or dependency changes in an issue first. Additional lanes, automation and hosted accounts are not part of the initial release scope.
+Read the [architecture](docs/architecture/README.md) and [design direction](docs/design/strudel-studio.md). Small fixes, clearer documentation, accessibility improvements, and reproducible bug reports are welcome. Discuss major feature or dependency changes in an issue first. Track reordering, solo/volume mixing, automation and hosted accounts remain outside the current target.
 
 Keep PRs focused. Explain the user-visible problem and resulting behavior, describe validation, and include screenshots for visible UI changes. Add regression coverage for behavior that could break playback, persistence, mappings, or export. Do not add tests that merely repeat markup or implementation details.
 
 Preserve project compatibility and keep user data out of fixtures. Do not reformat unrelated files, bundle dependency upgrades with unrelated changes, or introduce automatic paid requests. Changes to patched dependencies must record the upstream revision, purpose, and date in the attribution notes.
+
+## Documentation changes
+
+- **Target build:** update [docs/design/](docs/design/README.md) for intended product behavior and acceptance criteria. The main target is [strudel-studio.md](docs/design/strudel-studio.md).
+- **Departure from the design:** add a numbered record in [docs/adr/](docs/adr/README.md), using its template. Cite the target section, explain the difference and why it is needed, and document alternatives, consequences, and validation. Mark new proposals as proposed; accepted decisions stay in history and can be superseded.
+- **As built:** update [docs/architecture/](docs/architecture/README.md) in the implementation PR so it describes actual components, data flow, compatibility, and limitations. Include code links and relevant tests. Do not describe unimplemented plans as existing behavior.
+
+A change that implements the target directly needs an architecture update when the implementation changes, but no departure ADR. An intentional target change should include the design update and a decision record explaining what changed. Keep README and workspace instructions consistent with the resulting behavior.
 
 ## Licensing and conduct
 

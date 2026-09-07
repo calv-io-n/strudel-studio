@@ -2,7 +2,7 @@ import { link, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { newProject, ProjectSchema, type Binding, type Project, type Tab } from '../shared/model';
+import { palette, newProject, ProjectSchema, type Binding, type Project, type Tab } from '../shared/model';
 import { scaleCC } from '../shared/midi';
 import { scanSliders } from '../shared/sliders';
 
@@ -11,10 +11,10 @@ export const demoName = 'Neon-Drive';
 
 export async function createNeonDrive(): Promise<Project> {
   const project = newProject();
-  const tabs: Tab[] = await Promise.all(['Rhythm', 'Chords', 'Lead', 'Breakdown'].map(async name => {
+  const tabs: Tab[] = await Promise.all(['Rhythm', 'Chords', 'Lead', 'Breakdown'].map(async (name, index) => {
     const id = `neon-${name.toLowerCase()}`;
     const code = await readFile(path.join(root, 'patterns/sets/neon-drive', `${name.toLowerCase()}.strudel`), 'utf8');
-    return { id, name, code, anchors: scanSliders(code).map((slider, i) => ({ id: `${id}-slider-${i}`, from: slider.from, fingerprint: slider.fingerprint })) };
+    return { id, name, code, color: palette[index], anchors: scanSliders(code).map((slider, i) => ({ id: `${id}-slider-${i}`, from: slider.from, fingerprint: slider.fingerprint })) };
   }));
   const bindings: Binding[] = [
     { tabId: 'neon-lead', number: 20, label: 'Lead brightness' },
@@ -34,12 +34,12 @@ export async function createNeonDrive(): Promise<Project> {
   });
   return ProjectSchema.parse({ ...project, name: 'Neon Drive', bpm: 168, tabs, activeTabId: 'neon-lead', bindings, slots: [],
     clips: [
-      { id: 'intro', tabId: 'neon-chords', lane: 1, start: 0, length: 4 },
-      { id: 'groove-rhythm', tabId: 'neon-rhythm', lane: 0, start: 4, length: 12 },
-      { id: 'groove-lead', tabId: 'neon-lead', lane: 1, start: 4, length: 12 },
-      { id: 'breakdown', tabId: 'neon-breakdown', lane: 1, start: 16, length: 4 },
-      { id: 'final-rhythm', tabId: 'neon-rhythm', lane: 0, start: 20, length: 12 },
-      { id: 'final-lead', tabId: 'neon-lead', lane: 1, start: 20, length: 12 },
+      { id: 'intro', tabId: 'neon-chords', trackId: 'track-2', muted: false, start: 0, length: 4 },
+      { id: 'groove-rhythm', tabId: 'neon-rhythm', trackId: 'track-1', muted: false, start: 4, length: 12 },
+      { id: 'groove-lead', tabId: 'neon-lead', trackId: 'track-2', muted: false, start: 4, length: 12 },
+      { id: 'breakdown', tabId: 'neon-breakdown', trackId: 'track-2', muted: false, start: 16, length: 4 },
+      { id: 'final-rhythm', tabId: 'neon-rhythm', trackId: 'track-1', muted: false, start: 20, length: 12 },
+      { id: 'final-lead', tabId: 'neon-lead', trackId: 'track-2', muted: false, start: 20, length: 12 },
     ],
   });
 }
