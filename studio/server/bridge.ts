@@ -13,7 +13,7 @@ export class MidiBridge {
   constructor(private root: string, private publish: (event: object) => void, readonly disabled = false) {}
   start() {
     this.child?.kill(); this.child = undefined;
-    if (this.disabled) { this.update({ ready: false, message: 'MIDI bridge disabled for automated tests', ports: [], connected: [] }); return; }
+    if (this.disabled) { this.update({ ready: false, message: 'Physical MIDI is disabled. Virtual controls are available.', ports: [], connected: [] }); return; }
     const local = path.join(this.root, '.venv-midi/bin/python');
     const child = spawn(process.env.STUDIO_PYTHON || (existsSync(local) ? local : 'python3'), ['-u', path.join(this.root, 'studio/midi/bridge.py')]);
     this.child = child;
@@ -25,7 +25,7 @@ export class MidiBridge {
       } catch { console.error('[midi] Invalid bridge response'); }
     });
     child.stderr.on('data', () => { /* The bridge returns actionable errors in status messages. */ });
-    child.on('error', (error) => this.update({ ready: false, message: error.message, ports: [], connected: [] }));
+    child.on('error', (error) => this.update({ ready: false, message: `Physical MIDI unavailable. Virtual controls still work. For hardware setup, see docs/setup.md. (${error.message})`, ports: [], connected: [] }));
     child.on('exit', () => { if (this.child === child && this.status.ready) this.update({ ready: false, message: 'MIDI bridge stopped. Use Reconnect MIDI.', ports: [], connected: [] }); });
     child.stdin.on('error', () => {});
   }

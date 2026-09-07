@@ -1,0 +1,31 @@
+name: Bug report
+description: Report a reproducible Studio problem.
+body:
+  - type: markdown
+    attributes:
+      value: "For security issues, follow SECURITY.md. Do not include API keys, private recordings, or personal sessions."
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, Node version, browser version, and Studio commit or release.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include a minimal pattern when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant logs or screenshots
+      description: Remove credentials and private data first.

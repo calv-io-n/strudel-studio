@@ -33,7 +33,7 @@ def main():
         out_index = next(i for i, p in enumerate(loopback.get_ports()) if p.startswith(client_name + ":"))
         loopback.open_port(out_index, "Strudel Virtual Return")
     except Exception as exc:
-        emit({"type": "status", "ready": False, "message": f"MIDI unavailable: {exc}. Install studio/midi/requirements.txt and check /dev/snd/seq.", "ports": [], "connected": []})
+        emit({"type": "status", "ready": False, "message": f"Physical MIDI unavailable: {exc}. Virtual controls still work. See docs/setup.md for Python/ALSA setup and check /dev/snd/seq.", "ports": [], "connected": []})
         return 1
 
     def callback(source):

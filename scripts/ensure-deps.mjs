@@ -1,4 +1,6 @@
-// Ensures the dev environment has everything the workspace expects:
+// Optional legacy-tool diagnostics; run explicitly with npm run ensure-deps.
+// This script is never run automatically during installation.
+// Checks the tools used by the legacy workspace:
 //
 //   1. Bun is on PATH                — strudel-server's bin is a .ts file run by bun
 //   2. Playwright Chromium is cached — strudel-server drives it via Playwright
@@ -9,7 +11,7 @@
 //   - the binary checks are `which`
 //   - `playwright install chromium` short-circuits when the matching version is cached
 //
-// **No check fails the install.** Each missing tool prints a loud yellow warning
+// This diagnostic exits successfully even if a tool is missing. It prints a warning
 // with a copy-paste install command, then we exit 0. Reasons:
 //   * a fresh clone might be set up before the user installs system tools
 //   * CI / offline environments may want to provide tools some other way

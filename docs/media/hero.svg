@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="520" viewBox="0 0 1600 520" role="img" aria-labelledby="title desc">
+<title id="title">Strudel Studio — Write patterns. Arrange ideas. Play.</title>
+<desc id="desc">Graphite editorial wordmark with blue cycle marks and a two-lane arrangement motif.</desc>
+<rect width="1600" height="520" rx="20" fill="#13171d"/>
+<g stroke="#262e39" stroke-width="1"><path d="M72 102H1528M72 428H1528M1120 160V390M1216 160V390M1312 160V390M1408 160V390M1504 160V390M1072 228H1528M1072 324H1528"/></g>
+<g fill="#88b5f3"><rect x="72" y="56" width="9" height="9"/><rect x="90" y="56" width="9" height="9"/><rect x="108" y="56" width="9" height="9"/></g>
+<text x="140" y="66" font-family="ui-monospace,monospace" font-size="15" letter-spacing="3" fill="#a1b1c7">A LOCAL-FIRST MUSIC WORKSPACE</text>
+<text x="72" y="230" font-family="Arial,Helvetica,sans-serif" font-size="104" font-weight="700" letter-spacing="-5" fill="#f3f5f8">strudel<tspan fill="#88b5f3" font-weight="400"> studio</tspan></text>
+<text x="77" y="302" font-family="Arial,Helvetica,sans-serif" font-size="32" letter-spacing="-.5" fill="#d8e0ec">Write patterns. Arrange ideas. Play.</text>
+<text x="78" y="370" font-family="Arial,Helvetica,sans-serif" font-size="18" fill="#94a3b7">Code → composition → performance</text>
+<g fill="#233c5b" stroke="#547fad"><rect x="1120" y="184" width="182" height="38" rx="5"/><rect x="1312" y="184" width="192" height="38" rx="5"/><rect x="1216" y="280" width="192" height="38" rx="5"/></g>
+<path d="M1360 150V386" stroke="#8dbafb" stroke-width="2"/><path d="m1354 146 6 8 6-8" fill="#8dbafb"/>
+<g fill="#7e90a8" font-family="ui-monospace,monospace" font-size="13"><text x="1120" y="172">00</text><text x="1216" y="172">04</text><text x="1312" y="172">08</text><text x="1408" y="172">12</text></g>
+<text x="77" y="473" font-family="ui-monospace,monospace" font-size="14" letter-spacing="2" fill="#99a9bf">PATTERNS / TWO LANES / MIDI / WAV</text>
+<text x="1280" y="473" font-family="ui-monospace,monospace" font-size="14" fill="#99a9bf">BUILT WITH STRUDEL</text>
+</svg>
