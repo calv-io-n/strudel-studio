@@ -1,6 +1,6 @@
-# strudel-studio
+# Optional legacy watcher and sample tools
 
-Personal live coding music workspace. `npm run dev:watcher` and go.
+This guide covers the older external-editor → strudel.cc workflow, not the main Studio application. Start with the [current setup guide](../../setup.md) for Studio. The routing examples below are hardware-specific.
 
 ## Stack
 
@@ -15,7 +15,7 @@ Personal live coding music workspace. `npm run dev:watcher` and go.
 ## Prerequisites
 
 ```bash
-# Node 20+ (use your distro's package manager or nvm)
+# Node 24 (use a version manager or a package source that provides Node 24)
 # Debian/Ubuntu:
 sudo apt install nodejs npm
 
@@ -31,12 +31,7 @@ sudo apt install pulseaudio-utils
 
 Arch: `sudo pacman -S nodejs npm ffmpeg` · Fedora: `sudo dnf install nodejs ffmpeg`
 
-> Playwright Chromium does **not** need to be installed manually. The repo's
-> `postinstall` runs `node ./scripts/ensure-watcher.mjs`, which calls
-> `playwright install chromium` for you and re-runs every time `npm install`
-> resolves a different strudel-server / playwright version. It's a no-op when
-> the right build is already cached, and the bun-on-PATH check warns loudly
-> (without failing the install) if Bun is missing.
+> Run `npm run setup:watcher` explicitly to apply the upstream selector patch and download the watcher’s Chromium browser. Normal installation does not run optional setup. Bun 1.2+ is required for this workflow.
 
 ### GoXLR on Linux (optional)
 
@@ -45,9 +40,10 @@ If you're using a GoXLR, install [goxlr-utility](https://github.com/GoXLR-on-Lin
 ## Setup
 
 ```bash
-git clone <repo-url> strudel-studio
+git clone https://github.com/calv-io-n/strudel.git strudel-studio
 cd strudel-studio
-npm install
+npm ci
+npm run setup:watcher
 npm run dev:watcher
 code .
 ```
@@ -91,63 +87,13 @@ strudel-studio/
 └── README.md
 ```
 
-## package.json
+## Explicit watcher setup
 
-```json
-{
-  "name": "strudel-studio",
-  "version": "1.0.0",
-  "private": true,
-  "scripts": {
-    "postinstall": "node ./scripts/patch-strudel-server.mjs && node ./scripts/ensure-deps.mjs",
-    "patch-strudel-server": "node ./scripts/patch-strudel-server.mjs",
-    "ensure-deps": "node ./scripts/ensure-deps.mjs",
-    "sampler": "PORT=5555 npx @strudel/sampler --dir ./samples",
-    "watch": "bun node_modules/strudel-server/src/main.ts patterns/scratch.strudel",
-    "dev": "concurrently -n sam,watch -c blue,green \"npm run sampler\" \"npm run watch\"",
-    "rec": "./scripts/rec.sh",
-    "chop": "./scripts/chop.sh",
-    "trim": "./scripts/trim.sh",
-    "norm": "./scripts/norm.sh",
-    "yt": "./scripts/yt.sh"
-  },
-  "devDependencies": {
-    "concurrently": "^9.1.0",
-    "strudel-server": "github:micahkepe/strudel-server"
-  },
-  "dependencies": {
-    "@strudel/sampler": "^0.2.4"
-  }
-}
-```
+`npm run setup:watcher` verifies Bun, applies `scripts/patch-strudel-server.mjs`, and installs the watcher's Chromium version. The upstream dependency is pinned in `package.json` and the lockfile. See [attribution notes](../../../THIRD_PARTY_NOTICES.md) for the patch and upstream license.
 
-> `strudel-server` isn't on npm — it's pulled from GitHub. Its bin is a `.ts`
-> file that must be run with Bun, so the `watch` script invokes `bun` on the
-> installed source directly. `@strudel/sampler`'s real flags are `--dir <path>`
-> for the samples folder and `PORT=<n>` (env var, not a flag) for the port —
-> the default if unset is `5432`.
->
-> **Boot is fully automated.** `npm install` runs `postinstall`, which:
->
-> 1. **Patches strudel-server's stale selectors.** strudel.cc removed the `#code`
->    wrapper from its DOM and upstream `strudel-server` still hardcodes
->    `#code .cm-content`. Without the patch the watcher hangs 30s waiting for
->    an editor that never appears. `scripts/patch-strudel-server.mjs` rewrites
->    7 `#code` references → `.code-container` in
->    `node_modules/strudel-server/src/main.ts`. Idempotent — no-op on repeat
->    runs. Re-run manually with `npm run patch-strudel-server`.
->
-> 2. **Verifies every dev tool the workspace expects.** `scripts/ensure-deps.mjs`
->    checks `bun`, Playwright Chromium (running `playwright install chromium`
->    automatically against strudel-server's pinned version), `ffmpeg`, and
->    `yt-dlp` — and warns loudly with copy-paste install commands for any tool
->    that's missing. **No check fails the install** so a fresh clone can run
->    `npm install` before its host has every tool. Skip the Chromium step with
->    `STRUDEL_SKIP_PLAYWRIGHT_INSTALL=1`. Re-run manually with
->    `npm run ensure-deps`.
->
-> Net effect: clone → `npm install && npm run dev:watcher` → working stack, every
-> time, on any machine that has Node + Bun + ffmpeg + yt-dlp.
+`npm run ensure-deps` remains an optional legacy diagnostic command that checks Bun, Chromium, FFmpeg and yt-dlp. It may download Chromium and only warns about missing tools; set `STRUDEL_SKIP_PLAYWRIGHT_INSTALL=1` to suppress the download. Use `setup:watcher` when you need a failing exit code for incomplete setup.
+
+The watcher depends on the upstream strudel.cc interface and network availability. FFmpeg and yt-dlp are needed only for the corresponding audio utilities, not basic Studio playback or its built-in WAV export.
 
 ## npm scripts
 

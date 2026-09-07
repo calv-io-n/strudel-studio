@@ -1,6 +1,6 @@
-import { autocompletion, acceptCompletion, startCompletion, snippetCompletion, type CompletionResult, type CompletionContext, type Completion } from '@codemirror/autocomplete';
+import { autocompletion, closeCompletion, acceptCompletion, startCompletion, snippetCompletion, type CompletionResult, type CompletionContext, type Completion } from '@codemirror/autocomplete';
 import { Prec } from '@codemirror/state';
-import { keymap } from '@codemirror/view';
+import { keymap, ViewPlugin } from '@codemirror/view';
 import { parser } from '@lezer/javascript';
 import type { Asset } from '../shared/model';
 
@@ -64,6 +64,16 @@ export function studioCompletionSource(sounds: () => SoundEntry[], functions: ()
   };
 }
 export function studioCompletions(sounds: () => SoundEntry[], functions: () => string[]) {
-  return [autocompletion({ override: [studioCompletionSource(sounds, functions)], activateOnTyping: true, interactionDelay: 0 }),
+  // Removing a focused suggestion can fire focusout during a CodeMirror update.
+  // Defer closing until that update finishes, and keep it open for internal focus moves.
+  const closeAfterBlur = ViewPlugin.define(view => {
+    let destroyed = false;
+    const blur = () => queueMicrotask(() => {
+      if (!destroyed && !view.dom.contains(view.dom.ownerDocument.activeElement)) closeCompletion(view);
+    });
+    view.dom.addEventListener('focusout', blur);
+    return { destroy() { destroyed = true; view.dom.removeEventListener('focusout', blur); } };
+  });
+  return [closeAfterBlur, autocompletion({ override: [studioCompletionSource(sounds, functions)], activateOnTyping: true, interactionDelay: 0, closeOnBlur: false }),
     Prec.highest(keymap.of([{ key: 'Tab', run: acceptCompletion }, { key: 'Ctrl-Space', run: startCompletion }]))];
 }

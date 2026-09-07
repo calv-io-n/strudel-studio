@@ -2,9 +2,8 @@
   "name": "strudel-studio",
   "version": "1.0.0",
   "private": true,
-  "description": "Personal live coding music workspace for Strudel",
+  "description": "A local-first workspace for writing Strudel patterns, arranging music, and performing with MIDI.",
   "scripts": {
-    "postinstall": "node ./scripts/patch-strudel-server.mjs && node ./scripts/ensure-deps.mjs",
     "patch-strudel-server": "node ./scripts/patch-strudel-server.mjs",
     "ensure-deps": "node ./scripts/ensure-deps.mjs",
     "sampler": "PORT=5555 npx @strudel/sampler --dir ./samples",
@@ -24,15 +23,17 @@
     "studio:e2e": "playwright test --config studio/playwright.config.ts",
     "studio:app": "tsx studio/server/index.ts",
     "dev:watcher": "concurrently -n sam,watch -c blue,green \"npm run sampler\" \"npm run watch\"",
-    "studio:demo": "tsx studio/server/demo.ts"
+    "studio:demo": "tsx studio/server/demo.ts",
+    "setup:watcher": "node scripts/setup-watcher.mjs",
+    "setup:browser-tests": "playwright install chromium"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@types/node": "^26.4.1",
     "@types/ws": "^8.18.1",
     "agent-browser": "^0.36.0",
-    "concurrently": "^9.1.0",
-    "strudel-server": "github:micahkepe/strudel-server",
+    "concurrently": "^9.2.4",
+    "strudel-server": "git+https://github.com/micahkepe/strudel-server.git#b7b4e5742a54ffda7781bd0d1ef33d6a0588c73e",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vite": "^8.2.2"
@@ -54,5 +55,17 @@
     "ws": "^8.21.3",
     "zod": "4.5.4"
   },
-  "type": "module"
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/calv-io-n/strudel.git"
+  },
+  "homepage": "https://github.com/calv-io-n/strudel#readme",
+  "bugs": {
+    "url": "https://github.com/calv-io-n/strudel/issues"
+  }
 }

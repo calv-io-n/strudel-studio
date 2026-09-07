@@ -104,3 +104,22 @@ test('top bar exposes dark mode and creates saved sessions without losing curren
   await expect(page.locator('#add-session')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+test('completion redraw can remove a focused suggestion without a nested editor update', async ({ page }) => {
+  const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await edit(page, '$: s("'); await page.keyboard.type('s', { delay: 80 });
+  await expect(page.getByRole('listbox')).toBeVisible();
+  await page.evaluate(async moduleUrl => {
+    const { EditorView } = await import(moduleUrl);
+    const view = EditorView.findFromDOM(document.querySelector('.tab-editor:not([hidden]) .cm-editor'));
+    const option = document.querySelector('.cm-tooltip-autocomplete li');
+    if (!option || !view) throw new Error('Completion must be open');
+    option.setAttribute('tabindex', '-1'); (option as HTMLElement).focus();
+    view.dispatch({ changes: { from: view.state.doc.length, insert: 'aw' } });
+  }, '/@id/@codemirror/view');
+  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('saw');
+  await page.locator('#project-name').click();
+  await expect(page.getByRole('listbox')).toBeHidden();
+  expect(errors).toEqual([]);
+});

@@ -2,7 +2,7 @@
 // strudel.cc DOM selectors. Upstream hardcodes `#code .cm-...`, but
 // strudel.cc removed `#code` and now wraps the editor in `.code-container`.
 //
-// This script is idempotent — safe to run repeatedly. It runs as `postinstall`
+// This script is idempotent — safe to run repeatedly. It runs during `npm run setup:watcher`
 // and is a no-op if either the upstream file is missing or already patched.
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";

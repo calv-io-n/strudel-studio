@@ -132,7 +132,9 @@ test('pattern queries preserve local timing, layer voices, and apply versions ac
   await page.goto('/');
   const result = await page.evaluate(async (moduleUrl) => {
     const { arrangement, PatternTimeline } = await import(moduleUrl);
-    const core = await import(moduleUrl.replace('/studio/shared/arrangement.ts', '/node_modules/.vite/deps/@strudel_core.js'));
+    // Let Vite resolve the package; cache filenames vary across clean installs.
+    const coreUrl = '/@id/@strudel/core';
+    const core = await import(coreUrl);
     const clips = [{ id: 'a', tabId: 'a', lane: 0, start: 2, length: 2 }, { id: 'b', tabId: 'b', lane: 1, start: 2, length: 1 }];
     const pattern = arrangement(clips, new Map([['a', core.slowcat(core.pure('first'), core.pure('second'))], ['b', core.pure('layer')]]));
     const timeline = new PatternTimeline(); timeline.reset(core.pure('old')); const cycle = timeline.queue(core.pure('new'), 2.2);
