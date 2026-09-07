@@ -1,3 +1,4 @@
+import { isClipMuted } from './mix';
 import * as core from '@strudel/core';
 import type { Clip } from './model';
 
@@ -47,14 +48,14 @@ export class PatternTimeline {
 
 export class MuteTimeline {
   private versions: { cycle: number; ids: Set<string> }[] = [];
-  reset(clips: Clip[], tracks: { id: string; muted: boolean }[]) { this.versions = [{ cycle: 0, ids: this.snapshot(clips, tracks) }]; }
-  private snapshot(clips: Clip[], tracks: { id: string; muted: boolean }[]) {
-    return new Set(clips.filter(c => c.muted || tracks.some(t => t.id === c.trackId && t.muted)).map(c => c.id));
+  reset(clips: Clip[], tracks: { id: string; muted: boolean }[], soloTrackId?: string) { this.versions = [{ cycle: 0, ids: this.snapshot(clips, tracks, soloTrackId) }]; }
+  private snapshot(clips: Clip[], tracks: { id: string; muted: boolean }[], soloTrackId?: string) {
+    return new Set(clips.filter(c => isClipMuted(c, tracks, soloTrackId)).map(c => c.id));
   }
-  queue(clips: Clip[], tracks: { id: string; muted: boolean }[], through: number) {
+  queue(clips: Clip[], tracks: { id: string; muted: boolean }[], through: number, soloTrackId?: string) {
     const cycle = Math.floor(Math.max(0, through)) + 1;
     this.versions = this.versions.filter(v => v.cycle < cycle);
-    this.versions.push({ cycle, ids: this.snapshot(clips, tracks) }); return cycle;
+    this.versions.push({ cycle, ids: this.snapshot(clips, tracks, soloTrackId) }); return cycle;
   }
   segments(id: string, begin: number, end: number): [number, number][] {
     return this.versions.flatMap((v, i) => {

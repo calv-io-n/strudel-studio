@@ -94,3 +94,15 @@ test('muted tracks and clips export silence while retaining fractional arrangeme
   expect((wav.length - 44) / 4 / 44100).toBeCloseTo(1.25, 4);
   expect(wav.subarray(44).every(byte => byte === 0)).toBe(true);
 });
+
+test('solo export excludes other tracks while keeping the full arrangement duration', async ({ page, request }) => {
+  const p = newProject(); p.bpm = 240; p.soloTrackId = 'track-2';
+  p.tabs[0].code = '$: note("c3*4").s("triangle").gain(.2)';
+  p.clips = [{ id: 'excluded', tabId: 'pattern-1', trackId: 'track-1', start: 0, length: 1.25, muted: false }];
+  await request.put('/api/recovery', { data: p }); await page.goto('/');
+  await page.getByRole('button', { name: 'Export', exact: true }).click(); await page.locator('#export-tail').fill('0');
+  const downloaded = page.waitForEvent('download'); await page.getByRole('button', { name: 'Render & download WAV' }).click();
+  const wav = await readFile((await (await downloaded).path())!);
+  expect((wav.length - 44) / 4 / 44100).toBeCloseTo(1.25, 4);
+  expect(wav.subarray(44).every(byte => byte === 0)).toBe(true);
+});

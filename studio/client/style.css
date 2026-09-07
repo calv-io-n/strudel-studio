@@ -107,7 +107,7 @@ summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 10px 0
 .composition-toolbar label { display: flex; align-items: center; gap: 7px; font-size: 11px; }
 .composition-toolbar input { margin: 0 !important; width: 65px; }
 #arrangement-status { color: var(--muted); font-size: 11px; margin-left: auto; }
-#sequencer-scroll { overflow: auto; padding: 0 24px 22px; }
+#sequencer-scroll { overflow: auto; padding: 0 0 22px; }
 #sequencer { position: relative; }
 #ruler { display: flex; height: 24px; color: var(--muted); font-size: 10px; }
 #ruler span { flex: 0 0 64px; border-left: 1px solid var(--line); padding-left: 5px; }
@@ -193,7 +193,7 @@ dialog input { width: 100%; }
   .tools-open .workspace { display: none; }.tools-open #drawer { flex: 1; height: auto !important; max-height: none; min-height: 0; }
   .tools-open .project-menu { display: none; }#drawer-resize { display: none; }
   .composition-toolbar { flex-wrap: wrap; gap: 12px; padding: 18px 12px; }#arrangement-status { width: 100%; margin: 0; }
-  #sequencer-scroll { padding: 0 12px 20px; }.controller-panel .panel-heading { flex-direction: column; align-items: stretch; padding: 18px 12px 8px; }
+  #sequencer-scroll { padding: 0 0 20px; }.controller-panel .panel-heading { flex-direction: column; align-items: stretch; padding: 18px 12px 8px; }
   .controller-panel .panel-heading>div:first-child { justify-content: space-between; }.controller-options { margin-top: 6px; }
   .route-status { padding: 0 12px; }.controls { padding: 18px 12px; }.continuous { grid-template-columns: repeat(4,1fr); gap: 16px; }
   .pads { grid-template-columns: repeat(4,1fr); }.midi-advanced { padding: 0 12px 20px; }.midi-advanced[open] { display: block; }
@@ -295,9 +295,9 @@ dialog input { width: 100%; }
 
 #tabs [data-tab] { border-top:3px solid var(--pattern-color); touch-action:none}
 
-#ruler { margin-left:180px}
+#ruler { margin-left:0}
 .track-row { display:flex; position:relative}
-.track-header { position:sticky; left:0; z-index:4; flex:0 0 180px; width:180px; box-sizing:border-box; background:var(--panel,#eee); border-bottom:1px solid var(--border,#888); padding:8px; display:flex; gap:4px; align-items:center; flex-wrap:wrap}
+.track-header { position:sticky; left:0; z-index:10; flex:0 0 180px; width:180px; box-sizing:border-box; background:var(--panel,#eee); border-bottom:1px solid var(--line); padding:8px; display:flex; gap:4px; align-items:center; flex-wrap:wrap}
 .track-header strong { width:100%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .track-header[aria-current=true] { box-shadow:inset 3px 0 var(--accent,#528ee8)}
 .track-header button { font-size:11px; padding:3px 7px}
@@ -318,3 +318,15 @@ dialog input { width: 100%; }
 .track-header { height:60px; padding:4px 8px}
 .clip small { color:inherit}
 .clip { min-width:0; padding:6px 4px}
+
+#ruler .track-corner { position: sticky; left: 0; z-index: 11; flex: 0 0 180px; padding-left: 8px; border-left: 0; background: var(--panel); }
+.track-header { text-align: left; justify-content: flex-start; border-right: 1px solid var(--line); }
+[data-track-solo][aria-pressed=true] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+/* The fixed header column masks clips, drag previews, guides, and the playhead. */
+#sequencer-scroll { isolation: isolate; }
+
+.composition-drag-badge { position: fixed; z-index: 1000; pointer-events: none; max-width: 224px; padding: 10px 12px; border: 1px solid var(--pattern-color); border-left: 4px solid var(--pattern-color); border-radius: 6px; background: var(--panel); color: var(--text); box-shadow: 0 4px 16px #0003; font-size: 12px; }
+.composition-dragging, .composition-dragging * { cursor: grabbing !important; user-select: none; }
+.drag-source { opacity: .6; }
+.lane[data-drop-target=valid] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.lane[data-drop-target=invalid] { outline: 2px solid #c44; outline-offset: -2px; }

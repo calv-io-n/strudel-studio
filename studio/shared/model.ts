@@ -75,12 +75,13 @@ export type Clip = z.infer<typeof ClipSchema>;
 export const ProjectV3Schema = LegacyProjectSchema.omit({ code: true, anchors: true, version: true }).extend({
   sessionId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/).refine(name => name !== 'recovery').optional(),
   version: z.literal(3), tabs: z.array(TabSchema).min(1).max(50), activeTabId: id,
-  tracks: z.array(TrackSchema).min(1).max(16), snap: z.union([z.literal(1), z.literal(.5), z.literal(.25)]),
+  soloTrackId: tabId.optional(), tracks: z.array(TrackSchema).min(1).max(16), snap: z.union([z.literal(1), z.literal(.5), z.literal(.25)]),
   clips: z.array(ClipSchema).max(500), bpm: z.number().min(20).max(300),
 }).superRefine((p, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
   const tabs = new Set(p.tabs.map(t => t.id)), tracks = new Set(p.tracks.map(t => t.id));
   if (tabs.size !== p.tabs.length || !tabs.has(p.activeTabId)) issue('Invalid pattern tabs');
+  if (p.soloTrackId && !tracks.has(p.soloTrackId)) issue('Solo references a missing track');
   if (tracks.size !== p.tracks.length) issue('Duplicate track ID');
   if (new Set(p.clips.map(c => c.id)).size !== p.clips.length) issue('Duplicate clip ID');
   for (const c of p.clips) {

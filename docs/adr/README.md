@@ -15,3 +15,4 @@ Architecture decision records document intentional changes from the [target desi
 | ADR | Status | Decision |
 | --- | --- | --- |
 | [0001](0001-expand-composition-tracks.md) | Accepted | Expand the initial two-lane, whole-cycle design to colored tracks, muting, and fractional snapping |
+| [0002](0002-exclusive-track-solo.md) | Accepted | Add exclusive track solo and an opaque left-anchored header column |
