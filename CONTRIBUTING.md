@@ -19,7 +19,7 @@ On Linux, browser system libraries can be installed with `npm run setup:browser-
 
 ## Choosing a change
 
-Read the [architecture](docs/architecture/README.md) and [design direction](docs/design/strudel-studio.md). Small fixes, clearer documentation, accessibility improvements, and reproducible bug reports are welcome. Discuss major feature or dependency changes in an issue first. Track reordering, solo/volume mixing, automation and hosted accounts remain outside the current target.
+Read the [architecture](docs/architecture/README.md) and [design direction](docs/design/strudel-studio.md). Small fixes, clearer documentation, accessibility improvements, and reproducible bug reports are welcome. Discuss major feature or dependency changes in an issue first. Track reordering, volume mixing, automation and hosted accounts remain outside the current target.
 
 Keep PRs focused. Explain the user-visible problem and resulting behavior, describe validation, and include screenshots for visible UI changes. Add regression coverage for behavior that could break playback, persistence, mappings, or export. Do not add tests that merely repeat markup or implementation details.
 

@@ -54,13 +54,17 @@ Start with two named tracks, expandable to 16, with per-track and per-clip mutin
 - Show pattern names, cycle markers, and a playhead. An empty track gives one short instruction.
 - New clips are four cycles long. Use one shared tempo, initially 120 BPM with four beats per cycle. Composition ignores source patterns’ global tempo setters. Each clip plays its pattern from cycle zero and repeats for the clip's length. The composition stops at the end of its last clip.
 
-Use eight named colors: blue, cyan, teal, green, amber, orange, rose, and violet. New tabs cycle through them; duplicated tabs inherit the source color. Clip colors always follow the source tab. Track headers offer Mute and Rename/Remove actions; confirm removal of populated tracks and prevent deleting the last track.
+Use eight named colors: blue, cyan, teal, green, amber, orange, rose, and violet. New tabs cycle through them; duplicated tabs inherit the source color. Clip colors always follow the source tab. Track headers offer Mute, exclusive Solo, and Rename/Remove actions; confirm removal of populated tracks and prevent deleting the last track.
+
+Keep the opaque track-header column flush against the left edge, masking the timeline, drag previews, and playhead during horizontal scrolling. The ruler corner must mask scrolling cycle labels too.
+
+Solo isolates one track at a time. Selecting another track switches isolation; toggling the active Solo off restores prior track mute settings. Explicit track and clip mutes take precedence over Solo; a muted soloed track remains silent. Persist the selected solo track and include it in export; apply live changes at the same safe boundary as mute.
 
 Mute tracks or individual clips independently. While composition plays, schedule mute changes at the next safe cycle boundary and display pending state. Muting must not compile drafts or shorten the composition. Export captures mute settings at render start. Standalone tab playback stays independent.
 
-Dragging preserves the grab offset, previews the destination, and magnetically aligns nearby edges. Reject overlaps without shifting neighbors. Escape cancels. Provide edge scrolling and keyboard movement: Left/Right by the grid, Up/Down across tracks, Shift+Left/Right to resize. Keep numeric editing accessible in quarter-cycle increments.
+Dragging a tab reveals Composition and shows a colored source label at the pointer before it reaches a track. Highlight valid and invalid destinations. Dragging preserves the grab offset, previews the destination, and magnetically aligns nearby edges. Reject overlaps without shifting neighbors. Escape cancels. Provide edge scrolling and keyboard movement: Left/Right by the grid, Up/Down across tracks, Shift+Left/Right to resize. Keep numeric editing accessible in quarter-cycle increments.
 
-Keep volume/solo mixing, track reordering, automation lanes, nested arrangements, and detailed clip inspectors out of the first version.
+Keep volume mixing, track reordering, automation lanes, nested arrangements, and detailed clip inspectors out of the first version.
 
 ### Virtual MIDI
 

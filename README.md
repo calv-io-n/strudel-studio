@@ -39,7 +39,7 @@ Normal installation does not download a browser or configure optional tools. Pyt
 
 ## Hear the demo
 
-Right-click tabs to choose their colors. Arrange clips across up to 16 named tracks, mute tracks or clips, and snap movement to 1, ½, or ¼ cycle.
+Right-click tabs to choose their colors. Arrange clips across up to 16 named tracks, mute tracks or clips, solo a track, and snap movement to 1, ½, or ¼ cycle.
 
 **Neon Drive** is a 46-second synth-pop arrangement: four color-coded patterns, two tracks, and two mapped performance controls.
 

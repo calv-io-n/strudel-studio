@@ -39,7 +39,7 @@ export class Engine {
   private mutes = new MuteTimeline();
   pendingMuteCycle: number | undefined;
   updateMutes() {
-    if (this.started && this.target === 'composition') this.pendingMuteCycle = this.mutes.queue(this.project().clips, this.project().tracks, this.repl.scheduler.lastEnd);
+    if (this.started && this.target === 'composition') this.pendingMuteCycle = this.mutes.queue(this.project().clips, this.project().tracks, this.repl.scheduler.lastEnd, this.project().soloTrackId);
     this.changed();
   }
   private patterns = new PatternTimeline();
@@ -137,7 +137,7 @@ export class Engine {
         // Applying a tempo change with lookahead needs a separate clock transition.
         // Keep the running tempo; new code tempo takes effect on the next Play.
       } else {
-        this.mutes.reset(this.project().clips, this.project().tracks);
+        this.mutes.reset(this.project().clips, this.project().tracks, this.project().soloTrackId);
         this.patterns.reset(pattern);
         this.repl.scheduler.setCps(cps);
         this.target = target;

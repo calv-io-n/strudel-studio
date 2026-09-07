@@ -1,3 +1,4 @@
+import { isClipMuted } from '../shared/mix';
 import { palette } from '../shared/model';
 import { installCompositionGestures } from './composition';
 import './style.css';
@@ -170,7 +171,7 @@ function renderTransport() {
   $('#evaluate').disabled = engine.busy;
   $('#bpm').disabled = playing || engine.busy;
   $('#add-track').disabled = playing || engine.busy || project.tracks.length >= 16;
-  $('#arrangement-status').textContent = engine.pendingMuteCycle !== undefined ? `Mute change at cycle ${engine.pendingMuteCycle}` : playing ? 'Stop playback to edit clips' : 'Edit while stopped · 4 beats per cycle';
+  $('#arrangement-status').textContent = engine.pendingMuteCycle !== undefined ? `Mix change at cycle ${engine.pendingMuteCycle}` : playing ? 'Stop playback to edit clips' : 'Edit while stopped · 4 beats per cycle';
 }
 
 function renderSliders() {
@@ -583,11 +584,11 @@ function renderComposition() {
   $('#bpm').value = String(project.bpm); $('#snap').value = String(project.snap);
   $('#sequencer').style.width = `${length * 64 + 180}px`;
   $('#sequencer').style.setProperty('--grid', `${project.snap * 64}px`);
-  $('#ruler').innerHTML = Array.from({ length }, (_, i) => `<span>${i}</span>`).join('');
+  $('#ruler').innerHTML = '<span class="track-corner">Tracks</span>' + Array.from({ length }, (_, i) => `<span>${i}</span>`).join('');
   $('#clip-lane').innerHTML = project.tracks.map(t => `<option value="${t.id}">${escape(t.name)}</option>`).join('');
-  $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
+  $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
     const tab = project.tabs.find(t => t.id === c.tabId)!;
-    return `<button class="clip" data-color="${tab.color}" data-muted="${c.muted || track.muted}" data-clip="${c.id}" style="left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · cycle ${c.start} · ${c.length} cycles${c.muted || track.muted ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${c.muted || track.muted ? 'Muted · ' : ''}${c.length} cycles</small><span class="clip-resize" data-resize="${c.id}" aria-hidden="true"></span></button>`;
+    return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · cycle ${c.start} · ${c.length} cycles${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${c.length} cycles</small><span class="clip-resize" data-resize="${c.id}" aria-hidden="true"></span></button>`;
   }).join('') || '<p class="lane-empty">Drag a pattern here, or use Pattern actions → Add to composition</p>'}</div></div>`).join('');
   renderTransport();
 }
@@ -602,11 +603,12 @@ $('#tracks').addEventListener('click', event => {
   const el = event.target as HTMLElement, header = el.closest<HTMLElement>('[data-track]'); if (!header) return;
   selectedTrack = header.dataset.track; document.querySelectorAll<HTMLElement>('[data-track]').forEach(h => h.setAttribute('aria-current', String(h.dataset.track === selectedTrack))); const track = project.tracks.find(t => t.id === selectedTrack)!;
   if (el.closest('[data-track-mute]')) { track.muted = !track.muted; engine.updateMutes(); renderComposition(); dirty(); document.querySelector<HTMLElement>(`[data-track-mute="${track.id}"]`)?.focus(); }
+  else if (el.closest('[data-track-solo]')) { project.soloTrackId = project.soloTrackId === track.id ? undefined : track.id; engine.updateMutes(); renderComposition(); dirty(); document.querySelector<HTMLElement>(`[data-track-solo="${track.id}"]`)?.focus(); }
   else if (el.closest('[data-track-menu]')) {
     const rect = el.getBoundingClientRect(), disabled = engine.started || engine.busy ? 'Stop playback to edit tracks.' : undefined;
     contextMenu.open([
       { label: 'Rename', disabled, run: guard(async () => { editArrangement(); const name = await askEdit('Rename track', track.name); if (name) { editArrangement(); track.name = name; renderComposition(); dirty(); } }) },
-      { label: 'Remove', disabled: disabled || (project.tracks.length === 1 ? 'Keep at least one track.' : undefined), run: guard(async () => { editArrangement(); if (project.clips.some(c => c.trackId === track.id) && !await askEdit(`Remove ${track.name}?`, undefined, 'This also removes all clips on this track.')) return; editArrangement(); project.tracks = project.tracks.filter(t => t.id !== track.id); project.clips = project.clips.filter(c => c.trackId !== track.id); renderComposition(); dirty(); }) },
+      { label: 'Remove', disabled: disabled || (project.tracks.length === 1 ? 'Keep at least one track.' : undefined), run: guard(async () => { editArrangement(); if (project.clips.some(c => c.trackId === track.id) && !await askEdit(`Remove ${track.name}?`, undefined, 'This also removes all clips on this track.')) return; editArrangement(); if (project.soloTrackId === track.id) project.soloTrackId = undefined; project.tracks = project.tracks.filter(t => t.id !== track.id); project.clips = project.clips.filter(c => c.trackId !== track.id); renderComposition(); dirty(); }) },
     ], rect.left, rect.bottom, () => document.querySelector(`[data-track-menu="${track.id}"]`));
   }
 });
@@ -654,7 +656,7 @@ $('#clip-dialog').addEventListener('close', () => void guard(() => {
   else if (action === 'save') putClip({ ...clip, trackId: $('#clip-lane').value, start: Number($('#clip-start').value), length: Number($('#clip-length').value) });
 })());
 $('#bpm').onchange = guard(() => { editArrangement(); const bpm = Number($('#bpm').value); if (bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); project.bpm = bpm; dirty(); });
-installCompositionGestures({ project: () => project, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
+installCompositionGestures({ reveal: () => setDrawer('composition'), project: () => project, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
 
 const contextMenu = new ContextMenu();
 function showContextMenu(target: HTMLElement, x: number, y: number) {
