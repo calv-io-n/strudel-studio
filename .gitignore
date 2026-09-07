@@ -4,3 +4,12 @@ recordings/*
 samples/ai/
 *.tmp.wav
 .DS_Store
+.env
+.studio/
+.local/
+.venv-midi/
+.venv-mcp/
+studio/dist/
+studio/test-results/
+studio/playwright-report/
+__pycache__/

@@ -1,0 +1,13 @@
+// Neon Drive — Chords. The four-cycle opening: Am / F / C / G.
+// Play this tab alone to hear the harmony before the rhythm arrives.
+setCpm(168 / 4)
+
+$chords: note("< [a3,c4,e4] [f3,a3,c4] [c3,e3,g3] [g3,b3,d4] >")
+  .s("sawtooth").lpf(1500)
+  .attack(0.09).decay(0.2).sustain(0.65).release(0.15)
+  .gain(0.23).room(0.22)
+
+$spark: note("<e5 c5 g4 d5>")
+  .s("triangle")
+  .attack(0.005).decay(0.3).sustain(0).release(0.1)
+  .gain(0.25).delay(0.18).delaytime(0.267857).delayfeedback(0.2)
