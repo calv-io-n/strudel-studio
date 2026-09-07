@@ -13,7 +13,7 @@ Keep the first screen useful and quiet: one pattern, one obvious Play action, an
 ## Visual direction
 
 - Use the restraint of Apple's interfaces: clear typography, generous spacing, and familiar controls.
-- Use neutral surfaces and one accent color for selection and active controls. Offer light and dark appearances through a single Dark mode checkbox in the top bar. Default to light and remember the choice locally; update the editor and tools together.
+- Use neutral surfaces and one accent color for selection and active controls. Offer light and dark appearances through a moon/sun icon toggle in the top bar. Default to light and remember the choice locally; update the editor and tools together.
 - Keep the editor opaque and readable. Any liquid-glass treatment should be subtle and limited to floating surfaces; no decorative blur behind code.
 - Use thin separators and a consistent spacing scale. Avoid cards inside cards, excessive borders, decorative gradients, and ornamental animation.
 - Keep labels legible, keyboard focus visible, and motion optional. Minimalism must not hide essential state.
@@ -22,11 +22,21 @@ Keep the first screen useful and quiet: one pattern, one obvious Play action, an
 
 ### Header and editor
 
-The header contains a Sessions dropdown beside the Strudel name, the project name, save status, playback target, Play, and Stop. The dropdown opens saved sessions and refreshes when used. A + button beside it creates a named session, saving the current work first and using a numbered suffix for duplicate names. Dark mode is directly accessible in the top bar. Occasional actions such as saving, importing, and exporting live in a single Project menu.
+The header contains a Sessions dropdown beside the Strudel name, the project name, save status, playback target, Play, and Stop. The dropdown opens saved sessions and refreshes when used. A + button beside it creates a named session, saving the current work first and using a numbered suffix for duplicate names. A moon/sun icon toggle in the top bar switches between light and dark mode, with an accessible Dark mode label. Occasional actions such as saving, importing, and exporting live in a single Project menu.
 
 A tab strip sits directly above the editor. Each tab holds one named Strudel pattern. Creating, renaming, and closing tabs should feel familiar. Closing a tab must not silently discard work or break a composition that uses it.
 
 The editor takes the remaining space. Inline sliders stay close to the code they control. Do not add a permanent mapping sidebar, event log, or device dashboard.
+
+### Context menus
+
+Right-click a pattern tab, composition clip, or library sound to act on that item without changing the active pattern. Shift+F10 and the Context Menu key open the same menu from a focused item; arrow keys navigate, Enter or Space activates, and Escape dismisses.
+
+- Patterns: rename, duplicate, add to composition, and close. Duplication copies current code with fresh slider identities, without copying mappings or clips.
+- Clips: edit, duplicate, open source pattern, and remove. Duplicate clips occupy the first available whole-cycle space after the original in the same lane. Composition editing requires stopped playback.
+- Sounds: preview, insert into the current pattern, and rename.
+
+Existing buttons remain available. Pattern actions includes duplication, and the clip dialog includes duplication and source navigation. The code editor retains its native context menu.
 
 ### Bottom drawer
 

@@ -202,3 +202,114 @@ test('closing referenced tabs confirms removal and Escape never repeats an earli
   await expect(page.getByRole('tab', { name: 'Bass', exact: true })).toHaveCount(0);
   await expect(page.locator('.clip')).toHaveCount(0);
 });
+
+test('context menus target inactive patterns, copy draft code, and support keyboard dismissal', async ({ page, request }) => {
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
+  await editCode(page, '$: note("d3").gain(slider(0.3,0,1))');
+  await page.getByRole('slider', { name: 'gain inline slider', exact: true }).focus();
+  await page.getByRole('button', { name: 'MIDI Learn', exact: true }).click();
+  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await page.getByRole('slider', { name: 'Knob 1', exact: true }).fill('10');
+  await expect(page.locator('#learn-status')).toContainText('Connected CC 20');
+  await page.locator('#new-tab').click();
+  const original = page.getByRole('tab', { name: 'Pattern 1', exact: true });
+  await original.click({ button: 'right' });
+  await expect(page.getByRole('tab', { name: 'Pattern 2', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  await page.locator('#edit-name').fill('Bass'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  const bass = page.getByRole('tab', { name: 'Bass', exact: true });
+  await bass.focus(); await page.keyboard.press('Shift+F10');
+  await expect(page.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused();
+  await page.keyboard.press('End'); await expect(page.getByRole('menuitem', { name: 'Close', exact: true })).toBeFocused();
+  await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+  await expect(page.getByRole('tab', { name: 'Bass copy', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('note("d3")');
+  await expect.poll(async () => (await (await request.get('/api/recovery')).json()).tabs.length).toBe(3);
+  const saved = await (await request.get('/api/recovery')).json();
+  expect(saved.bindings).toHaveLength(1); expect(saved.bindings[0].target.tabId).toBe(saved.tabs[0].id);
+  expect(saved.tabs[2].anchors[0].id).not.toBe(saved.tabs[0].anchors[0].id); expect(saved.clips).toEqual([]);
+  expect(saved.tabs[2].id).not.toBe(saved.tabs[0].id);
+  await bass.click({ button: 'right' }); await page.keyboard.press('Escape');
+  await expect(page.getByRole('menu')).toBeHidden(); await expect(bass).toBeFocused();
+  await bass.click({ button: 'right' }); await page.locator('#project-name').click();
+  await expect(page.getByRole('menu')).toBeHidden();
+  await page.locator('.tab-editor:not([hidden]) .cm-content').click({ button: 'right' });
+  await expect(page.getByRole('menu')).toBeHidden();
+  await page.reload(); await expect(page.getByRole('tab', { name: 'Bass copy', exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test('clip context menus duplicate around occupied space and prevent edits during playback', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await addClip(page, '0', '0', '4'); await addClip(page, '0', '5', '3');
+  const clip = page.locator('.clip').first();
+  await clip.locator('.clip-resize').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Duplicate', exact: true }).click();
+  await expect(page.locator('.clip')).toHaveCount(3);
+  await expect(page.locator('.clip').last()).toHaveAttribute('aria-label', /cycle 8 · 4 cycles/);
+  await clip.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(page.locator('#clip-dialog')).toBeVisible(); await page.getByRole('button', { name: 'Cancel', exact: true }).click();
+  await page.locator('#new-tab').click();
+  await clip.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Open source pattern', exact: true }).click();
+  await expect(page.getByRole('tab', { name: 'Pattern 1', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.locator('#play').click(); await expect(page.locator('#transport-state')).toContainText('Playing');
+  await clip.click({ button: 'right' });
+  for (const label of ['Edit', 'Duplicate', 'Remove']) await expect(page.getByRole('menuitem', { name: new RegExp(`^${label}`) })).toHaveAttribute('aria-disabled', 'true');
+  await page.keyboard.press('Escape'); await page.locator('#stop').click();
+  await clip.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
+  await expect(page.locator('.clip')).toHaveCount(2);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.locator('.clip').first().click();
+  await expect(page.locator('#clip-dialog')).toBeVisible();
+  expect(await page.locator('#clip-dialog').evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await page.getByRole('button', { name: 'Duplicate', exact: true }).click();
+  await expect(page.locator('.clip')).toHaveCount(3);
+});
+
+test('sound context actions use the clicked sound and menus fit both appearances', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.locator('#sounds-toggle').click();
+  for (const prompt of ['Context sound A', 'Context sound B']) {
+    await page.getByLabel('Describe your next sound').fill(prompt);
+    await page.locator('#generate').click(); await expect(page.locator('#generation-status')).toContainText('Ready to preview');
+  }
+  const first = page.locator('.asset').filter({ hasText: 'Context sound A' });
+  await first.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Rename', exact: true }).click();
+  await page.locator('#edit-name').fill('Renamed sound A'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  const renamed = page.locator('.asset').filter({ hasText: 'Renamed sound A' });
+  await renamed.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Preview', exact: true }).click();
+  await page.locator('#stop').click();
+  for (const dark of [false, true]) {
+    await page.locator('#dark-mode').setChecked(dark);
+    await renamed.dispatchEvent('contextmenu', { clientX: 1438, clientY: 1098 });
+    const bounds = await page.getByRole('menu').boundingBox();
+    expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(1100);
+    await page.screenshot({ path: `/tmp/strudel-context-${dark ? 'dark' : 'light'}.png` });
+    await page.keyboard.press('Escape');
+  }
+  await renamed.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Insert into pattern', exact: true }).click();
+  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('Context sound A');
+  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).not.toContainText('Context sound B');
+});
+
+test('context actions preserve the active tab and protect the last pattern', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  const tab = page.getByRole('tab', { name: 'Pattern 1', exact: true });
+  await tab.click({ button: 'right' });
+  await expect(page.getByRole('menuitem', { name: /^Close/ })).toHaveAttribute('aria-disabled', 'true');
+  await page.getByRole('menuitem', { name: 'Add to composition', exact: true }).click();
+  await page.getByRole('button', { name: 'Save clip', exact: true }).click();
+  await expect(page.locator('.clip')).toHaveCount(1);
+  await page.locator('#new-tab').click();
+  await tab.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Close', exact: true }).click();
+  await expect(page.locator('#edit-description')).toContainText('1 composition clip');
+  await page.keyboard.press('Escape'); await expect(tab).toBeVisible();
+  await tab.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Close', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await expect(tab).toHaveCount(0); await expect(page.locator('.clip')).toHaveCount(0);
+  const active = page.getByRole('tab', { name: 'Pattern 2', exact: true });
+  await expect(active).toHaveAttribute('aria-selected', 'true');
+  await active.click({ button: 'right' }); await page.setViewportSize({ width: 800, height: 700 });
+  await expect(page.getByRole('menu')).toBeHidden();
+});

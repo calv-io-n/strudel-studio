@@ -5,7 +5,8 @@ import { StudioEditor } from './editor';
 import { Engine } from './engine';
 import { setupExport } from './export';
 import { soundLabel } from './completions';
-import { canPlace } from '../shared/clips';
+import { ContextMenu, type MenuAction } from './context-menu';
+import { canPlace, duplicatePlacement } from '../shared/clips';
 
 type UIElement = HTMLElement & { value: string; checked: boolean; disabled: boolean; files?: FileList | null; showModal(): void; returnValue: string };
 const $ = <T extends HTMLElement = UIElement>(selector: string) => document.querySelector<T>(selector)!;
@@ -17,7 +18,7 @@ async function api<T>(path: string, method = 'GET', value?: unknown): Promise<T>
 try { document.documentElement.dataset.appearance = localStorage.getItem('studio.appearance') === 'dark' ? 'dark' : 'light'; } catch { document.documentElement.dataset.appearance = 'light'; }
 const app = $('#app');
 app.innerHTML = `
-<header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Local project</span></div><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sounds</button><label class="check appearance-choice"><input id="dark-mode" type="checkbox"> Dark mode</label></header>
+<header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Local project</span></div><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sounds</button><label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label></header>
 <details class="project-menu"><summary>Project</summary><nav class="sessionbar" aria-label="Project tools"><span class="section-label">Workspace</span><button id="save">Save project</button><button id="import">Import .strudel</button><button id="export">Export code</button><input type="file" id="import-file" accept=".strudel,.str,.js" hidden><span id="connection">Connecting…</span><button id="new-project">New project</button></nav></details>
 <main class="workspace">
   <aside id="sounds-panel" class="sound-panel panel" hidden aria-label="Sound library"><div class="panel-heading"><h1>Sounds <small id="asset-count">0 sounds</small></h1><button id="sounds-close" class="quiet">Back to editor</button></div>
@@ -25,7 +26,7 @@ app.innerHTML = `
     <div class="library-heading"><h2>Your sounds</h2><button id="refresh-assets" class="quiet">Refresh</button></div><div id="assets" class="asset-list"></div>
     <section id="assignment" class="assignment" hidden><button id="insert-sound" class="primary">Insert into pattern</button><details><summary>Assign to a control or slot</summary><h2>Assign selected sound</h2><label for="assign-target">Destination</label><select id="assign-target"></select><button id="assign">Assign sound</button><button id="learn-trigger">Learn a trigger key</button><p class="hint">Pads play one-shots. Slots swap sounds on the next cycle.</p></details></section>
   </aside>
-  <section class="editor-panel panel"><div class="tabbar"><div id="tabs" role="tablist" aria-label="Patterns"></div><button id="new-tab" aria-label="New pattern">+</button><details id="tab-menu"><summary aria-label="Pattern actions">•••</summary><div><button id="rename-tab">Rename pattern</button><button id="add-to-composition">Add to composition</button><button id="close-tab">Close pattern</button></div></details></div><div id="editor"></div><div id="mapping-context" hidden></div><div class="editor-footer"><span id="slider-hint">Select an inline slider to map it</span><span id="cycle">Cycle 0</span></div></section>
+  <section class="editor-panel panel"><div class="tabbar"><div id="tabs" role="tablist" aria-label="Patterns"></div><button id="new-tab" aria-label="New pattern">+</button><details id="tab-menu"><summary aria-label="Pattern actions">•••</summary><div><button id="rename-tab">Rename pattern</button><button id="duplicate-tab">Duplicate pattern</button><button id="add-to-composition">Add to composition</button><button id="close-tab">Close pattern</button></div></details></div><div id="editor"></div><div id="mapping-context" hidden></div><div class="editor-footer"><span id="slider-hint">Select an inline slider to map it</span><span id="cycle">Cycle 0</span></div></section>
   <aside class="mapping-panel panel"><div class="panel-heading"><h2>Control mappings</h2><span id="mapping-count">0</span></div><section class="mapping-setup" aria-label="Slider mapping"><label for="slider-target">Inline slider</label><select id="slider-target"><option value="">Select a slider…</option></select><button id="learn-slider" class="primary">MIDI Learn</button><button id="cancel-learn" hidden>Cancel learning</button><div id="selected-bindings"></div><p id="learn-status" class="hint" role="status">Select a slider, then move a knob or fader.</p><details><summary>Enter mapping manually</summary><form id="manual-map"><label>Device profile<select id="manual-profile"></select></label><div class="form-row"><label>Channel<input id="manual-channel" type="number" min="1" max="16" value="1" required></label><label>CC number<input id="manual-number" type="number" min="0" max="127" value="20" required></label></div><button type="submit">Bind slider</button></form></details></section><div id="bindings"></div>
     <section class="slots-section"><div class="library-heading"><h2>Sound slots</h2><button id="add-slot" class="quiet">Add</button></div><div id="slots"></div></section>
     <details class="devices" open><summary>MIDI devices</summary><p id="bridge-status" class="hint"></p><button id="reconnect">Reconnect MIDI</button><div id="profiles"></div><div class="form-row"><select id="available-ports" aria-label="Available MIDI inputs"></select><button id="add-profile">Connect</button></div></details>
@@ -38,7 +39,7 @@ app.innerHTML = `
 <div id="composition-content" hidden><div class="composition-toolbar"><h2>Composition</h2><label>Tempo <input id="bpm" type="number" min="20" max="300" value="120"> BPM</label><span id="arrangement-status">Edit while stopped · 4 beats per cycle</span></div><div id="sequencer-scroll"><div id="sequencer"><div id="ruler"></div><div class="lane" data-lane="0" aria-label="Lane 1"></div><div class="lane" data-lane="1" aria-label="Lane 2"></div><div id="playhead" hidden></div></div></div></div>
 <div id="midi-content" hidden></div><div id="export-content" hidden></div></section>
 <dialog id="edit-dialog"><form method="dialog"><h2 id="edit-title"></h2><label id="edit-label">Name<input id="edit-name" maxlength="80" required></label><p id="edit-description"></p><div class="form-row"><button type="button" value="cancel">Cancel</button><button type="submit" value="confirm" class="primary">Confirm</button></div></form></dialog>
-<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Lane<select id="clip-lane" aria-label="Lane"><option value="0">Lane 1</option><option value="1">Lane 2</option></select></label><div class="form-row"><label>Start cycle<input id="clip-start" type="number" min="0" max="4096" required></label><label>Length<input id="clip-length" type="number" min="1" max="4096" required></label></div><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="remove" formnovalidate>Remove</button><button value="save" class="primary">Save clip</button></div></form></dialog>
+<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Lane<select id="clip-lane" aria-label="Lane"><option value="0">Lane 1</option><option value="1">Lane 2</option></select></label><div class="form-row"><label>Start cycle<input id="clip-start" type="number" min="0" max="4096" required></label><label>Length<input id="clip-length" type="number" min="1" max="4096" required></label></div><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="save" class="primary">Save clip</button></div></form></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>`;
 
@@ -198,7 +199,7 @@ function renderRoute() {
 }
 function renderAssets() {
   $('#asset-count').textContent = `${assets.length} sound${assets.length === 1 ? '' : 's'}`;
-  $('#assets').innerHTML = assets.length ? assets.map((a) => `<article class="asset ${a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span class="sample-mark">${a.loop ? '∞' : '↗'}</span><span><strong>${escape(soundLabel(a))}</strong><small>${a.duration ? a.duration + 's' : 'Auto duration'} · ${a.loop ? 'Loop' : 'One-shot'}${a.provider === 'fixture' ? ' · Test fixture' : ''}</small></span></button><button data-rename-asset="${a.id}" aria-label="Rename ${escape(soundLabel(a))}">Rename</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}">▶</button></article>`).join('') : '<div class="empty"><div class="empty-wave">∿</div><h3>Your next sound starts here.</h3><p>Describe a sound above, audition the result, then put it on a pad or into your pattern.</p></div>';
+  $('#assets').innerHTML = assets.length ? assets.map((a) => `<article data-asset="${a.id}" class="asset ${a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span class="sample-mark">${a.loop ? '∞' : '↗'}</span><span><strong>${escape(soundLabel(a))}</strong><small>${a.duration ? a.duration + 's' : 'Auto duration'} · ${a.loop ? 'Loop' : 'One-shot'}${a.provider === 'fixture' ? ' · Test fixture' : ''}</small></span></button><button data-rename-asset="${a.id}" aria-label="Rename ${escape(soundLabel(a))}">Rename</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}">▶</button></article>`).join('') : '<div class="empty"><div class="empty-wave">∿</div><h3>Your next sound starts here.</h3><p>Describe a sound above, audition the result, then put it on a pad or into your pattern.</p></div>';
   $('#assignment').hidden = !selectedAsset;
   $('#assign-target').innerHTML = project.controls.filter((c) => c.kind === 'pad' || c.kind === 'key').map((c) => `<option value="pad:${c.id}">${escape(c.label)} · Note ${c.number}</option>`).join('') + project.slots.map((s) => `<option value="slot:${s.name}">Sound slot: ${escape(s.name)}</option>`).join('');
 }
@@ -313,15 +314,16 @@ $('#profiles').onchange = (e) => {
 const removeBinding = (e: MouseEvent) => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-remove-binding]')?.dataset.removeBinding; if (id) { project.bindings = project.bindings.filter((b) => b.id !== id); renderBindings(); dirty(); } };
 $('#bindings').onclick = removeBinding; $('#selected-bindings').onclick = removeBinding;
 $('#refresh-assets').onclick = guard(async () => { assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); renderAssets(); renderSlots(); });
+async function renameSound(id: string) {
+  const asset = assetById(id);
+  const label = await askEdit('Name sound', soundLabel(asset));
+  if (!label) return;
+  const updated = await api<Asset>(`samples/${asset.id}`, 'PATCH', { label });
+  assets = assets.map(item => item.id === updated.id ? updated : item);
+  await engine.registerAssets(assets); renderAssets(); renderSlots(); renderBindings();
+}
 $('#assets').onclick = (e) => { const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
-  if (button.dataset.renameAsset) void guard(async () => {
-    const asset = assetById(button.dataset.renameAsset!);
-    const label = await askEdit('Name sound', soundLabel(asset));
-    if (!label) return;
-    const updated = await api<Asset>(`samples/${asset.id}`, 'PATCH', { label });
-    assets = assets.map(item => item.id === updated.id ? updated : item);
-    await engine.registerAssets(assets); renderAssets(); renderSlots(); renderBindings();
-  })();
+  if (button.dataset.renameAsset) void guard(() => renameSound(button.dataset.renameAsset!))();
   if (button.dataset.selectAsset) { selectedAsset = button.dataset.selectAsset; renderAssets(); }
   if (button.dataset.preview) void guard(() => engine.trigger(assetById(button.dataset.preview!)))();
 };
@@ -411,6 +413,7 @@ $('#saved-projects').onpointerdown = guard(refreshProjects);
 
 $('#save').onclick = guard(async () => { await persistSession(); notice(`Saved ${snapshot().name}.`); });
 async function loadProject(next: Project) {
+  contextMenu.close(false);
   const validated = ProjectSchema.parse(next);
   // Preload before changing the running project. Missing assets are explicit, and
   // leave the current session intact instead of partially applying a load.
@@ -483,14 +486,16 @@ function askEdit(title: string, value?: string, description = ''): Promise<strin
   const dialog = $('#edit-dialog'); dialog.returnValue = ''; dialog.showModal();
   return new Promise(resolve => dialog.addEventListener('close', () => resolve(dialog.returnValue === 'confirm' ? value === undefined ? 'confirmed' : $('#edit-name').value.trim() : undefined), { once: true }));
 }
-$('#rename-tab').onclick = guard(async () => {
-  const tab = project.tabs.find(t => t.id === project.activeTabId)!;
+async function renameTab(id: string) {
+  const tab = project.tabs.find(t => t.id === id)!;
   const name = await askEdit('Rename pattern', tab.name); if (name) { tab.name = name; renderTabs(); renderComposition(); renderTransport(); dirty(); }
-});
-$('#close-tab').onclick = guard(async () => {
+}
+$('#rename-tab').onclick = guard(() => renameTab(project.activeTabId));
+$('#duplicate-tab').onclick = guard(() => duplicateTab(project.activeTabId));
+async function closeTab(id: string) {
   if (engine.busy) throw new Error('Wait for playback preparation to finish.');
   if (project.tabs.length === 1) throw new Error('Keep at least one pattern in the project.');
-  const id = project.activeTabId, tab = project.tabs.find(t => t.id === id)!;
+  const tab = project.tabs.find(t => t.id === id)!;
   const clips = project.clips.filter(c => c.tabId === id).length;
   const mappings = project.bindings.filter(b => b.target.kind === 'slider' && b.target.tabId === id).length;
   if (!await askEdit(`Close ${tab.name}?`, undefined, `This removes its code, ${clips} composition clip(s), and ${mappings} slider mapping(s) from this project.`)) return;
@@ -498,8 +503,19 @@ $('#close-tab').onclick = guard(async () => {
   editors.get(id)?.view.dom.parentElement?.remove(); editors.get(id)?.view.destroy(); editors.delete(id);
   project.tabs = project.tabs.filter(t => t.id !== id); project.clips = project.clips.filter(c => c.tabId !== id);
   project.bindings = project.bindings.filter(b => b.target.kind !== 'slider' || b.target.tabId !== id);
-  switchTab(project.tabs[0].id); renderComposition();
-});
+  switchTab(project.activeTabId === id ? project.tabs[0].id : project.activeTabId); renderComposition();
+}
+$('#close-tab').onclick = guard(() => closeTab(project.activeTabId));
+function duplicateTab(id: string) {
+  const tab = project.tabs.find(t => t.id === id)!;
+  let name = '', index = 1;
+  do {
+    const suffix = index === 1 ? ' copy' : ` copy ${index}`;
+    name = tab.name.slice(0, 80 - suffix.length) + suffix; index++;
+  } while (project.tabs.some(t => t.name === name));
+  createTab(name, getEditor(id).code);
+  $(`[data-tab="${project.activeTabId}"]`).focus();
+}
 async function addSession() {
   if (engine.busy) throw new Error('Wait for playback preparation to finish.');
   const name = await askEdit('Add session', 'Untitled session', 'Your current session will be saved before opening the new one.');
@@ -515,14 +531,15 @@ async function addSession() {
 }
 $('#add-session').onclick = guard(addSession);
 $('#new-project').onclick = guard(addSession);
-$('#insert-sound').onclick = guard(async () => {
-  if (!selectedAsset) return;
-  const asset = assetById(selectedAsset); await engine.preload(asset);
+async function insertSound(id: string) {
+  const targetEditor = editor;
+  const asset = assetById(id); await engine.preload(asset);
   const key = `studio_${asset.id.replaceAll('-', '')}`;
   const code = `\n// ${asset.prompt.replace(/[\r\n]+/g, ' ')}\nsamples({ ${key}: [location.origin + '/api/samples/${asset.id}/audio'] })\n$: s("${key}").gain(0.5)\n`;
-  editor.view.dispatch({ changes: { from: editor.view.state.doc.length, insert: code } });
+  targetEditor.view.dispatch({ changes: { from: targetEditor.view.state.doc.length, insert: code } });
   setSounds(false); editor.view.focus(); notice(engine.started ? 'Sound inserted. Apply changes to hear it.' : 'Sound inserted. Press Play to hear it.');
-});
+}
+$('#insert-sound').onclick = guard(() => selectedAsset ? insertSound(selectedAsset) : undefined);
 function setSounds(open: boolean) {
   $('#sounds-panel').hidden = !open; $('#sounds-toggle').setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('sounds-open', open);
@@ -577,14 +594,27 @@ function openClip(id: string) {
   editArrangement(); const clip = project.clips.find(c => c.id === id)!; editingClip = id;
   $('#clip-lane').value = String(clip.lane); $('#clip-start').value = String(clip.start); $('#clip-length').value = String(clip.length); $('#clip-dialog').returnValue = ''; $('#clip-dialog').showModal();
 }
-$('#add-to-composition').onclick = guard(() => {
-  editArrangement(); const clip: Clip = { id: crypto.randomUUID(), tabId: project.activeTabId, lane: 0, start: Math.max(0, ...project.clips.filter(c => c.lane === 0).map(c => c.start + c.length)), length: 4 };
+function addToComposition(tabId: string) {
+  editArrangement(); const clip: Clip = { id: crypto.randomUUID(), tabId, lane: 0, start: Math.max(0, ...project.clips.filter(c => c.lane === 0).map(c => c.start + c.length)), length: 4 };
   putClip(clip); setDrawer('composition'); openClip(clip.id);
-});
+}
+$('#add-to-composition').onclick = guard(() => addToComposition(project.activeTabId));
+function duplicateClip(id: string) {
+  editArrangement();
+  const original = project.clips.find(c => c.id === id)!;
+  const copy = duplicatePlacement(project.clips, original, crypto.randomUUID());
+  if (!copy) throw new Error('No room to duplicate this clip in its lane.');
+  putClip(copy);
+}
+function removeClip(id: string) {
+  editArrangement(); project.clips = project.clips.filter(c => c.id !== id); renderComposition(); dirty();
+}
 $('#clip-dialog').addEventListener('close', () => void guard(() => {
   const action = $('#clip-dialog').returnValue, clip = project.clips.find(c => c.id === editingClip); if (!clip || action === 'cancel') return;
+  if (action === 'source') { switchTab(clip.tabId); return; }
   editArrangement();
-  if (action === 'remove') { project.clips = project.clips.filter(c => c.id !== clip.id); renderComposition(); dirty(); }
+  if (action === 'duplicate') duplicateClip(clip.id);
+  else if (action === 'remove') removeClip(clip.id);
   else if (action === 'save') putClip({ ...clip, lane: Number($('#clip-lane').value) as 0 | 1, start: Number($('#clip-start').value), length: Number($('#clip-length').value) });
 })());
 $('#bpm').onchange = guard(() => { editArrangement(); const bpm = Number($('#bpm').value); if (bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); project.bpm = bpm; dirty(); });
@@ -602,6 +632,7 @@ $('#sequencer').ondrop = e => {
   })();
 };
 $('#sequencer').onpointerdown = e => {
+  if (e.button !== 0) return;
   const handle = (e.target as HTMLElement).closest<HTMLElement>('[data-resize]'); if (!handle || engine.started) return;
   e.preventDefault(); e.stopPropagation(); const clip = project.clips.find(c => c.id === handle.dataset.resize)!;
   const x = e.clientX; let length = clip.length; handle.setPointerCapture(e.pointerId);
@@ -609,6 +640,47 @@ $('#sequencer').onpointerdown = e => {
   handle.onpointerup = () => { resized = true; void guard(() => putClip({ ...clip, length }))().then(renderComposition); };
   handle.onpointercancel = renderComposition;
 };
+
+const contextMenu = new ContextMenu();
+function showContextMenu(target: HTMLElement, x: number, y: number) {
+  const item = target.closest<HTMLElement>('[data-tab], [data-clip], [data-asset]');
+  if (!item) return false;
+  const stopped = engine.started || engine.busy ? 'Stop playback to edit the composition.' : undefined;
+  const action = (label: string, run: () => unknown, disabled?: string): MenuAction => ({ label, run: guard(run), disabled });
+  let actions: MenuAction[], selector: string;
+  if (item.dataset.tab) {
+    const id = item.dataset.tab; selector = `[data-tab="${id}"]`;
+    actions = [
+      action('Rename', () => renameTab(id)),
+      action('Duplicate', () => duplicateTab(id), project.tabs.length >= 50 ? 'Pattern limit reached (50).' : undefined),
+      action('Add to composition', () => addToComposition(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : undefined)),
+      action('Close', () => closeTab(id), project.tabs.length === 1 ? 'Keep at least one pattern.' : engine.busy ? 'Wait for playback preparation.' : undefined),
+    ];
+  } else if (item.dataset.clip) {
+    const id = item.dataset.clip, clip = project.clips.find(c => c.id === id)!;
+    selector = `[data-clip="${id}"]`;
+    actions = [
+      action('Edit', () => openClip(id), stopped),
+      action('Duplicate', () => duplicateClip(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : !duplicatePlacement(project.clips, clip, 'candidate') ? 'No room in this lane.' : undefined)),
+      action('Open source pattern', () => switchTab(clip.tabId)),
+      action('Remove', () => removeClip(id), stopped),
+    ];
+  } else {
+    const id = item.dataset.asset!; selector = `[data-select-asset="${id}"]`;
+    actions = [action('Preview', () => engine.trigger(assetById(id))), action('Insert into pattern', () => insertSound(id)), action('Rename', () => renameSound(id))];
+  }
+  contextMenu.open(actions, x, y, () => document.querySelector<HTMLElement>(selector) ?? document.querySelector<HTMLElement>('[role=tab][aria-selected=true]'));
+  return true;
+}
+document.addEventListener('contextmenu', event => {
+  if (showContextMenu(event.target as HTMLElement, event.clientX, event.clientY)) event.preventDefault();
+  else contextMenu.close(false);
+});
+document.addEventListener('keydown', event => {
+  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+  const target = event.target as HTMLElement, rect = target.getBoundingClientRect();
+  if (showContextMenu(target, rect.left, rect.bottom)) { event.preventDefault(); event.stopPropagation(); }
+});
 
 async function boot() {
   await engine.setup(project);
