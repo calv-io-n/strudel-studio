@@ -16,6 +16,7 @@ Keep the first screen useful and quiet: one pattern, one obvious Play action, an
 - Use neutral surfaces and one accent color for selection and active controls. Offer light and dark appearances through a moon/sun icon toggle in the top bar. Default to light and remember the choice locally; update the editor and tools together.
 - Keep the editor opaque and readable. Any liquid-glass treatment should be subtle and limited to floating surfaces; no decorative blur behind code.
 - Use thin separators and a consistent spacing scale. Avoid cards inside cards, excessive borders, decorative gradients, and ornamental animation.
+- Use subtle rounded scrollbars throughout the editor and tools: slim neutral thumbs, quiet tracks, and stronger hover/drag contrast in both themes. Retain native scrolling and native high-contrast styling.
 - Keep labels legible, keyboard focus visible, and motion optional. Minimalism must not hide essential state.
 
 ## Workspace

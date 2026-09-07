@@ -32,3 +32,7 @@ When evolving these boundaries, preserve project migration coverage, stop/cancel
 Composition projects use schema v3: ordered stable track IDs, named palette colors on tabs, per-track and per-clip mute settings, and quarter-cycle clip timing. V1/v2 input migrates through the shared schema. Pointer gestures live in `studio/client/composition.ts`; grid and magnetic placement calculations are shared with keyboard/numeric validation in `studio/shared/clips.ts`. A separate mute timeline gates arrangement queries independently of compiled pattern versions, so Apply changes cannot overwrite queued mutes.
 
 See [composition internals](composition.md) for persistence, scheduling, and gesture behavior.
+
+## Scrollbar styling
+
+[Shared client CSS](../../studio/client/style.css) styles native scrollbars across the editor, tabs, composition, and scrollable panels. Light/dark tokens control neutral thumb colors. Browsers supporting scrollbar pseudo-elements use a 12px scrollbar with a 2px transparent inset, yielding an 8px rounded thumb, plus hover/active colors and transparent tracks/corners. Standard `scrollbar-width`/`scrollbar-color` properties provide a thin themed fallback; they reset to `auto` in the detailed-styling branch to avoid overriding the pseudo-elements. Custom rules are excluded in forced-colors mode. Scrolling stays browser-native; there is no JavaScript scrollbar or visibility timer.
