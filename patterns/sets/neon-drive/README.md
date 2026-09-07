@@ -16,7 +16,7 @@ Open http://localhost:5173, choose **Sessions → Neon Drive**, select **Composi
 | 16–20 | — | Breakdown |
 | 20–32 | Rhythm | Lead |
 
-Each `.strudel` file is its own playable tab. Use Current tab to audition one part. Rhythm includes drums and bass; Lead includes the original melody and supporting chords, so the complete arrangement fits the existing two lanes.
+Each `.strudel` file is its own playable tab. Use Current tab to audition one part. Rhythm includes drums and bass; Lead includes the original melody and supporting chords, so the demo uses two tracks. Each tab has a color that carries through to its clips; add more tracks for your own arrangement.
 
 Open **Virtual MIDI** and move **Lead brightness** (Knob 1 / CC 20) or **Bass cutoff** (Knob 2 / CC 21). The bindings work even while another tab is selected. For a code edit during playback, use **Apply changes**; saving or typing alone does not alter playback.
 

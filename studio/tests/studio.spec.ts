@@ -14,7 +14,7 @@ async function patternAction(page: Page, name: string) {
 }
 async function addClip(page: Page, lane: string, start = '0', length = '1') {
   await patternAction(page, 'Add to composition');
-  await page.getByLabel('Lane', { exact: true }).selectOption(lane);
+  await page.getByLabel('Track', { exact: true }).selectOption(`track-${Number(lane) + 1}`);
   await page.getByLabel('Start cycle').fill(start); await page.getByLabel('Length', { exact: true }).fill(length);
   await page.getByRole('button', { name: 'Save clip', exact: true }).click();
 }
@@ -42,7 +42,7 @@ test('minimal workspace, independent tabs, drawer persistence, keyboard layout a
   await page.getByRole('button', { name: 'Save project', exact: true }).click();
   await expect(page.locator('#notice')).toContainText('Saved Design acceptance');
   const saved = await (await request.get('/api/projects/Design-acceptance')).json();
-  expect(saved.version).toBe(2); expect(saved.tabs).toHaveLength(2);
+  expect(saved.version).toBe(3); expect(saved.tabs).toHaveLength(2);
   await expect.poll(async () => (await (await request.get('/api/recovery')).json()).name).toBe('Design acceptance');
   await page.getByLabel('Dark mode', { exact: true }).check();
   await expect(page.locator('html')).toHaveAttribute('data-appearance', 'dark');
@@ -222,9 +222,9 @@ test('context menus target inactive patterns, copy draft code, and support keybo
   await page.locator('#edit-name').fill('Bass'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   const bass = page.getByRole('tab', { name: 'Bass', exact: true });
   await bass.focus(); await page.keyboard.press('Shift+F10');
-  await expect(page.getByRole('menuitem', { name: 'Rename', exact: true })).toBeFocused();
+  await expect(page.getByRole('menuitem', { name: 'Color…', exact: true })).toBeFocused();
   await page.keyboard.press('End'); await expect(page.getByRole('menuitem', { name: 'Close', exact: true })).toBeFocused();
-  await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
+  await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
   await expect(page.getByRole('tab', { name: 'Bass copy', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('note("d3")');
   await expect.poll(async () => (await (await request.get('/api/recovery')).json()).tabs.length).toBe(3);

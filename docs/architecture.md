@@ -1,27 +1,3 @@
-# Architecture
+# Architecture guide
 
-Studio is a local Node server plus a browser audio/editor application. No hosted account or database is required.
-
-```mermaid
-flowchart LR
-  Editor[Browser editor and controls] --> Engine[Strudel audio engine]
-  Editor -->|HTTP| Server[Local Node server]
-  Server --> Store[Session JSON and sound files]
-  Editor <-->|WebSocket| MIDI[Optional Python ALSA bridge]
-  Server -->|Explicit generation request| Provider[ElevenLabs]
-  Editor --> Renderer[Offline browser WAV renderer]
-```
-
-- `studio/client/`: `main.ts` coordinates UI and shared user actions; `editor.ts` owns CodeMirror and stable slider identities; `engine.ts` owns playback and live updates. Context menus share the same actions as visible controls. `export.ts` and the isolated render page handle offline WAV rendering.
-- `studio/shared/`: Zod project schemas and migrations, arrangement timing, clip placement, MIDI parsing/pickup, sliders, sample-slot timelines, and WAV encoding. Keep persistent-format rules here rather than duplicating them in UI code.
-- `studio/server/`: localhost-only HTTP/WebSocket endpoints, atomic project storage, explicit sound-generation jobs, demo installation, and MIDI bridge coordination. Vite serves the client in middleware mode; `studio:build` does not create a standalone production server.
-- `studio/midi/`: optional Linux/ALSA bridge and separate MIDI MCP tooling. The browser's virtual controls do not require these tools.
-- `studio/tests/`: unit/integration tests and Playwright user flows. Browser configuration isolates sessions and sounds and uses fixture generation without API credits.
-
-## State and compatibility
-
-Projects contain tabs, composition clips, mappings, controller values and sound-slot references. Editors hold current code and slider anchors. Autosave writes the session and recovery snapshot; a browser draft covers interrupted saves. Audio playback uses applied pattern versions: typing does not silently replace playing code. Live slider and MIDI updates are deliberate exceptions.
-
-Clip placement uses whole cycles and prohibits overlap within a lane. Composition uses a shared tempo. Rendering snapshots current code and values into a separate browser context so it does not interrupt playback.
-
-When evolving these boundaries, preserve project migration coverage, stop/cancel behavior, mapping identity, and deterministic fixture tests. Extract UI modules when a concrete change benefits from it; a wholesale framework migration is not required.
+The maintained as-built documentation now lives in [docs/architecture/](architecture/README.md). This page preserves existing links. For intended behavior see the [design target](design/strudel-studio.md); for decisions to depart from that target see [ADRs](adr/README.md).

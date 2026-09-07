@@ -45,14 +45,14 @@ const LegacyProjectSchema = z.object({
   controls: z.array(VirtualControlSchema).max(100),
 });
 const tabId = id.regex(/^[a-zA-Z0-9_-]+$/);
-export const TabSchema = z.object({ id: tabId, name: z.string().trim().min(1).max(80), code: z.string().max(200_000), anchors: z.array(AnchorSchema).max(500) });
-export type Tab = z.infer<typeof TabSchema>;
-export const ClipSchema = z.object({ id: tabId, tabId, lane: z.union([z.literal(0), z.literal(1)]), start: z.number().int().min(0).max(4096), length: z.number().int().min(1).max(4096) });
-export type Clip = z.infer<typeof ClipSchema>;
+const OldTabSchema = z.object({ id: tabId, name: z.string().trim().min(1).max(80), code: z.string().max(200_000), anchors: z.array(AnchorSchema).max(500) });
+
+const OldClipSchema = z.object({ id: tabId, tabId, lane: z.union([z.literal(0), z.literal(1)]), start: z.number().int().min(0).max(4096), length: z.number().int().min(1).max(4096) });
+
 export const ProjectV2Schema = LegacyProjectSchema.omit({ code: true, anchors: true, version: true }).extend({
   sessionId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/).refine(name => name !== 'recovery', 'Reserved session name').optional(),
-  version: z.literal(2), tabs: z.array(TabSchema).min(1).max(50), activeTabId: id,
-  clips: z.array(ClipSchema).max(500), bpm: z.number().min(20).max(300),
+  version: z.literal(2), tabs: z.array(OldTabSchema).min(1).max(50), activeTabId: id,
+  clips: z.array(OldClipSchema).max(500), bpm: z.number().min(20).max(300),
 }).superRefine((project, ctx) => {
   const ids = new Set(project.tabs.map(t => t.id));
   const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
@@ -64,11 +64,40 @@ export const ProjectV2Schema = LegacyProjectSchema.omit({ code: true, anchors: t
   }
   if (project.bindings.some(b => b.target.kind === 'slider' && (!b.target.tabId || !ids.has(b.target.tabId)))) issue('Slider mapping references a missing pattern');
 });
-export type Project = z.infer<typeof ProjectV2Schema>;
-export const ProjectSchema = z.union([ProjectV2Schema, LegacyProjectSchema.transform(({ code, anchors, ...project }) => ({
-  ...project, version: 2 as const, tabs: [{ id: 'pattern-1', name: 'Pattern 1', code, anchors }], activeTabId: 'pattern-1', clips: [], bpm: 120,
-  bindings: project.bindings.map(b => b.target.kind === 'slider' ? { ...b, target: { ...b.target, tabId: 'pattern-1' } } : b),
-}))]).pipe(ProjectV2Schema);
+export const palette = ['blue', 'cyan', 'teal', 'green', 'amber', 'orange', 'rose', 'violet'] as const;
+export const defaultTracks = () => [1, 2].map(n => ({ id: `track-${n}`, name: `Track ${n}`, muted: false }));
+export const TabSchema = OldTabSchema.extend({ color: z.enum(palette) });
+export type Tab = z.infer<typeof TabSchema>;
+export const TrackSchema = z.object({ id: tabId, name: z.string().trim().min(1).max(80), muted: z.boolean() });
+const cycle = z.number().min(0).max(4096).multipleOf(.25);
+export const ClipSchema = z.object({ id: tabId, tabId, trackId: tabId, start: cycle, length: cycle.min(.25), muted: z.boolean() });
+export type Clip = z.infer<typeof ClipSchema>;
+export const ProjectV3Schema = LegacyProjectSchema.omit({ code: true, anchors: true, version: true }).extend({
+  sessionId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/).refine(name => name !== 'recovery').optional(),
+  version: z.literal(3), tabs: z.array(TabSchema).min(1).max(50), activeTabId: id,
+  tracks: z.array(TrackSchema).min(1).max(16), snap: z.union([z.literal(1), z.literal(.5), z.literal(.25)]),
+  clips: z.array(ClipSchema).max(500), bpm: z.number().min(20).max(300),
+}).superRefine((p, ctx) => {
+  const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
+  const tabs = new Set(p.tabs.map(t => t.id)), tracks = new Set(p.tracks.map(t => t.id));
+  if (tabs.size !== p.tabs.length || !tabs.has(p.activeTabId)) issue('Invalid pattern tabs');
+  if (tracks.size !== p.tracks.length) issue('Duplicate track ID');
+  if (new Set(p.clips.map(c => c.id)).size !== p.clips.length) issue('Duplicate clip ID');
+  for (const c of p.clips) {
+    if (!tabs.has(c.tabId) || !tracks.has(c.trackId)) issue('Missing clip source or track');
+    if (p.clips.some(o => o.id !== c.id && o.trackId === c.trackId && c.start < o.start + o.length && o.start < c.start + c.length)) issue('Clips cannot overlap in the same track');
+  }
+  if (p.bindings.some(b => b.target.kind === 'slider' && !tabs.has(b.target.tabId!))) issue('Slider mapping references a missing pattern');
+});
+export type Project = z.infer<typeof ProjectV3Schema>;
+const migrateV2 = (p: z.infer<typeof ProjectV2Schema>) => ({ ...p, version: 3 as const, tracks: defaultTracks(), snap: 1 as const,
+  tabs: p.tabs.map((t, i) => ({ ...t, color: palette[i % palette.length] })),
+  clips: p.clips.map(({ lane, ...c }) => ({ ...c, trackId: `track-${lane + 1}`, muted: false })),
+});
+export const ProjectSchema = z.union([ProjectV3Schema, ProjectV2Schema.transform(migrateV2), LegacyProjectSchema.transform(({ code, anchors, ...p }) => migrateV2({
+  ...p, version: 2, tabs: [{ id: 'pattern-1', name: 'Pattern 1', code, anchors }], activeTabId: 'pattern-1', clips: [], bpm: 120,
+  bindings: p.bindings.map(b => b.target.kind === 'slider' ? { ...b, target: { ...b.target, tabId: 'pattern-1' } } : b),
+}))]).pipe(ProjectV3Schema);
 export type MidiEvent = { source: string; bytes: number[]; receivedAt: number; sequence: number; route: 'alsa' | 'simulation' };
 export type BridgeStatus = { ready: boolean; message: string; ports: string[]; connected: string[] };
 export type Receipt = { sequence: number; bindingId: string; target: Target; status: string; value?: number; at: number };
@@ -76,7 +105,7 @@ export type Job = { id: string; state: 'running' | 'complete' | 'failed'; asset?
 
 export const defaultCode = `// Select an inline slider, then choose MIDI Learn.\nsetCpm(120/4)\n\n$beat: note("c2*4").s("triangle")\n  .decay(0.12).sustain(0)\n  .gain(slider(0.45, 0, 1, 0.01))\n\n$bass: note("<a2 f2 c3 g2>")\n  .s("sawtooth")\n  .lpf(slider(900, 100, 6000, 10))\n  .gain(0.18)\n\n// Open Sounds to generate and insert a sample.\n`;
 export function newProject(): Project {
-  return { version: 2, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [] }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
+  return { version: 3, tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
     profiles: [ { id: 'virtual', name: 'Virtual controller', port: 'studio:virtual', enabled: true },
       { id: 'external', name: 'External MIDI input', port: 'studio:input', enabled: true } ],
     slots: [{ name: 'bass', assets: [], active: null }],

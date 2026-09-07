@@ -32,29 +32,35 @@ The editor takes the remaining space. Inline sliders stay close to the code they
 
 Right-click a pattern tab, composition clip, or library sound to act on that item without changing the active pattern. Shift+F10 and the Context Menu key open the same menu from a focused item; arrow keys navigate, Enter or Space activates, and Escape dismisses.
 
-- Patterns: rename, duplicate, add to composition, and close. Duplication copies current code with fresh slider identities, without copying mappings or clips.
-- Clips: edit, duplicate, open source pattern, and remove. Duplicate clips occupy the first available whole-cycle space after the original in the same lane. Composition editing requires stopped playback.
+- Patterns: choose a named color, rename, duplicate, add to composition, and close. Duplication copies current code with fresh slider identities, without copying mappings or clips.
+- Clips: mute/unmute, edit, duplicate, open source pattern, and remove. Duplicate clips occupy the first available quarter-cycle space after the original in the same track. Structural composition editing requires stopped playback; colors and mutes remain available live.
 - Sounds: preview, insert into the current pattern, and rename.
 
 Existing buttons remain available. Pattern actions includes duplication, and the clip dialog includes duplication and source navigation. The code editor retains its native context menu.
 
 ### Bottom drawer
 
-Use one resizable bottom drawer with two views: **Composition** and **Virtual MIDI**. Only one view is visible at a time. Selecting the active view again collapses the drawer. Both views start collapsed for a new project; remember the user's choice thereafter.
+Use one resizable bottom drawer with three views: **Composition**, **Virtual MIDI**, and **Export**. Only one view is visible at a time. Selecting the active view again collapses the drawer. All views start collapsed for a new project; remember the user's choice thereafter.
 
 Collapsing or switching a view does not stop playback or reset controls. On narrow screens, the active tool can fill the workspace while preserving a clear way back to the editor.
 
 ### Composition
 
-Start with a simple two-lane sequencer, enough to arrange patterns and layer two at once.
+Start with two named tracks, expandable to 16, with per-track and per-clip muting. Tab colors identify their composition clips.
 
-- Drag a pattern tab onto a lane to create a clip. Also provide an “Add to composition” action for keyboard and touch use.
+- Drag a pattern tab onto a track to create a clip. Also provide an “Add to composition” action for keyboard and touch use.
 - Each clip references its source tab and has a start position and length measured in Strudel cycles.
-- Stop playback before moving, resizing, adding, or removing clips. Clips snap to whole cycles and do not overlap within the same lane; clips in different lanes play together.
-- Show pattern names, cycle markers, and a playhead. An empty lane gives one short instruction.
+- Stop playback before moving, resizing, adding, or removing clips. Clips snap to a selectable 1, ½, or ¼ cycle grid with magnetic edge alignment and do not overlap within the same track; clips in different tracks play together.
+- Show pattern names, cycle markers, and a playhead. An empty track gives one short instruction.
 - New clips are four cycles long. Use one shared tempo, initially 120 BPM with four beats per cycle. Composition ignores source patterns’ global tempo setters. Each clip plays its pattern from cycle zero and repeats for the clip's length. The composition stops at the end of its last clip.
 
-Keep mixing, automation lanes, nested arrangements, and detailed clip inspectors out of the first version.
+Use eight named colors: blue, cyan, teal, green, amber, orange, rose, and violet. New tabs cycle through them; duplicated tabs inherit the source color. Clip colors always follow the source tab. Track headers offer Mute and Rename/Remove actions; confirm removal of populated tracks and prevent deleting the last track.
+
+Mute tracks or individual clips independently. While composition plays, schedule mute changes at the next safe cycle boundary and display pending state. Muting must not compile drafts or shorten the composition. Export captures mute settings at render start. Standalone tab playback stays independent.
+
+Dragging preserves the grab offset, previews the destination, and magnetically aligns nearby edges. Reject overlaps without shifting neighbors. Escape cancels. Provide edge scrolling and keyboard movement: Left/Right by the grid, Up/Down across tracks, Shift+Left/Right to resize. Keep numeric editing accessible in quarter-cycle increments.
+
+Keep volume/solo mixing, track reordering, automation lanes, nested arrangements, and detailed clip inspectors out of the first version.
 
 ### Virtual MIDI
 

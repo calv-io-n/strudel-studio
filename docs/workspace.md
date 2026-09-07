@@ -2,7 +2,7 @@
 
 ## Workspace
 
-- Write in named pattern tabs. Use **+** to add a pattern. Right-click a tab for Rename, Duplicate, Add to composition, or Close; **•••** also offers these actions.
+- Write in named pattern tabs. Use **+** to add a pattern. Right-click a tab for Color, Rename, Duplicate, Add to composition, or Close; **•••** also offers these actions.
 - Choose **Current tab** or **Composition**, then Play. Stop silences playback, previews, and held notes.
 - Typed code changes wait for **Apply changes** (Ctrl+Enter). MIDI and inline sliders affect the sound immediately. Code-defined tempo changes take effect on the next Play.
 - Open **Composition**, **Virtual MIDI**, or **Export** from the footer. Click the active view again to return to the editor. The drawer remembers its view and height.
@@ -10,9 +10,15 @@
 
 ## Composition
 
-Drag a pattern tab onto either lane, or use **••• → Add to composition**. Click a clip to change its lane, start cycle, or length, or remove it. Drag clips to move them and their right edges to resize.
+Drag a pattern tab onto a track, or use **••• → Add to composition**. New clips are four cycles long. Tab colors carry through to every source clip, including duplicates. Use **Color…** in the tab menu to choose one of eight named colors.
 
-Clips snap to whole cycles, start their pattern at local cycle zero, and repeat for their length. Different lanes can overlap; clips in the same lane cannot. The composition uses one shared tempo (120 BPM by default, four beats per cycle), ignoring source patterns' tempo setters. Playback stops after the last clip. Stop before moving or resizing clips.
+Projects start with two tracks. **Add track** appends and selects a new track for subsequent additions, up to 16. Track **•••** menus rename or remove tracks; removing a populated track confirms removal of its clips. Keep at least one track. Headers stay visible when scrolling horizontally, and the track area scrolls vertically.
+
+Choose **1 cycle**, **½ cycle**, or **¼ cycle** snapping. Moving and resizing show a preview and align magnetically to nearby clip edges. Invalid overlapping placements are rejected; Escape cancels a gesture. Clips keep their original grab offset while moving. Focus a clip and use Left/Right to move by the grid, Up/Down to change tracks, or Shift+Left/Right to resize. Click a clip for numeric editing in quarter-cycle increments. Changing the grid leaves existing timing intact.
+
+Use a track's **Mute** button or a clip's right-click **Mute/Unmute** action. Track mute silences its clips without changing their individual mute settings. During composition playback, changes take effect at the next safe cycle boundary shown in the toolbar. Existing notes and effect tails can finish. Mutes never apply unfinished code edits, affect standalone tab playback, or shorten the arrangement. Stop clears pending scheduling; the next Play uses saved settings.
+
+Structural edits require stopped playback. Each clip starts its source pattern from cycle zero. All tracks use the shared composition tempo, with four beats per cycle, and playback ends at the last clip, including muted clips. Right-click clips for Edit, Duplicate, Open source pattern, and Remove.
 
 ## MIDI
 
@@ -34,8 +40,8 @@ Generated sounds are stored in `samples/ai/`. The app never generates automatica
 
 Use **+ beside Sessions** to create a named session; Enter or Confirm creates it. Sessions autosave to `.studio/projects/` and retain their identity and dropdown selection after reload. Switching sessions saves pending edits first. A local browser draft protects edits during interrupted saves; **Project → Save project** retries a failed save. Recovery is also saved to `.studio/projects/recovery.json`. Projects include all tabs, clips, mappings, slots, and controller values. Sounds remain in the local sound library, so retain that folder when backing up projects.
 
-Older single-pattern projects migrate when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab asks before removing its code, clips, and mappings.
+Older single-pattern and two-lane projects migrate to format v3 when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab asks before removing its code, clips, and mappings.
 
 ## Audio export
 
-Open **Export** beside Virtual MIDI, choose **Full composition**, and click **Render & download WAV**. The offline renderer exports stereo 44.1 kHz, 16-bit audio with an adjustable effect tail (three seconds by default). You can also render a chosen number of cycles from the current tab. Rendering captures current code, slider values, and sound slots without interrupting playback; progress and cancellation are available. Maximum export length is fifteen minutes.
+Open **Export** beside Virtual MIDI, choose **Full composition**, and click **Render & download WAV**. The offline renderer exports stereo 44.1 kHz, 16-bit audio with an adjustable effect tail (three seconds by default). You can also render a chosen number of cycles from the current tab. Rendering captures current code, slider values, sound slots, and track/clip mute settings without interrupting playback; progress and cancellation are available. Maximum export length is fifteen minutes.
