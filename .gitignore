@@ -2,6 +2,7 @@ node_modules/
 recordings/*
 !recordings/.gitkeep
 samples/ai/
+samples/libraries/
 *.tmp.wav
 .DS_Store
 .env

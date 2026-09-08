@@ -14,7 +14,8 @@ export function parseGitHubLink(link: string) {
   return { owner, repo, tail };
 }
 async function githubJSON(path: string, request: typeof fetch) {
-  const response = await request(`https://api.github.com${path}`, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Strudel-Studio' }, redirect: 'error', signal: AbortSignal.timeout(20000) });
+  const token = process.env.STUDIO_GITHUB_TOKEN?.trim();
+  const response = await request(`https://api.github.com${path}`, { headers: { Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'Strudel-Studio', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, redirect: 'error', signal: AbortSignal.timeout(20000) });
   if (!response.ok) throw Object.assign(new Error(response.status === 403 || response.status === 429 ? 'GitHub rate limit or access restriction. Retry later.' : `GitHub source unavailable (${response.status}). Check the link and revision.`), { status: response.status });
   const text = await boundedBody(response, 8_000_000); return JSON.parse(text.toString());
 }

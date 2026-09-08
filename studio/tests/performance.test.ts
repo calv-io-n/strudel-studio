@@ -20,6 +20,13 @@ test('takes retain chords and release outstanding notes on interruption', () => 
   assert.equal(take.state, 'review'); assert.throws(() => take.start(), /current take/);
 });
 
+test('a cursor inside a note resolves its phrase without selecting text', () => {
+  const code = 'note("c3 e3").s("triangle")';
+  assert.equal(destinationFor(code, 'a', 2, 2).original, 'note("c3 e3")');
+  assert.equal(destinationFor(code, 'a', 7, 7).soundCode, '.s("triangle")');
+  assert.throws(() => destinationFor(code, 'a', code.length, code.length), /cannot be replaced/);
+});
+
 test('quantization preserves overlaps and clips notes to the phrase boundary', async () => {
   const { phraseNotes, transcribe } = await import('../shared/performance');
   const notes = [{ key: 'a', pitch: 60, velocity: 127, start: .24, end: .76 }, { key: 'b', pitch: 64, velocity: 64, start: .26, end: .49 }];

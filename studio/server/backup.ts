@@ -1,23 +1,24 @@
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { ProjectSchema, AssetSchema, type Project } from '../shared/model';
+import { parseProject, AssetSchema, type Project } from '../shared/model';
 import { assetReferences } from '../shared/asset-references';
 import type { Store } from './store';
 
 export async function backupProject(project: Project, store: Store) {
-  project = ProjectSchema.parse(project);
+  project = parseProject(project);
   const files: Record<string, Uint8Array> = { 'project.json': strToU8(JSON.stringify(project)) };
   const missing: string[] = []; let total = 0;
   for (const id of assetReferences(project)) {
     try {
       const asset = await store.asset(id);
       files[`assets/${id}.json`] = strToU8(JSON.stringify(asset));
-      try { files[`assets/${id}.${asset.format}`] = await readFile(path.join(store.samplesRoot, `${id}.${asset.format}`)); }
+      const dir = await store.locate(id);
+      try { files[`assets/${id}.${asset.format}`] = await readFile(path.join(dir, `${id}.${asset.format}`)); }
       catch { missing.push(`${id}.${asset.format}`); }
       if (asset.source?.originalFormat) {
         const original = `${id}.original.${asset.source.originalFormat}`;
-        try { files[`assets/${original}`] = await readFile(path.join(store.samplesRoot, original)); } catch { missing.push(original); }
+        try { files[`assets/${original}`] = await readFile(path.join(dir, original)); } catch { missing.push(original); }
       }
     } catch { missing.push(`${id}.json`); }
     total = Object.values(files).reduce((n, bytes) => n + bytes.length, 0);
@@ -35,7 +36,7 @@ export async function restoreBackup(bytes: Uint8Array, store: Store) {
     return true;
   } });
   if (!files['project.json']) throw new Error('Backup has no project.json.');
-  const project = ProjectSchema.parse(JSON.parse(strFromU8(files['project.json'])));
+  const project = parseProject(JSON.parse(strFromU8(files['project.json'])));
   const references = assetReferences(project), missing: string[] = [];
   const assets = [];
   for (const id of references) {
@@ -48,7 +49,7 @@ export async function restoreBackup(bytes: Uint8Array, store: Store) {
     let exists = false;
     try {
       await store.asset(id);
-      const previous = await readFile(path.join(store.samplesRoot, `${id}.${asset.format}`));
+      const previous = await readFile(await store.audioPath({ id, format: asset.format }));
       if (!previous.equals(Buffer.from(audio))) throw new Error(`Asset ${id} already exists with different audio. Restore into a separate sample directory.`);
       exists = true;
     } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }

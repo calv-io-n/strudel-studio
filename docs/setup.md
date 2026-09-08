@@ -63,14 +63,21 @@ All configuration is optional. `.env` is loaded by the server; never commit it.
 | `ELEVENLABS_API_KEY` | Unset; sound generation disabled |
 | `STUDIO_PORT` | `5173`; localhost Studio port |
 | `STUDIO_DATA_DIR` | `.studio/projects`; saved sessions and recovery |
-| `STUDIO_SAMPLE_DIR` | `samples/ai`; generated-sound library |
+| `STUDIO_SAMPLE_DIR` | `samples/ai`; generated, imported and recorded sounds |
+| `STUDIO_LIBRARY_DIR` | `samples/libraries`; boot-time GitHub packs, read alongside `STUDIO_SAMPLE_DIR` |
+| `STUDIO_GITHUB_TOKEN` | Unset; optional GitHub token sent only to `api.github.com` to raise the 60-per-hour discovery limit for imports and boot libraries |
+| `STUDIO_LIBRARIES` | Unset; comma-separated public GitHub repo or folder links cached into the sample library at boot (see below) |
 | `STUDIO_PYTHON` | `.venv-midi/bin/python` if present, otherwise `python3` |
 | `STUDIO_DISABLE_MIDI` | Set `1` to disable the physical bridge; virtual controls remain usable |
 | `STUDIO_CHROMIUM` | Optional Chromium executable override for browser tests |
 | `STUDIO_E2E_ALSA` | Set `1` only for hardware browser tests on a compatible host |
 | `STUDIO_FIXTURE_GENERATION` | Test-only local fixture generator; not real AI generation |
 
-Changing `STUDIO_SAMPLE_DIR` changes the generated library, not the legacy sampler's `samples/` root. Keep source checkouts and data paths consistent when moving an installation.
+### Boot-time sample libraries
+
+`STUDIO_LIBRARIES` lists public GitHub repositories or folders whose WAV files are downloaded once into `STUDIO_LIBRARY_DIR` when the server starts, then appear in the Sample library as an imported pack named after the repository or folder. The sync runs after the port is open and never blocks startup; each boot only fetches files that are not cached yet, and files that failed are retried. Only WAV files are cached at boot (MP3, OGG and FLAC need the browser importer). `.env.example` ships two openly licensed packs: `tidalcycles/sounds-tr808-fischer` (TR-808 one-shots, CC0, ~12 MB) and `switchangel/breaks` (breakbeat loops, public domain, ~2.5 MB). Unauthenticated GitHub API access allows 60 requests per hour; each library costs two to four requests per boot, so keep the list short or set `STUDIO_GITHUB_TOKEN`.
+
+Both directories are gitignored, so deleting `samples/libraries/` and restarting re-downloads the packs. Changing `STUDIO_SAMPLE_DIR` changes the generated library, not the legacy sampler's `samples/` root. Keep source checkouts and data paths consistent when moving an installation.
 
 ## Troubleshooting
 

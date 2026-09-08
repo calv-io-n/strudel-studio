@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { newProject } from '../shared/model';
 
 async function editCode(page: Page, code: string) {
-  await page.locator('.tab-editor:not([hidden]) .cm-content').click();
+  await page.locator('.tab-editor:not([hidden]) .cm-content').focus();
   await page.keyboard.press('Control+Home'); await page.keyboard.press('Control+a'); await page.keyboard.insertText(code);
 }
 async function patternAction(page: Page, name: string) {
@@ -23,8 +23,8 @@ test.beforeEach(async ({ request }) => { await request.put('/api/recovery', { da
 test('minimal workspace, independent tabs, drawer persistence, keyboard layout and project recovery', async ({ page, request }) => {
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await expect(page.locator('#drawer')).toBeHidden(); await expect(page.locator('#sounds-panel')).toBeHidden();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await expect(page.locator('#drawer')).toBeVisible(); await expect(page.locator('#sounds-panel')).toBeHidden();
+  await page.getByRole('button', { name: 'Play pattern', exact: true }).click();
   await expect(page.locator('#transport-state')).toContainText('Playing · Pattern 1');
   await page.getByRole('button', { name: 'New pattern', exact: true }).click();
   await editCode(page, '$: note("e3").s("triangle")');
@@ -32,7 +32,7 @@ test('minimal workspace, independent tabs, drawer persistence, keyboard layout a
   await expect(page.locator('#evaluate')).toBeHidden();
   await page.getByRole('tab', { name: 'Pattern 1', exact: true }).click();
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('$beat');
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
   await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
   await expect(page.locator('#midi-content')).toBeVisible();
   await page.getByRole('button', { name: 'Composition', exact: true }).click();
@@ -42,7 +42,7 @@ test('minimal workspace, independent tabs, drawer persistence, keyboard layout a
   await page.getByRole('button', { name: 'Save project', exact: true }).click();
   await expect(page.locator('#notice')).toContainText('Saved Design acceptance');
   const saved = await (await request.get('/api/projects/Design-acceptance')).json();
-  expect(saved.version).toBe(4); expect(saved.tabs).toHaveLength(2);
+  expect(saved.version).toBe(5); expect(saved.tabs).toHaveLength(2);
   await expect.poll(async () => (await (await request.get('/api/recovery')).json()).name).toBe('Design acceptance');
   await page.getByLabel('Dark mode', { exact: true }).check();
   await expect(page.locator('html')).toHaveAttribute('data-appearance', 'dark');
@@ -60,7 +60,7 @@ test('minimal workspace, independent tabs, drawer persistence, keyboard layout a
 
 test('MIDI controls stay live across tabs and typed edits apply explicitly', async ({ page, request }) => {
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Play pattern', exact: true }).click();
   await page.getByRole('slider', { name: 'gain inline slider', exact: true }).focus();
   await page.getByRole('button', { name: 'MIDI Learn', exact: true }).click();
   await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
@@ -72,7 +72,7 @@ test('MIDI controls stay live across tabs and typed edits apply explicitly', asy
   await knob.fill('0');
   await page.getByRole('tab', { name: 'Pattern 1', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'gain inline slider', exact: true })).toHaveValue('0');
-  await page.locator('.tab-editor:not([hidden]) .cm-content').click();
+  await page.locator('.tab-editor:not([hidden]) .cm-content').focus();
   await page.keyboard.press('Control+Home'); await page.keyboard.insertText('// changed draft\n');
   await page.getByRole('button', { name: 'Apply changes', exact: false }).click();
   await expect(page.locator('#evaluate')).toBeHidden();
@@ -81,7 +81,7 @@ test('MIDI controls stay live across tabs and typed edits apply explicitly', asy
   await page.getByRole('button', { name: 'Apply changes', exact: false }).click();
   await expect(page.locator('#notice')).toContainText('Pattern 1:');
   await expect(page.locator('#transport-state')).toContainText('Playing');
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
   await expect(page.locator('#transport-state')).toHaveText('Stopped');
   await page.getByRole('button', { name: 'C4', exact: true }).focus(); await page.keyboard.down('Space');
   await expect.poll(async () => (await (await request.get('/api/feedback')).json()).snapshot?.diagnostics.notes).toBe(1);
@@ -96,10 +96,10 @@ test('two lanes play on the composition clock and stop at the final clip', async
   await page.getByRole('button', { name: 'New pattern', exact: true }).click();
   await editCode(page, '$: note("e3").s("triangle")'); await addClip(page, '1');
   await expect(page.locator('.clip')).toHaveCount(2);
-  await page.getByLabel('Playback target').selectOption('composition');
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+
+  await page.locator('#composition-play').click();
   await expect(page.locator('#transport-state')).toContainText('Playing · Composition');
-  await expect(page.getByLabel('Playback target')).toBeDisabled();
+  await expect(page.locator('#composition-play')).toBeDisabled();
   await expect(page.locator('#arrangement-status')).toHaveText('Stop playback to edit clips');
   await expect(page.locator('#transport-state')).toHaveText('Stopped', { timeout: 7000 });
   await expect.poll(async () => (await (await request.get('/api/recovery')).json()).clips.length).toBe(2);
@@ -109,7 +109,7 @@ test('two lanes play on the composition clock and stop at the final clip', async
 
 test('generate a fixture sound, preview, insert and reopen playable code', async ({ page, request }) => {
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await page.getByRole('button', { name: 'Sample library', exact: true }).click(); await page.locator('#add-sounds').evaluate((el: HTMLDetailsElement) => { el.open = true; });
   await page.getByRole('tab', { name: 'Generate', exact: true }).click();
   await page.getByLabel('Describe your next sound').fill('A warm short bass');
   await page.locator('.generation-options > summary').click();
@@ -117,14 +117,13 @@ test('generate a fixture sound, preview, insert and reopen playable code', async
   await page.getByRole('button', { name: 'Generate sound', exact: true }).click();
   await expect(page.locator('#generation-status')).toContainText('Ready to preview');
   await page.getByRole('button', { name: 'Preview A warm short bass', exact: true }).first().click();
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
-  await page.getByRole('button', { name: 'Insert into pattern', exact: true }).click();
+  await page.locator('#assets .asset.selected [data-insert-existing]').click();
   await expect(page.locator('#sounds-panel')).toBeHidden();
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('/api/samples/');
-  await page.getByRole('button', { name: 'Play', exact: true }).click(); await expect(page.locator('#transport-state')).toContainText('Playing');
+  await page.getByRole('button', { name: 'Play pattern', exact: true }).click(); await expect(page.locator('#transport-state')).toContainText('Playing');
   await expect.poll(async () => (await (await request.get('/api/recovery')).json()).tabs[0].code).toContain('/api/samples/');
   await page.reload(); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await page.getByRole('button', { name: 'Play', exact: true }).click(); await expect(page.locator('#transport-state')).toContainText('Playing');
+  await page.getByRole('button', { name: 'Play pattern', exact: true }).click(); await expect(page.locator('#transport-state')).toContainText('Playing');
   expect((await request.post('/api/generations', { data: { prompt: '', duration: 31, loop: false } })).status()).toBe(400);
   expect((await request.post('/api/generations', { headers: { Origin: 'https://example.com' }, data: { prompt: 'rain', duration: 1, loop: false } })).status()).toBe(403);
 });
@@ -198,10 +197,10 @@ test('closing referenced tabs confirms removal and Escape never repeats an earli
   await patternAction(page, 'Rename pattern');
   await page.locator('#edit-name').fill('Bass'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Bass', exact: true })).toBeVisible();
-  await patternAction(page, 'Close pattern'); await page.keyboard.press('Escape');
+  await patternAction(page, 'Delete pattern…'); await page.keyboard.press('Escape');
   await expect(page.getByRole('tab', { name: 'Bass', exact: true })).toBeVisible();
   await expect(page.locator('.clip')).toHaveCount(1);
-  await patternAction(page, 'Close pattern'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  await patternAction(page, 'Delete pattern…'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Bass', exact: true })).toHaveCount(0);
   await expect(page.locator('.clip')).toHaveCount(0);
 });
@@ -224,7 +223,7 @@ test('context menus target inactive patterns, copy draft code, and support keybo
   const bass = page.getByRole('tab', { name: 'Bass', exact: true });
   await bass.focus(); await page.keyboard.press('Shift+F10');
   await expect(page.getByRole('menuitem', { name: 'Color…', exact: true })).toBeFocused();
-  await page.keyboard.press('End'); await expect(page.getByRole('menuitem', { name: 'Close', exact: true })).toBeFocused();
+  await page.keyboard.press('End'); await expect(page.getByRole('menuitem', { name: 'Delete…', exact: true })).toBeFocused();
   await page.keyboard.press('Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
   await expect(page.getByRole('tab', { name: 'Bass copy', exact: true })).toHaveAttribute('aria-selected', 'true');
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('note("d3")');
@@ -237,8 +236,8 @@ test('context menus target inactive patterns, copy draft code, and support keybo
   await expect(page.getByRole('menu')).toBeHidden(); await expect(bass).toBeFocused();
   await bass.click({ button: 'right' }); await page.locator('#project-name').click();
   await expect(page.getByRole('menu')).toBeHidden();
-  await page.locator('.tab-editor:not([hidden]) .cm-content').click({ button: 'right' });
-  await expect(page.getByRole('menu')).toBeHidden();
+  await page.locator('.tab-editor:not([hidden]) .cm-content').getByText('note', { exact: true }).click({ button: 'right' });
+  await expect(page.getByRole('menuitem', { name: 'Play MIDI', exact: true })).toBeVisible(); await page.keyboard.press('Escape');
   await page.reload(); await expect(page.getByRole('tab', { name: 'Bass copy', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
@@ -272,7 +271,7 @@ test('clip context menus duplicate around occupied space and prevent edits durin
 
 test('sound context actions use the clicked sound and menus fit both appearances', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await page.locator('#sounds-toggle').click();
+  await page.locator('#sounds-toggle').click(); await page.locator('#add-sounds > summary').click();
   for (const prompt of ['Context sound A', 'Context sound B']) {
     await page.getByRole('tab', { name: 'Generate', exact: true }).click();
   await page.getByLabel('Describe your next sound').fill(prompt);
@@ -283,16 +282,16 @@ test('sound context actions use the clicked sound and menus fit both appearances
   await page.locator('#edit-name').fill('Renamed sound A'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   const renamed = page.locator('.asset').filter({ hasText: 'Renamed sound A' });
   await renamed.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Preview', exact: true }).click();
-  await page.locator('#stop').click();
+  await page.locator('#sounds-close').click();
   for (const dark of [false, true]) {
-    await page.locator('#dark-mode').setChecked(dark);
+    await page.locator('#dark-mode').setChecked(dark); await page.locator('#sounds-toggle').click();
     await renamed.dispatchEvent('contextmenu', { clientX: 1438, clientY: 1098 });
     const bounds = await page.getByRole('menu').boundingBox();
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(1440); expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(1100);
     await page.screenshot({ path: `/tmp/strudel-context-${dark ? 'dark' : 'light'}.png` });
-    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape'); await page.locator('#sounds-close').click();
   }
-  await renamed.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Insert into pattern', exact: true }).click();
+  await page.locator('#sounds-toggle').click(); await renamed.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Insert into pattern', exact: true }).click();
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('Renamed sound A');
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).not.toContainText('Context sound B');
 });
@@ -301,15 +300,15 @@ test('context actions preserve the active tab and protect the last pattern', asy
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
   const tab = page.getByRole('tab', { name: 'Pattern 1', exact: true });
   await tab.click({ button: 'right' });
-  await expect(page.getByRole('menuitem', { name: /^Close/ })).toHaveAttribute('aria-disabled', 'true');
+  await expect(page.getByRole('menuitem', { name: /^Delete/ })).toHaveAttribute('aria-disabled', 'true');
   await page.getByRole('menuitem', { name: 'Add to composition', exact: true }).click();
   await page.getByRole('button', { name: 'Save clip', exact: true }).click();
   await expect(page.locator('.clip')).toHaveCount(1);
   await page.locator('#new-tab').click();
-  await tab.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Close', exact: true }).click();
+  await tab.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Delete…', exact: true }).click();
   await expect(page.locator('#edit-description')).toContainText('1 composition clip');
   await page.keyboard.press('Escape'); await expect(tab).toBeVisible();
-  await tab.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Close', exact: true }).click();
+  await tab.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Delete…', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   await expect(tab).toHaveCount(0); await expect(page.locator('.clip')).toHaveCount(0);
   const active = page.getByRole('tab', { name: 'Pattern 2', exact: true });

@@ -3,6 +3,7 @@ export type MenuAction = { label: string; run: () => unknown; disabled?: string 
 /** One transient menu; item actions retain their target rather than reading selection. */
 export class ContextMenu {
   private root = document.createElement('div');
+  private scrollPositions = new Map<Element, [number, number]>();
   private restore?: () => HTMLElement | null;
   constructor() {
     this.root.className = 'context-menu'; this.root.hidden = true;
@@ -14,6 +15,9 @@ export class ContextMenu {
     window.addEventListener('resize', () => this.close());
     window.addEventListener('blur', () => this.close(false));
     document.addEventListener('scroll', event => {
+      const target = event.target === document ? document.scrollingElement : event.target as Element;
+      const atOpen = target && this.scrollPositions.get(target);
+      if (atOpen && target!.scrollLeft === atOpen[0] && target!.scrollTop === atOpen[1]) return;
       if (!this.root.contains(event.target as Node)) this.close();
     }, true);
     this.root.addEventListener('keydown', event => {
@@ -61,6 +65,9 @@ export class ContextMenu {
     const bounds = this.root.getBoundingClientRect();
     this.root.style.left = `${Math.max(8, Math.min(x, innerWidth - bounds.width - 8))}px`;
     this.root.style.top = `${Math.max(8, Math.min(y, innerHeight - bounds.height - 8))}px`;
+    this.scrollPositions.clear();
+    for (let element: HTMLElement | null = restore(); element; element = element.parentElement) this.scrollPositions.set(element, [element.scrollLeft, element.scrollTop]);
+    if (document.scrollingElement) this.scrollPositions.set(document.scrollingElement, [document.scrollingElement.scrollLeft, document.scrollingElement.scrollTop]);
     this.root.querySelector('button')?.focus({ preventScroll: true });
   }
 }

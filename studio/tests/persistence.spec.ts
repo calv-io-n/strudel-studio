@@ -2,7 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { newProject } from '../shared/model';
 
 async function edit(page: Page, code: string) {
-  await page.locator('.tab-editor:not([hidden]) .cm-content').click();
+  await page.locator('.tab-editor:not([hidden]) .cm-content').focus();
   await page.keyboard.press('Control+a'); await page.keyboard.insertText(code);
 }
 async function create(page: Page, name: string) {

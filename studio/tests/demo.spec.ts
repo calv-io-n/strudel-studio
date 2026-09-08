@@ -23,20 +23,20 @@ test('Neon Drive plays every tab, renders its complete arrangement, and restores
   for (const name of ['Rhythm', 'Chords', 'Lead', 'Breakdown']) {
     await page.getByRole('tab', { name, exact: true }).click();
     await page.evaluate(() => window.neonCapture.start());
-    await page.getByRole('button', { name: 'Play', exact: true }).click();
+    await page.getByRole('button', { name: 'Play pattern', exact: true }).click();
     await expect(page.locator('#transport-state')).toHaveText(`Playing · ${name}`);
     await expect.poll(() => page.evaluate(() => window.neonCapture.frames / window.neonCapture.rate)).toBeGreaterThan(.8);
     const audio = await page.evaluate(() => window.neonCapture.finish());
     expect(audio.peak, `${name} must produce audio`).toBeGreaterThan(.005);
     expect(audio.clipped, `${name} should not clip`).toBe(0);
-    await page.getByRole('button', { name: 'Stop', exact: true }).click();
+    await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
   }
 
-  await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
   await expect(page.locator('.clip')).toHaveCount(6);
-  await page.getByLabel('Playback target').selectOption('composition');
+
   await page.evaluate(() => window.neonCapture.start());
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.locator('#composition-play').click();
   await expect(page.locator('#transport-state')).toHaveText('Playing · Composition');
   // Wait for real musical time, not an accelerated test clock.
   for (const cycle of [4.5, 16.5, 20.5, 31]) {
@@ -62,19 +62,19 @@ test('Neon Drive plays every tab, renders its complete arrangement, and restores
   // The pre-mapped lead knob must address a hidden editor and remain a live control.
   await page.getByRole('tab', { name: 'Chords', exact: true }).click();
   await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Composition', exact: true }).click(); await page.locator('#composition-play').click(); await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
   await page.getByRole('slider', { name: 'Lead brightness', exact: true }).fill('100');
   await expect(page.locator('#last-receipt')).toContainText('applied');
   await page.getByRole('tab', { name: 'Lead', exact: true }).click();
   await expect(page.getByRole('slider', { name: 'lpf inline slider', exact: true })).toHaveValue('4800');
   await expect(page.locator('#evaluate')).toBeHidden();
-  await page.locator('.tab-editor:not([hidden]) .cm-content').click();
+  await page.locator('.tab-editor:not([hidden]) .cm-content').focus();
   await page.keyboard.press('Control+Home'); await page.keyboard.insertText('// verified draft\n');
   await expect(page.locator('#evaluate')).toBeVisible();
   await page.getByRole('button', { name: 'Apply changes', exact: false }).click();
   await expect(page.locator('#evaluate')).toBeHidden();
   await expect(page.locator('#transport-state')).toContainText('Playing');
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
   await page.getByLabel('Project name').fill('Neon Drive verified');
   await page.locator('.project-menu > summary').click();
   await page.getByRole('button', { name: 'Save project', exact: true }).click();

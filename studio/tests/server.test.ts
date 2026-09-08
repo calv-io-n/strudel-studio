@@ -54,3 +54,14 @@ test('session creation is collision-safe and survives a fresh store instance', a
   for (const session of sessions) assert.deepEqual(await reopened.load(session.sessionId!), session);
   assert.notEqual((await db.create({ ...newProject(), name: 'recovery' })).sessionId, 'recovery');
 });
+
+test('sample descriptions and tags persist without changing audio identity', async () => {
+  const db = await store(), generator = new Generator(db, undefined, true);
+  const job = await finished(generator, generator.start({ prompt: 'Metadata fixture', duration: .5, loop: false }).id);
+  const asset = job.asset!;
+  const updated = await db.updateAsset(asset.id, { description: 'Soft wooden percussion', tags: ['wood', 'soft'] });
+  assert.equal(updated.id, asset.id); assert.equal(updated.prompt, asset.prompt);
+  assert.deepEqual((await db.asset(asset.id)).tags, ['wood', 'soft']);
+  assert.equal((await db.asset(asset.id)).description, 'Soft wooden percussion');
+  await assert.rejects(() => db.updateAsset(asset.id, { tags: ['x'.repeat(51)] }));
+});

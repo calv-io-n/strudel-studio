@@ -24,10 +24,11 @@ export async function importSample(req: IncomingMessage, store: Store) {
     if (metadata.recoverId && existing?.contentHash && existing.contentHash !== hash) throw new Error('This file differs from the original. Choose the original file or import it as a new sound.');
     if (existing && !existing.missing) return { asset: existing, reused: true };
     const asset = existing ? { ...existing, missing: undefined } : AssetSchema.parse({ id: metadata.recoverId ?? randomUUID(), createdAt: new Date().toISOString(), label: metadata.label, provider: metadata.provider, duration, format: 'wav', contentHash: hash, pack: metadata.pack, source: { ...metadata.source, name: metadata.name, originalFormat: metadata.originalFormat } });
-    const originalPath = path.join(store.samplesRoot, `${asset.id}.original.${metadata.originalFormat}`);
+    const dir = existing ? await store.locate(existing.id) : store.samplesRoot;
+    const originalPath = path.join(dir, `${asset.id}.original.${metadata.originalFormat}`);
     const tmp = `${originalPath}.${randomUUID()}.tmp`;
     await writeFile(tmp, original); await rename(tmp, originalPath);
-    if (existing) { if (asset.format === 'mp3' && metadata.originalFormat !== 'mp3') throw new Error('Restore the original MP3 file.'); await writeFile(path.join(store.samplesRoot, `${asset.id}.${asset.format}`), asset.format === 'mp3' ? original : wav, { flag: 'wx' }); }
+    if (existing) { if (asset.format === 'mp3' && metadata.originalFormat !== 'mp3') throw new Error('Restore the original MP3 file.'); await writeFile(path.join(dir, `${asset.id}.${asset.format}`), asset.format === 'mp3' ? original : wav, { flag: 'wx' }); }
     else await store.writeAsset(asset, wav);
     return { asset, reused: !!existing };
   });

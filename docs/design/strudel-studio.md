@@ -1,3 +1,5 @@
+> The current workspace and sound-selection interactions are specified in [Workspace polish](workspace-polish.md). That document supersedes the older header, tab-closing, drawer, and MIDI entry-flow descriptions below.
+
 # Strudel Studio
 
 Design target for the project. This describes intended behavior, not a claim that every feature is implemented.
@@ -113,7 +115,7 @@ Inserted code remains a draft under the existing Play / Apply changes rules. MID
 
 ## Sound library
 
-Open the library from a single **Sounds** action. It is a temporary panel, closed by default, with exactly two source tabs: **Generate** and **Import**. Default to Import for new projects and remember the last used tab. Keep one shared searchable library of saved sounds and packs accessible beneath either tab, so users do not have to remember how a sound was acquired. Switching tabs preserves unfinished prompts, import selections, and recording state.
+Open the library from a single **Sample library** action in the drawer bar, or by clicking a sound name in code. It is a drawer view beside Composition and Virtual MIDI, closed by default and never modal: the editor and transport stay usable while it is open, and it can expand to fill the workspace. Every sound row offers preview, **Insert**/**Swap**, and **Live**, which routes the controller and test keys to that sound for audition only. Sources sit under an **Add sounds** disclosure with exactly two tabs: **Generate** and **Import**. Default to Import for new projects and remember the last used tab. Keep one shared searchable library of saved sounds and packs accessible beneath either tab, so users do not have to remember how a sound was acquired. Switching tabs preserves unfinished prompts, import selections, and recording state.
 
 Generate contains sound generation. Import contains **Upload files or pack**, **From GitHub**, and **Record audio**. Upload supports drag-and-drop and a file picker; every flow also works by keyboard. Neither importing nor recording requires an ElevenLabs key or a generation request.
 

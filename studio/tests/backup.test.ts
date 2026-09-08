@@ -20,7 +20,7 @@ test('backup restores referenced audio and creates a collision-safe session', as
     const wav = new Uint8Array(encodeWav(new Float32Array(4410), new Float32Array(4410), 44100).buffer); await source.writeAsset(asset, wav);
     const project = newProject(); project.assetIds = [asset.id]; project.tabs[0].code = `s("studio_${asset.id.replaceAll('-', '')}")`;
     const bytes = await backupProject(project, source);
-    const restored = await restoreBackup(bytes, target); assert.equal(restored.project.version, 4); assert.deepEqual(restored.missing, []);
+    const restored = await restoreBackup(bytes, target); assert.equal(restored.project.version, 5); assert.deepEqual(restored.missing, []);
     assert.deepEqual(await readFile(path.join(target.samplesRoot, `${asset.id}.wav`)), Buffer.from(wav));
     const duplicate = await restoreBackup(bytes, target); assert.notEqual(duplicate.project.sessionId, restored.project.sessionId);
     project.assetIds.push(randomUUID()); const missing = unzipSync(await backupProject(project, source));
@@ -29,7 +29,7 @@ test('backup restores referenced audio and creates a collision-safe session', as
 });
 test('v3 sessions migrate and sample insertion preserves surrounding code without duplicating effects', () => {
   const project = newProject(); const { assetIds, ...old } = project;
-  const next = ProjectSchema.parse({ ...old, version: 3 }); assert.equal(next.version, 4); assert.deepEqual(next.assetIds, []);
+  const next = ProjectSchema.parse({ ...old, version: 3 }); assert.equal(next.version, 5); assert.deepEqual(next.assetIds, []);
   const asset = AssetSchema.parse({ id: randomUUID(), createdAt: '', format: 'wav', provider: 'recording', duration: 2, label: 'Take', recording: { source: 'internal', bpm: 120, offsetCycles: .5, duration: 2, trimStart: 0, trimEnd: 2 } });
   const code = 'note(60).s("triangle").room(.5)\n$: s("bd")'; const change = sampleInsertion(code, 5, asset, 120);
   assert.equal(code.slice(0, change.from), 'note(60).s("triangle").room(.5)');

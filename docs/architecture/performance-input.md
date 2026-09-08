@@ -39,3 +39,11 @@ Format v4 adds explicit asset references and migrates v1–v3 input. Project bac
 Unit and browser fixtures cover phrase fidelity, explicit acceptance/undo, audible live gain, isolated audio capture, interruption/reload recovery, jam looping, upload/GitHub imports, duplicate reuse and backup restoration. The complete browser suite retains existing playback and export checks. Physical ALSA MIDI and audio-interface channel behavior require hardware verification; browser fixtures do not establish those results.
 
 Limits are visible in the UI: 64 MB per imported source file, 256 MB per pack/backup, 500 files per import review and 15 minutes per sample or recording. Browser decoder/input capabilities determine supported device channels and codec availability. Unsupported inputs/formats report errors without discarding valid takes or files.
+
+## Composition MIDI transcription
+
+The contextual **Transcribe on composition** path is implemented separately from the legacy one-shot performance panel. Composition Play starts cycle-window capture. Nonempty passes replace the displayed proposal at loop boundaries; empty passes preserve it. Live MIDI and Transcribed select the audible source without stopping the loop.
+
+The engine evaluates the entire source with the selected expression replaced by a tagged MIDI pattern. It retains surrounding variables, inherited sound/effect settings, and live slider references. Clip-specific backing patterns suppress the selected expression, and a separate overlay supplies a transcribed phrase when the chosen loop extends beyond one source clip.
+
+Project format v5 adds optional clip source offsets and migrates v1–v4 input. These offsets preserve phase when acceptance splits a clip. Pending composition MIDI takes recover from browser storage separately from accepted code. Project backups include accepted variations and their sample references; unaccepted browser-only MIDI takes are not included in backups.
