@@ -52,3 +52,10 @@ velocity and selected quantization. Stop retains the take; Accept replaces only
 the anchored expression as one editor edit. Preview isolated temporarily attenuates
 the arrangement output; neither preview mode inserts code. Retry explicitly drops
 the current proposal. Runtime phrase settings are separate from saved project code.
+
+Jam uses a repeating arrangement query with absolute scheduling offsets and a
+runtime destination-tab exclusion. Take Stop leaves the loop intact; global Stop
+and leaving performance end it. Ordinary composition still stops at its last clip.
+Phrase suppression recompiles only the last applied source snapshot with the
+selected expression replaced by silence; ambiguity blocks suppression. Neither
+mechanism edits saved mix flags or draft source.

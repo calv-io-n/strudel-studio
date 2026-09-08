@@ -79,3 +79,35 @@ test('generated Strudel preserves phrase timing and chord overlaps', async ({ pa
   }, process.cwd());
   expect(result).toEqual([[.25, .75, 60, 1], [.25, .5, 64, .503937]]);
 });
+
+test('jam repeats accompaniment, excludes the destination and survives take Stop', async ({ page, request }) => {
+  const project = newProject(); project.tabs[0].code = 'note("c3").s("triangle")';
+  project.tabs.push({ ...project.tabs[0], id: 'backing', name: 'Backing', code: 'note("g3").s("triangle")' });
+  project.clips = [{ id: 'lead', tabId: 'pattern-1', trackId: 'track-1', start: 0, length: .25, muted: false }, { id: 'back', tabId: 'backing', trackId: 'track-2', start: 0, length: .25, muted: false }];
+  await request.put('/api/recovery', { data: project });
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.locator('.cm-content').click(); await page.keyboard.press('Control+Home');
+  for (let i = 0; i < 10; i++) await page.keyboard.press('Shift+ArrowRight');
+  await page.getByRole('button', { name: 'Play into selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Jam with composition', exact: true }).click();
+  await expect(page.locator('[data-jam-state]')).toContainText('excluding Pattern 1');
+  await page.waitForTimeout(1100);
+  await expect(page.locator('#transport-state')).toContainText('Playing');
+  await page.getByRole('button', { name: 'Stop take', exact: true }).click();
+  await expect(page.locator('#transport-state')).toContainText('Playing');
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(page.locator('#transport-state')).toHaveText('Stopped');
+  expect((await (await request.get('/api/recovery')).json()).clips).toEqual(project.clips);
+});
+
+test('loop queries repeat only eligible clips with continuous absolute timing', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async root => {
+    const { arrangement, loopRange } = await import('/@fs/' + root + '/studio/shared/arrangement.ts');
+    const core = await import(String('/@id/@strudel/core'));
+    const clips = ['lead', 'back'].map(id => ({ id, tabId: id, trackId: id, start: 0, length: 1, muted: false }));
+    const pattern = loopRange(arrangement(clips, new Map([['lead', core.note(60)], ['back', core.note(64)]]), undefined, () => 'lead'), 0, 1);
+    return pattern.queryArc(0, 3).map((h: any) => [Number(h.whole.begin), Number(h.whole.end), h.value.note]);
+  }, process.cwd());
+  expect(result).toEqual([[0, 1, 64], [1, 2, 64], [2, 3, 64]]);
+});
