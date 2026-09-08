@@ -1,3 +1,4 @@
+import { LiveEffects } from './live-effects';
 import * as core from '@strudel/core';
 import * as mini from '@strudel/mini';
 import * as tonal from '@strudel/tonal';
@@ -41,6 +42,7 @@ export class Engine {
       core.setTime(() => this.repl.scheduler.now()); core.setCpsFunc(() => this.repl.scheduler.cps); core.setPattern(this.repl.state.pattern);
     }
   }
+  readonly liveEffects = new LiveEffects();
   get tempo() { return this.project().bpm; }
   isolatePerformance(isolated: boolean) {
     const output = audio.getSuperdoughAudioController().output.destinationGain;
@@ -57,7 +59,10 @@ export class Engine {
       if (compiler.state.evalError) throw compiler.state.evalError;
       const haps = compiler.state.pattern?.queryArc(0, 1) ?? [];
       if (haps.length !== 1 || !haps[0].value || typeof haps[0].value !== 'object') throw new Error('Select a single instrument chain or choose the fallback synth.');
-      return haps[0].value;
+      const controls: Record<string, string> = {};
+      const destination = owner.destination;
+      for (const slider of owner.sliders) if (destination && slider.start >= destination.to && slider.end <= destination.to + soundCode.length) controls[slider.label === 'lpf' ? 'cutoff' : slider.label] = slider.id;
+      return this.liveEffects.wrap(haps[0].value, controls);
     } finally {
       core.setTime(() => this.repl.scheduler.now()); core.setCpsFunc(() => this.repl.scheduler.cps); core.setPattern(this.repl.state.pattern);
       this.compilingBusy = false;
@@ -111,7 +116,8 @@ export class Engine {
         if (!slider) return core.pure(value);
         const stableId = slider.id;
         const revision = owner.liveVersions.get(stableId) ?? 0;
-        return core.ref(() => (owner.liveVersions.get(stableId) ?? 0) !== revision ? owner.values.get(stableId) ?? value : value);
+        return core.ref(() => (owner.liveVersions.get(stableId) ?? 0) !== revision ? owner.values.get(stableId) ?? value : value)
+          .withContext((context: object) => ({ ...context, [`studioControl_${stableId}`]: { key: stableId, label: slider.label } }));
       },
       soundSlot: (argument: string | { __pure: string }) => {
         const name = slotName(argument);
@@ -131,6 +137,13 @@ export class Engine {
       },
     });
     this.repl = audio.webaudioRepl({ transpiler, beforeStart: () => this.unlock(),
+      defaultOutput: (hap: any, deadline: number, duration: number, cps: number, time: number) => {
+        const controls: Record<string, string> = {};
+        for (const [key, control] of Object.entries(hap.context ?? {})) if (key.startsWith('studioControl_')) {
+          const item = control as { key: string; label: string }; controls[item.label === 'lpf' ? 'cutoff' : item.label] = item.key;
+        }
+        return audio.webaudioOutput(hap.withValue((value: any) => this.liveEffects.wrap(value, controls)), deadline, duration, cps, time);
+      },
       onToggle: () => this.changed(), onEvalError: (err: Error) => this.error(err.message),
     });
     this.timeline.reset(project.slots);

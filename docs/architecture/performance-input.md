@@ -59,3 +59,11 @@ and leaving performance end it. Ordinary composition still stops at its last cli
 Phrase suppression recompiles only the last applied source snapshot with the
 selected expression replaced by silence; ambiguity blocks suppression. Neither
 mechanism edits saved mix flags or draft source.
+
+Simple mapped gain and low-pass controls carry slider identity through pattern
+context into dedicated voice AudioParams with 15 ms smoothing. This works for
+scheduled playback and performed voices without applying drafts. Modulated filters
+retain native scheduling; room/delay/envelope controls update next scheduled notes.
+Mapping feedback names these boundaries. Offline export uses ordinary Strudel
+rendering and snapshots the latest saved control values. A browser audio-capture
+regression verifies muting a sustained note through its live gain control.
