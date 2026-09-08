@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, rename, writeFile, link, unlink } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, writeFile, link, unlink, access } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { AssetSchema, ProjectSchema, type Asset, type Project } from '../shared/model';
@@ -38,7 +38,11 @@ export class Store {
     const result: Asset[] = [];
     for (const name of await readdir(this.samplesRoot)) {
       if (!name.endsWith('.json')) continue;
-      try { result.push(AssetSchema.parse(JSON.parse(await readFile(path.join(this.samplesRoot, name), 'utf8')))); }
+      try {
+        const asset = AssetSchema.parse(JSON.parse(await readFile(path.join(this.samplesRoot, name), 'utf8')));
+        try { await access(path.join(this.samplesRoot, `${asset.id}.${asset.format}`)); } catch { asset.missing = true; }
+        result.push(asset);
+      }
       catch { /* Other sample metadata may share this directory. */ }
     }
     return result.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -48,8 +52,11 @@ export class Store {
     return AssetSchema.parse(JSON.parse(await readFile(path.join(this.samplesRoot, `${id}.json`), 'utf8')));
   }
   async writeAsset(asset: Asset, audio: Uint8Array) {
-    await writeFile(path.join(this.samplesRoot, `${asset.id}.${asset.format}`), audio, { flag: 'wx' });
-    await writeFile(path.join(this.samplesRoot, `${asset.id}.json`), JSON.stringify(asset, null, 2), { flag: 'wx' });
+    asset = AssetSchema.parse(asset);
+    const file = path.join(this.samplesRoot, `${asset.id}.${asset.format}`);
+    await writeFile(file, audio, { flag: 'wx' });
+    try { await writeFile(path.join(this.samplesRoot, `${asset.id}.json`), JSON.stringify(asset, null, 2), { flag: 'wx' }); }
+    catch (error) { await unlink(file); throw error; }
   }
   async labelAsset(id: string, label: string) {
     const asset = AssetSchema.parse({ ...await this.asset(id), label });

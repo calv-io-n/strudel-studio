@@ -110,6 +110,7 @@ test('two lanes play on the composition clock and stop at the final clip', async
 test('generate a fixture sound, preview, insert and reopen playable code', async ({ page, request }) => {
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
   await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await page.getByRole('tab', { name: 'Generate', exact: true }).click();
   await page.getByLabel('Describe your next sound').fill('A warm short bass');
   await page.locator('.generation-options > summary').click();
   await page.getByLabel('Duration', { exact: true }).fill('1');
@@ -273,7 +274,8 @@ test('sound context actions use the clicked sound and menus fit both appearances
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
   await page.locator('#sounds-toggle').click();
   for (const prompt of ['Context sound A', 'Context sound B']) {
-    await page.getByLabel('Describe your next sound').fill(prompt);
+    await page.getByRole('tab', { name: 'Generate', exact: true }).click();
+  await page.getByLabel('Describe your next sound').fill(prompt);
     await page.locator('#generate').click(); await expect(page.locator('#generation-status')).toContainText('Ready to preview');
   }
   const first = page.locator('.asset').filter({ hasText: 'Context sound A' });

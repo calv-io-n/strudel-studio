@@ -8,10 +8,16 @@ export const GenerationSchema = z.object({
   loop: z.boolean(),
 });
 export type Generation = z.infer<typeof GenerationSchema>;
-export const AssetSchema = GenerationSchema.extend({
+export const AssetSchema = z.object({
+  prompt: z.string().max(450).default(''), duration: z.number().nonnegative().nullable().default(null), loop: z.boolean().default(false),
   label: z.string().trim().min(1).max(80).optional(),
   id: z.string().uuid(), createdAt: z.string(), format: z.enum(['mp3', 'wav']),
-  provider: z.enum(['elevenlabs', 'fixture']),
+  provider: z.enum(['elevenlabs', 'fixture', 'upload', 'github', 'recording']),
+  contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  pack: z.object({ id: z.string().uuid(), name: z.string().min(1).max(80), folder: z.string().max(1000).default('') }).optional(),
+  source: z.object({ name: z.string().max(1000), url: z.string().max(2000).optional(), revision: z.string().max(100).optional(), originalFormat: z.enum(['wav', 'mp3', 'ogg', 'flac']).optional() }).optional(),
+  recording: z.object({ source: z.enum(['internal', 'external']), bpm: z.number().positive(), offsetCycles: z.number().nonnegative(), duration: z.number().nonnegative(), trimStart: z.number().nonnegative(), trimEnd: z.number().nonnegative(), incomplete: z.boolean().default(false) }).optional(),
+  missing: z.boolean().optional(),
 });
 export type Asset = z.infer<typeof AssetSchema>;
 export const AnchorSchema = z.object({

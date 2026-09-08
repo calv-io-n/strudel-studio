@@ -67,3 +67,9 @@ retain native scheduling; room/delay/envelope controls update next scheduled not
 Mapping feedback names these boundaries. Offline export uses ordinary Strudel
 rendering and snapshots the latest saved control values. A browser audio-capture
 regression verifies muting a sustained note through its live gain control.
+
+Sounds now separates Generate and Import while retaining one searchable library.
+Asset metadata supports upload, GitHub and recording provenance independently of
+the generation request schema. Legacy generated metadata and sample URLs remain
+valid. The store reports missing audio and removes a newly written audio file if
+its metadata cannot be committed.
