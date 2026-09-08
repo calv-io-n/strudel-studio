@@ -46,9 +46,9 @@ export class PerformancePanel {
     this.root.querySelector<HTMLButtonElement>(`[data-${name}]`)!.onclick = async () => { try { await action(); } catch (error) { this.report((error as Error).message); } };
   }
   protected status(text: string) { this.root.querySelector('[data-state]')!.textContent = text; }
-  private async prepare() {
+  async prepare() {
     if (!this.owner?.destination?.valid) throw new Error('The destination changed. Select a supported note expression again.');
-    this.values = await this.engine.performanceValues(this.owner, this.take!.destination.soundCode);
+    this.values = await this.engine.performanceValues(this.owner, this.take!.destination.soundCode); this.audition = true;
   }
   async note(key: string, pitch: number, velocity: number, on: boolean) {
     if (!this.take) return false;

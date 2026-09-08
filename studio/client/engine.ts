@@ -26,6 +26,7 @@ export class Engine {
     try { await this.compile('composition', false); } catch (error) { this.jam = undefined; throw error; }
   }
   endJam() { if (this.jam) this.stop(); }
+  get destinationTabId() { return this.jam?.tabId ?? this.project().activeTabId; }
   get arrangementLength() { return Math.max(0, ...this.project().clips.map(c => c.start + c.length)); }
   async suppressPhrase(owner: StudioEditor, tabId: string, original: string, enabled: boolean) {
     if (!enabled) { this.suppressed.delete(tabId); return; }
@@ -43,6 +44,7 @@ export class Engine {
     }
   }
   readonly liveEffects = new LiveEffects();
+  get audioContext(): AudioContext { return audio.getAudioContext(); }
   get tempo() { return this.project().bpm; }
   isolatePerformance(isolated: boolean) {
     const output = audio.getSuperdoughAudioController().output.destinationGain;

@@ -1,3 +1,4 @@
+import { RecordingPanel } from './recording';
 import { effectBehavior } from './live-effects';
 import { PerformancePanel } from './performance';
 import { isClipMuted } from '../shared/mix';
@@ -103,6 +104,13 @@ editor = getEditor();
 const engine = new Engine(getEditor, () => snapshot(), () => renderTransport(), (message) => notice(message, true));
 const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine);
 $('#editor').after(performancePanel.root);
+const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true));
+$('#sound-import').append(recordingPanel.root);
+const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
+recordButton.onclick = guard(() => recordingPanel.open('external')); $('#sound-import').prepend(recordButton);
+const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
+recordSelected.onclick = guard(async () => { performancePanel.stop(); await recordingPanel.open('internal'); setSounds(true); soundSource('import'); });
+performancePanel.root.querySelector('[data-actions]')!.append(recordSelected);
 const performButton = document.createElement('button'); performButton.textContent = 'Play into selection';
 performButton.onclick = guard(() => performancePanel.arm());
 $('.editor-footer').prepend(performButton);
@@ -437,7 +445,8 @@ $('#saved-projects').onpointerdown = guard(refreshProjects);
 
 $('#save').onclick = guard(async () => { await persistSession(); notice(`Saved ${snapshot().name}.`); });
 async function loadProject(next: Project) {
-  performancePanel.close();
+  if (recordingPanel.pending) throw new Error('Save or discard the pending audio take before switching sessions.');
+  recordingPanel.discard(); performancePanel.close();
   contextMenu.close(false);
   const validated = ProjectSchema.parse(next);
   // Preload before changing the running project. Missing assets are explicit, and
@@ -470,7 +479,7 @@ function settleSlots(stopped = !engine.started) {
 }
 
 function startPlayback() { return engine.evaluate(true, $('#play-target').value === 'composition' ? 'composition' : project.activeTabId); }
-function stopPlayback() { performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
+function stopPlayback() { void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
 $('#play-target').onchange = renderTransport;
 $('#dark-mode').checked = document.documentElement.dataset.appearance === 'dark';
 $('#dark-mode').onchange = () => {
@@ -568,7 +577,7 @@ $('#insert-sound').onclick = guard(() => selectedAsset ? insertSound(selectedAss
 function setSounds(open: boolean) {
   $('#sounds-panel').hidden = !open; $('#sounds-toggle').setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('sounds-open', open);
-  if (open) { $('#mapping-context').hidden = true; $('#prompt').focus(); } else $('#sounds-toggle').focus();
+  if (open) { $('#mapping-context').hidden = true; ($('#generate-form').hidden ? $('#sound-import-tab') : $('#prompt')).focus(); } else $('#sounds-toggle').focus();
 }
 $('#sounds-toggle').onclick = () => setSounds(!!$('#sounds-panel').hidden);
 $('#sounds-close').onclick = () => setSounds(false);

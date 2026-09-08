@@ -73,3 +73,12 @@ Asset metadata supports upload, GitHub and recording provenance independently of
 the generation request schema. Legacy generated metadata and sample URLs remain
 valid. The store reports missing audio and removes a newly written audio file if
 its metadata cannot be committed.
+
+The audio-take panel captures either the private performed-sound bus or a selected
+MediaStream input through an AudioWorklet. External setup requests permission,
+exposes reported channels and level metering, and defaults monitoring off. Internal
+capture requests no microphone permission. Both sources share count-in, duration
+limits, preview, trim, save and discard. Internal Stop offers a finishing tail;
+input loss retains received frames as incomplete. Saved PCM WAVs use stable library
+IDs and include tempo, offset and trim metadata. Hardware channel reporting still
+requires validation on the user's interface.
