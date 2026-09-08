@@ -38,3 +38,10 @@ shows its original code in a temporary review panel. The editor maps the range
 through unrelated changes and blocks acceptance after overlapping edits. The shared
 take model retains note events and closes held notes on interruption. Audition,
 transcription generation, and audio recording are subsequent stack changes.
+
+Selected-sound audition now compiles the selected expression's effect suffix and
+routes incoming notes through private Superdough voice orbits into a performance
+bus. Note-off releases the source while effect returns finish. Shared bus/source
+routing is rejected with an explicit fallback synth. Armed note events bypass
+sample bindings and MIDI Learn. The browser test captures real audio output;
+phrase suppression and jam routing follow with the transport changes.

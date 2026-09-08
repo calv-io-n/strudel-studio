@@ -9,11 +9,29 @@ import { SlotTimeline, slotName } from '../shared/slots';
 import { arrangement, MuteTimeline, PatternTimeline, type Pattern } from '../shared/arrangement';
 import type { Asset, Project } from '../shared/model';
 import type { StudioEditor } from './editor';
+import { PerformanceAudio } from './performance-audio';
 import { soundCatalog, soundKey } from './completions';
 
 type Scheduler = { started: boolean; lastEnd: number; cps: number; now(): number; stop(): void; setCps(cps: number): void; setPattern(pattern: Pattern, start?: boolean): Promise<void> };
 type Repl = { scheduler: Scheduler; state: { evalError?: Error; pattern?: { queryArc(a: number, b: number): unknown[] } }; evaluate(code: string, start: boolean): Promise<unknown> };
 export class Engine {
+  readonly performanceAudio = new PerformanceAudio();
+  async performanceValues(owner: StudioEditor, soundCode: string): Promise<Record<string, any>> {
+    if (this.compilingBusy) throw new Error('Wait for the current pattern to finish preparing.');
+    await this.unlock();
+    this.compilingBusy = true;
+    try {
+      const compiler = core.repl({ transpiler });
+      await compiler.evaluate(`note(60)${soundCode.replace(/slider\(\s*([-+\d.e]+)[^)]*\)/g, '$1')}`, false);
+      if (compiler.state.evalError) throw compiler.state.evalError;
+      const haps = compiler.state.pattern?.queryArc(0, 1) ?? [];
+      if (haps.length !== 1 || !haps[0].value || typeof haps[0].value !== 'object') throw new Error('Select a single instrument chain or choose the fallback synth.');
+      return haps[0].value;
+    } finally {
+      core.setTime(() => this.repl.scheduler.now()); core.setCpsFunc(() => this.repl.scheduler.cps); core.setPattern(this.repl.state.pattern);
+      this.compilingBusy = false;
+    }
+  }
   private library: Asset[] = [];
   get soundEntries() { return soundCatalog(Object.keys(audio.soundMap.get()), this.library); }
   get functionNames(): string[] {
@@ -214,6 +232,7 @@ export class Engine {
     this.changed(); return { cycle, cancelled: false };
   }
   stop() {
+    this.performanceAudio.silence();
     this.epoch++;
     this.pendingCycle = undefined; this.pendingMuteCycle = undefined;
     this.repl.scheduler.stop(); draw.cleanupDraw(true);
