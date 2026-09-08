@@ -52,3 +52,32 @@ test('external recording permission denial is recoverable and monitoring starts 
   await expect(page.locator('[data-status]')).toContainText('permission denied');
   await expect(page.getByRole('button', { name: 'Set up source', exact: true })).toBeEnabled();
 });
+
+test('file import retains valid audio beside unsupported files and reuses identical assets', async ({ page, request }) => {
+  const { encodeWav } = await import('../shared/wav');
+  const frames = Float32Array.from({ length: 4410 }, (_, i) => Math.sin(i * .08) * .2);
+  const bytes = Buffer.from(encodeWav(frames, frames, 44100).buffer);
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await page.locator('[data-files]').setInputFiles([{ name: 'import-tone.wav', mimeType: 'audio/wav', buffer: bytes }, { name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('not audio') }]);
+  await expect(page.locator('[data-review]')).toContainText('Unsupported format');
+  await page.getByRole('button', { name: 'Import selected', exact: true }).click();
+  await expect(page.locator('[data-review]')).toContainText('Imported');
+  const before = await (await request.get('/api/samples')).json(); const asset = before.find((a: any) => a.label === 'import-tone');
+  expect(asset).toBeTruthy(); expect(asset.source.originalFormat).toBe('wav');
+  await page.locator('[data-files]').setInputFiles([{ name: 'import-tone.wav', mimeType: 'audio/wav', buffer: bytes }]);
+  await page.getByRole('button', { name: 'Import selected', exact: true }).click();
+  await expect(page.locator('[data-review]')).toContainText('reused existing sound');
+  expect((await (await request.get('/api/samples')).json()).filter((a: any) => a.contentHash === asset.contentHash)).toHaveLength(1);
+});
+
+test('ZIP import reviews playable entries and rejects traversal paths', async ({ page }) => {
+  const { zipSync } = await import('fflate'); const { encodeWav } = await import('../shared/wav');
+  const frames = new Float32Array(441); const wav = new Uint8Array(encodeWav(frames, frames, 44100).buffer);
+  const zip = zipSync({ 'kit/kick.wav': wav, '../unsafe.wav': wav });
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await page.locator('[data-files]').setInputFiles({ name: 'Kit.zip', mimeType: 'application/zip', buffer: Buffer.from(zip) });
+  await expect(page.locator('[data-review]')).toContainText('kit/kick.wav');
+  await expect(page.locator('[data-review]')).toContainText('unsafe path');
+});

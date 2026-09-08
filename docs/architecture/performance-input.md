@@ -82,3 +82,10 @@ limits, preview, trim, save and discard. Internal Stop offers a finishing tail;
 input loss retains received frames as incomplete. Saved PCM WAVs use stable library
 IDs and include tempo, offset and trim metadata. Hardware channel reporting still
 requires validation on the user's interface.
+
+File/folder/ZIP import now reviews entries before committing them. Browser decoding
+produces a stereo WAV derivative while the server retains original bytes; SHA-256
+identity makes repeated imports reusable and restores missing audio under its old
+identifier. Packs carry folder metadata and can be renamed without changing sound
+IDs. ZIP review bounds file count and expansion size and rejects unsafe paths.
+Individual decode/upload errors remain visible alongside successful imports.

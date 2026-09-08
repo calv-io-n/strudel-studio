@@ -1,3 +1,4 @@
+import { SampleImports } from './imports';
 import { RecordingPanel } from './recording';
 import { effectBehavior } from './live-effects';
 import { PerformancePanel } from './performance';
@@ -106,6 +107,8 @@ const performancePanel = new PerformancePanel(() => editor, () => project.tabs.f
 $('#editor').after(performancePanel.root);
 const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true));
 $('#sound-import').append(recordingPanel.root);
+const sampleImports = new SampleImports(async asset => { assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true));
+$('#sound-import').append(sampleImports.root);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
 recordButton.onclick = guard(() => recordingPanel.open('external')); $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
@@ -221,7 +224,8 @@ function renderRoute() {
 function renderAssets() {
   $('#asset-count').textContent = `${assets.length} sound${assets.length === 1 ? '' : 's'}`;
   const visibleAssets = assets.filter(a => [soundLabel(a), a.pack?.name, a.pack?.folder].join(' ').toLowerCase().includes($('#sound-search').value.toLowerCase()));
-  $('#assets').innerHTML = visibleAssets.length ? visibleAssets.map((a) => `<article data-asset="${a.id}" class="asset ${a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span class="sample-mark">${a.loop ? '∞' : '↗'}</span><span><strong>${escape(soundLabel(a))}</strong><small>${a.duration ? a.duration + 's' : 'Auto duration'} · ${a.loop ? 'Loop' : 'One-shot'}${a.provider === 'fixture' ? ' · Test fixture' : ''}${a.pack ? ' · ' + escape(a.pack.name) + ' / ' + escape(a.pack.folder) : ''}${a.missing ? ' · Missing audio: restore from backup or reimport the original file' : ''}</small></span></button><button data-rename-asset="${a.id}" aria-label="Rename ${escape(soundLabel(a))}">Rename</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}">▶</button></article>`).join('') : '<div class="empty"><div class="empty-wave">∿</div><h3>Your next sound starts here.</h3><p>Describe a sound above, audition the result, then put it on a pad or into your pattern.</p></div>';
+  visibleAssets.sort((a, b) => (a.pack?.name || '').localeCompare(b.pack?.name || ''));
+  $('#assets').innerHTML = visibleAssets.length ? visibleAssets.map((a, index) => `${a.pack && visibleAssets[index - 1]?.pack?.id !== a.pack.id ? '<h3>' + escape(a.pack.name) + ' <button data-rename-pack="' + a.pack.id + '">Rename pack</button></h3>' : ''}<article data-asset="${a.id}" class="asset ${a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span class="sample-mark">${a.loop ? '∞' : '↗'}</span><span><strong>${escape(soundLabel(a))}</strong><small>${a.duration ? a.duration + 's' : 'Auto duration'} · ${a.loop ? 'Loop' : 'One-shot'}${a.provider === 'fixture' ? ' · Test fixture' : ''}${a.pack ? ' · ' + escape(a.pack.name) + ' / ' + escape(a.pack.folder) : ''}${a.missing ? ' · Missing audio: restore from backup or reimport the original file' : ''}</small></span></button>${a.missing ? `<button data-recover="${a.id}">Recover sound</button>` : ''}<button data-insert-existing="${a.id}">Insert</button><button data-rename-asset="${a.id}" aria-label="Rename ${escape(soundLabel(a))}">Rename</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}">▶</button></article>`).join('') : '<div class="empty"><div class="empty-wave">∿</div><h3>Your next sound starts here.</h3><p>Describe a sound above, audition the result, then put it on a pad or into your pattern.</p></div>';
   $('#assignment').hidden = !selectedAsset;
   $('#assign-target').innerHTML = project.controls.filter((c) => c.kind === 'pad' || c.kind === 'key').map((c) => `<option value="pad:${c.id}">${escape(c.label)} · Note ${c.number}</option>`).join('') + project.slots.map((s) => `<option value="slot:${s.name}">Sound slot: ${escape(s.name)}</option>`).join('');
 }
@@ -355,6 +359,9 @@ async function renameSound(id: string) {
   await engine.registerAssets(assets); renderAssets(); renderSlots(); renderBindings();
 }
 $('#assets').onclick = (e) => { const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
+  if (button.dataset.recover) { setSounds(true); soundSource('import'); sampleImports.root.querySelector<HTMLInputElement>('[data-files]')!.click(); }
+  if (button.dataset.insertExisting) void guard(() => insertSound(button.dataset.insertExisting!))();
+  if (button.dataset.renamePack) void guard(async () => { const name = await askEdit('Rename pack', assets.find(a => a.pack?.id === button.dataset.renamePack)?.pack?.name); if (name) { assets = await api<Asset[]>(`packs/${button.dataset.renamePack}`, 'PATCH', { name }); renderAssets(); } })();
   if (button.dataset.renameAsset) void guard(() => renameSound(button.dataset.renameAsset!))();
   if (button.dataset.selectAsset) { selectedAsset = button.dataset.selectAsset; renderAssets(); }
   if (button.dataset.preview) void guard(() => engine.trigger(assetById(button.dataset.preview!)))();

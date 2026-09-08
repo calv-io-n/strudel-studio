@@ -1,3 +1,4 @@
+import { importSample } from './imports';
 import { saveRecording } from './recordings';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -42,10 +43,13 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
   if (!url.pathname.startsWith('/api/')) return vite.middlewares(req, res);
   try {
+    if (req.method === 'POST' && url.pathname === '/api/imports/sample') return json(res, 201, await importSample(req, store));
     if (req.method === 'POST' && url.pathname === '/api/recordings') return json(res, 201, await saveRecording(req, store));
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, generation: { configured: generator.configured, fixture: generator.fixture } });
     if (req.method === 'GET' && url.pathname === '/api/feedback') return json(res, 200, { events, receipts, snapshot: studioSnapshot });
     if (req.method === 'GET' && url.pathname === '/api/samples') return json(res, 200, await store.assets());
+    const packMatch = url.pathname.match(/^\/api\/packs\/([\da-f-]{36})$/i);
+    if (req.method === 'PATCH' && packMatch) return json(res, 200, await store.labelPack(packMatch[1], z.object({ name: z.string().trim().min(1).max(80) }).parse(await body(req)).name));
     const metadataMatch = url.pathname.match(/^\/api\/samples\/([\da-f-]{36})$/i);
     if (req.method === 'PATCH' && metadataMatch) {
       const { label } = z.object({ label: z.string().trim().min(1).max(80) }).strict().parse(await body(req));

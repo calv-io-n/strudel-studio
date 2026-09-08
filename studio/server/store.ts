@@ -58,6 +58,16 @@ export class Store {
     try { await writeFile(path.join(this.samplesRoot, `${asset.id}.json`), JSON.stringify(asset, null, 2), { flag: 'wx' }); }
     catch (error) { await unlink(file); throw error; }
   }
+  async labelPack(id: string, name: string) {
+    const packAssets = (await this.assets()).filter(asset => asset.pack?.id === id);
+    if (!packAssets.length) throw new Error('Pack not found.');
+    for (const asset of packAssets) {
+      const updated = AssetSchema.parse({ ...asset, pack: { ...asset.pack!, name } });
+      const file = path.join(this.samplesRoot, `${asset.id}.json`), tmp = `${file}.${randomUUID()}.tmp`;
+      await writeFile(tmp, JSON.stringify(updated, null, 2)); await rename(tmp, file);
+    }
+    return this.assets();
+  }
   async labelAsset(id: string, label: string) {
     const asset = AssetSchema.parse({ ...await this.asset(id), label });
     const file = path.join(this.samplesRoot, `${asset.id}.json`);
