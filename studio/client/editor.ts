@@ -4,6 +4,7 @@ import { initEditor, codemirrorSettings, compartments, extensions, activateTheme
 import { reconcileSliders, type Slider } from '../shared/sliders';
 import type { Tab } from '../shared/model';
 import { studioCompletions, type SoundEntry } from './completions';
+import { destinationFor, type Destination } from '../shared/performance';
 
 export class StudioEditor {
   view: EditorView;
@@ -15,6 +16,35 @@ export class StudioEditor {
   private changeWidgets = StateEffect.define<Slider[]>();
   private replacing = false;
   private liveWrite = false;
+  private destinationEffect = StateEffect.define<Destination | null>();
+  private destinationField = StateField.define<Destination | null>({
+    create: () => null,
+    update: (value, tr) => {
+      for (const effect of tr.effects) if (effect.is(this.destinationEffect)) return effect.value;
+      if (!value || !tr.docChanged) return value;
+      let valid = value.valid;
+      tr.changes.iterChangedRanges((from, to) => {
+        if (from < value!.to && to > value!.from || from === to && from > value!.from && from < value!.to) valid = false;
+      });
+      return { ...value, valid, from: tr.changes.mapPos(value.from, 1), to: tr.changes.mapPos(value.to, -1) };
+    },
+    provide: field => EditorView.decorations.from(field, value => value && value.to > value.from
+      ? Decoration.set([Decoration.mark({ class: value.valid ? 'performance-destination' : 'performance-conflict' }).range(value.from, value.to)]) : Decoration.none),
+  });
+  arm(tabId: string) {
+    const { from, to } = this.view.state.selection.main;
+    const destination = destinationFor(this.code, tabId, from, to);
+    this.view.dispatch({ effects: this.destinationEffect.of(destination) });
+    return destination;
+  }
+  get destination() { return this.view.state.field(this.destinationField); }
+  disarm() { this.view.dispatch({ effects: this.destinationEffect.of(null) }); }
+  acceptTake(code: string) {
+    const destination = this.destination;
+    if (!destination?.valid || this.code.slice(destination.from, destination.to) !== destination.original) throw new Error('The destination changed. Select a valid destination before accepting.');
+    if (!code.trim()) throw new Error('An empty take cannot replace code.');
+    this.view.dispatch({ changes: { from: destination.from, to: destination.to, insert: code }, effects: this.destinationEffect.of(null), userEvent: 'input.performance' });
+  }
   constructor(root: HTMLElement, project: Tab, callbacks: { change: () => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
     const owner = this;
     class SliderWidget extends WidgetType {
@@ -65,6 +95,7 @@ export class StudioEditor {
       '.cm-cursor': { borderLeftColor: 'var(--accent)' },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { background: 'var(--selection)' },
     })])] });
+    this.view.dispatch({ effects: StateEffect.appendConfig.of(this.destinationField) });
     this.onSelect = callbacks.select;
   }
   setAppearance(dark: boolean) {

@@ -1,3 +1,4 @@
+import { PerformancePanel } from './performance';
 import { isClipMuted } from '../shared/mix';
 import { palette } from '../shared/model';
 import { installCompositionGestures } from './composition';
@@ -97,6 +98,11 @@ function getEditor(id = project.activeTabId) {
 }
 editor = getEditor();
 const engine = new Engine(getEditor, () => snapshot(), () => renderTransport(), (message) => notice(message, true));
+const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true));
+$('#editor').after(performancePanel.root);
+const performButton = document.createElement('button'); performButton.textContent = 'Play into selection';
+performButton.onclick = guard(() => performancePanel.arm());
+$('.editor-footer').prepend(performButton);
 let saveChain = Promise.resolve();
 let saveRevision = 0;
 function snapshot(): Project {

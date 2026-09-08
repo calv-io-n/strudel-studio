@@ -359,3 +359,11 @@ dialog input { width: 100%; }
     ::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
   }
 }
+
+.performance-destination { background: var(--selection); outline: 1px solid var(--accent); }
+.performance-conflict { text-decoration: underline wavy #b45309; }
+.performance-panel { padding: 12px 20px; border-top: 1px solid var(--border); max-height: 45vh; overflow: auto; }
+.performance-panel .form-row { flex-wrap: wrap; }
+.performance-diff { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.performance-diff pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; }
+@media (max-width: 650px) { .performance-diff { grid-template-columns: 1fr; } }
