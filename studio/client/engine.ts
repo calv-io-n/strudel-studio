@@ -10,7 +10,7 @@ import { SlotTimeline, slotName } from '../shared/slots';
 import { arrangement, loopRange, MuteTimeline, PatternTimeline, type Pattern } from '../shared/arrangement';
 import type { Asset, Project } from '../shared/model';
 import type { StudioEditor } from './editor';
-import { PerformanceAudio } from './performance-audio';
+import { PerformanceAudio, assertIsolated } from './performance-audio';
 import { soundCatalog, soundKey } from './completions';
 
 type Scheduler = { started: boolean; lastEnd: number; cps: number; now(): number; stop(): void; setCps(cps: number): void; setPattern(pattern: Pattern, start?: boolean): Promise<void> };
@@ -47,6 +47,7 @@ export class Engine {
   get audioContext(): AudioContext { return audio.getAudioContext(); }
   get tempo() { return this.project().bpm; }
   isolatePerformance(isolated: boolean) {
+    if (isolated) { for (const note of this.notes.keys()) this.noteOff(note); this.voices.forEach(source => { try { source.stop(); } catch { /* ended */ } }); }
     const output = audio.getSuperdoughAudioController().output.destinationGain;
     if (output) output.gain.setTargetAtTime(isolated ? 0 : 1, audio.getAudioContext().currentTime, .01);
   }
@@ -61,17 +62,27 @@ export class Engine {
       if (compiler.state.evalError) throw compiler.state.evalError;
       const haps = compiler.state.pattern?.queryArc(0, 1) ?? [];
       if (haps.length !== 1 || !haps[0].value || typeof haps[0].value !== 'object') throw new Error('Select a single instrument chain or choose the fallback synth.');
+      if (typeof haps[0].value.s !== 'string') throw new Error('This selection does not identify its instrument. Select the complete sound expression, or open Timing and accompaniment to choose the fallback synth.');
+      assertIsolated(haps[0].value);
       const controls: Record<string, string> = {};
       const destination = owner.destination;
       for (const slider of owner.sliders) if (destination && slider.start >= destination.to && slider.end <= destination.to + soundCode.length) controls[slider.label === 'lpf' ? 'cutoff' : slider.label] = slider.id;
-      return this.liveEffects.wrap(haps[0].value, controls);
+      return this.refreshPerformanceValues({ ...this.liveEffects.wrap(haps[0].value, controls), studioPerformanceControls: controls }, owner);
     } finally {
       core.setTime(() => this.repl.scheduler.now()); core.setCpsFunc(() => this.repl.scheduler.cps); core.setPattern(this.repl.state.pattern);
       this.compilingBusy = false;
     }
   }
+  refreshPerformanceValues(values: Record<string, any>, owner: StudioEditor) {
+    const next: Record<string, any> = { ...values, studioInitial: { ...values.studioInitial } };
+    for (const [parameter, id] of Object.entries(values.studioPerformanceControls ?? {})) {
+      const value = owner.values.get(id as string); if (value === undefined) continue;
+      if (values.studioLive?.[parameter]) next.studioInitial[parameter] = value; else next[parameter] = value;
+    }
+    return next;
+  }
   private library: Asset[] = [];
-  get soundEntries() { return soundCatalog(Object.keys(audio.soundMap.get()), this.library); }
+  get soundEntries() { return soundCatalog(Object.keys(audio.soundMap.get()).filter(key => !['studio_live_voice', 'studio_controlled_voice'].includes(key)), this.library); }
   get functionNames(): string[] {
     return [...new Set([...Object.entries({ ...core, ...mini, ...tonal, ...audio, ...draw, ...fonts })
       .filter(([, value]) => typeof value === 'function').map(([name]) => name), ...Object.getOwnPropertyNames(core.Pattern.prototype)])]

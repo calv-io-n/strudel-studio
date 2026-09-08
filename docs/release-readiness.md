@@ -56,3 +56,11 @@ The lockfile pins the optional watcher to HTTPS for anonymous installation, with
 - Explicit browser-only and watcher setup commands: passed. System-library installation requires interactive sudo on this development host.
 - GitHub Markdown rendering: all README images loaded in light and dark previews; narrow layout has no horizontal overflow; local documentation links resolve.
 - npm audit: zero reported vulnerabilities after the compatible dependency update. Gitleaks history, release-source, and staged-change scans: zero findings.
+
+## Design implementation stack
+
+The [draft implementation stack](architecture/implementation-stack.md) adds MIDI
+diff review and isolated audition, jam accompaniment, audio takes, sample-pack
+imports, and portable v4 projects. Existing workspace, playback and WAV-export
+checks remain in the browser suite. Physical ALSA and interface validation is still
+required on hardware; no release or merge is performed by this work.

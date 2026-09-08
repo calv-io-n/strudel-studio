@@ -1,3 +1,4 @@
+import { isolateHistory } from '@codemirror/commands';
 import { StateEffect, StateField } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { initEditor, codemirrorSettings, compartments, extensions, activateTheme, updateMiniLocations, highlightMiniLocations } from '@strudel/codemirror';
@@ -37,13 +38,14 @@ export class StudioEditor {
     this.view.dispatch({ effects: this.destinationEffect.of(destination) });
     return destination;
   }
+  restoreDestination(destination: Destination) { this.view.dispatch({ effects: this.destinationEffect.of({ ...destination, from: Math.min(destination.from, this.code.length), to: Math.min(destination.to, this.code.length), valid: destination.valid && destination.from >= 0 && destination.to <= this.code.length && this.code.slice(destination.from, destination.to) === destination.original }) }); }
   get destination() { return this.view.state.field(this.destinationField); }
   disarm() { this.view.dispatch({ effects: this.destinationEffect.of(null) }); }
   acceptTake(code: string) {
     const destination = this.destination;
     if (!destination?.valid || this.code.slice(destination.from, destination.to) !== destination.original) throw new Error('The destination changed. Select a valid destination before accepting.');
     if (!code.trim()) throw new Error('An empty take cannot replace code.');
-    this.view.dispatch({ changes: { from: destination.from, to: destination.to, insert: code }, effects: this.destinationEffect.of(null), userEvent: 'input.performance' });
+    this.view.dispatch({ changes: { from: destination.from, to: destination.to, insert: code }, effects: this.destinationEffect.of(null), userEvent: 'input.performance', annotations: isolateHistory.of('full') });
   }
   constructor(root: HTMLElement, project: Tab, callbacks: { change: () => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
     const owner = this;

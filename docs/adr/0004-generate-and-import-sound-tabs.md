@@ -24,3 +24,10 @@ Traditional samples should be as easy to add as generated sounds. Manual reposit
 ## Consequences and validation
 
 Implementation needs upload/archive handling, GitHub discovery, audio-format handling, pack metadata, stable storage, and recoverable import jobs. Existing saved sounds must remain accessible. Follow the [design acceptance criteria](../design/strudel-studio.md#first-version-acceptance), including offline playback/export, duplicate imports, renaming, mixed valid/invalid files, cancellation, partial failures, and keyboard access. This decision updates the target only; document runtime boundaries and checks when implemented.
+
+## Implementation follow-up
+
+The [implementation stack](../architecture/implementation-stack.md) adds the shared
+library, reviewed file/folder/ZIP/GitHub imports, stable asset recovery, and portable
+project backups. Runtime limits and checks are documented in
+[performance input](../architecture/performance-input.md).

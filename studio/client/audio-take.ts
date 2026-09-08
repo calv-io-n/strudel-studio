@@ -17,7 +17,7 @@ export class AudioTakeCapture {
   private stopped?: () => void;
   frames = 0;
   recording = false;
-  constructor(readonly context: AudioContext, private source: AudioNode, private meter: (value: number) => void) {}
+  constructor(readonly context: AudioContext, private source: AudioNode, private meter: (value: number) => void, private retained: (chunk: { left: Float32Array; right: Float32Array }) => void = () => {}) {}
   async setup() {
     if (!loaded.has(this.context)) {
       const url = URL.createObjectURL(new Blob([processor], { type: 'text/javascript' }));
@@ -27,7 +27,7 @@ export class AudioTakeCapture {
     this.node = new AudioWorkletNode(this.context, 'studio-take', { numberOfInputs: 1, numberOfOutputs: 1, outputChannelCount: [2] });
     this.node.port.onmessage = ({ data }) => {
       if (data.type === 'level') this.meter(data.peak);
-      if (data.type === 'audio') { this.chunks.push(data); this.frames += data.left.length; }
+      if (data.type === 'audio') { this.chunks.push(data); this.frames += data.left.length; this.retained({ left: data.left, right: data.right }); }
       if (data.type === 'stopped') this.stopped?.();
     };
     this.source.connect(this.node); this.node.connect(this.context.destination); // processor emits silence
@@ -38,6 +38,7 @@ export class AudioTakeCapture {
     this.recording = false;
     await new Promise<void>(resolve => { const timeout = setTimeout(resolve, 1000); this.stopped = () => { clearTimeout(timeout); resolve(); }; this.node!.port.postMessage({ type: 'stop' }); });
   }
+  restore(chunks: { left: Float32Array; right: Float32Array }[]) { this.chunks = chunks; this.frames = chunks.reduce((sum, chunk) => sum + chunk.left.length, 0); }
   get duration() { return this.frames / this.context.sampleRate; }
   wav(start = 0, end = this.duration) {
     const from = Math.max(0, Math.floor(start * this.context.sampleRate)), to = Math.min(this.frames, Math.floor(end * this.context.sampleRate));

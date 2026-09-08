@@ -99,3 +99,38 @@ test('GitHub samples are reviewed and imported into the same local library', asy
   await page.reload(); await page.getByRole('button', { name: 'Sounds', exact: true }).click();
   await expect(page.locator('#assets')).toContainText('github-tone');
 });
+
+test('audio take chunks survive reload for explicit review and save', async ({ page, request }) => {
+  const project = newProject(); project.name = 'Recover audio take'; project.tabs[0].code = 'note(60).s("triangle")';
+  await request.put('/api/recovery', { data: project });
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.locator('.cm-content').click(); await page.keyboard.press('Control+Home');
+  for (let i = 0; i < 8; i++) await page.keyboard.press('Shift+ArrowRight');
+  await page.getByRole('button', { name: 'Play into selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Record highlighted sound', exact: true }).click();
+  await page.getByRole('button', { name: 'Record audio take', exact: true }).click();
+  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  const key = page.getByRole('button', { name: 'C4', exact: true });
+  await key.dispatchEvent('pointerdown', { pointerId: 1 }); await page.waitForTimeout(400); await key.dispatchEvent('pointerup', { pointerId: 1 });
+  await page.getByRole('button', { name: 'Stop recording', exact: true }).click(); await page.getByRole('button', { name: 'End tail', exact: true }).click();
+  await page.reload(); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await expect(page.locator('[data-status]')).toContainText('Recovered audio take');
+  await expect(page.locator('#transport-state')).toHaveText('Stopped');
+  await page.getByLabel('Take name').fill('Recovered audio'); await page.getByRole('button', { name: 'Save sound', exact: true }).click();
+  await expect(page.locator('[data-status]')).toContainText('Saved to');
+});
+
+test('project backup download and restore preserve the musical session', async ({ page, request }) => {
+  const project = newProject(); project.name = 'Portable session'; project.tabs[0].code = 'note(67).s("triangle")';
+  await request.put('/api/recovery', { data: project });
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.locator('.project-menu > summary').click();
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Download project backup', exact: true }).click();
+  const download = await downloading;
+  await page.locator('#backup-file').setInputFiles((await download.path())!);
+  await expect(page.locator('#notice')).toContainText('Project and audio restored');
+  await expect(page.locator('.cm-content')).toHaveText(project.tabs[0].code);
+  await expect(page.getByLabel('Sessions', { exact: true })).toHaveValue('Portable-session-2');
+});

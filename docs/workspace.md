@@ -42,8 +42,26 @@ Generated sounds are stored in `samples/ai/`. The app never generates automatica
 
 Use **+ beside Sessions** to create a named session; Enter or Confirm creates it. Sessions autosave to `.studio/projects/` and retain their identity and dropdown selection after reload. Switching sessions saves pending edits first. A local browser draft protects edits during interrupted saves; **Project → Save project** retries a failed save. Recovery is also saved to `.studio/projects/recovery.json`. Projects include all tabs, clips, mappings, slots, and controller values. Sounds remain in the local sound library, so retain that folder when backing up projects.
 
-Older single-pattern and two-lane projects migrate to format v3 when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab asks before removing its code, clips, and mappings.
+Older single-pattern and two-lane projects migrate to format v4 when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab asks before removing its code, clips, and mappings.
 
 ## Audio export
 
 Open **Export** beside Virtual MIDI, choose **Full composition**, and click **Render & download WAV**. The offline renderer exports stereo 44.1 kHz, 16-bit audio with an adjustable effect tail (three seconds by default). You can also render a chosen number of cycles from the current tab. Rendering captures current code, slider values, sound slots, and track/clip mute settings without interrupting playback; progress and cancellation are available. Maximum export length is fifteen minutes.
+
+## Perform, review and keep a take
+
+Highlight a note expression and choose **Play into selection**. **Audition** plays its sound without saving anything. **Transcribe** shows inferred Strudel code beside the original while you play; choose phrase length, quantization and optional count-in before starting. **Stop take** retains the proposal. **Preview isolated** hears it alone; **Preview with accompaniment** retains the playing mix. **Accept into selection** replaces the armed expression as one undoable draft edit. Discard leaves the code unchanged, and Retry explicitly replaces the pending take.
+
+**Jam with composition** repeats the displayed range while temporarily excluding the destination tab. Stopping a take keeps the jam running. Global Stop ends both. Original-phrase suppression and jam exclusions never change saved mutes or Solo.
+
+**Record highlighted sound** captures the actual played audio and effects. For an interface or microphone, open **Sounds → Import → Record audio**, select the source, and set it up. Check levels before recording; monitoring starts off. Stop, finish the tail, preview/trim, name and save the take. Insert it from the library as a separate sample phrase; the original effects are not added again.
+
+MIDI proposals, import reviews and audio-take chunks have browser recovery. Recovered work stays stopped and requires explicit review. Keep important audio with **Save sound**; browser storage limits can prevent recovery and are reported.
+
+## Import samples and back up projects
+
+Sounds has **Generate** and **Import** tabs above one searchable library. Upload audio files, a folder or a ZIP pack, review the selections, then choose **Import selected**. Public GitHub links have a discovery and download-review step before importing. Identical files reuse existing sound identities; pack and sound renames preserve patterns.
+
+Imports support WAV, MP3, OGG and FLAC where the browser decoder supports them, up to 64 MB per source file, 256 MB unpacked and 500 files per review. Originals are retained alongside playback WAVs. Individual failures remain visible; valid imports survive cancellation.
+
+**Project → Download project backup** bundles referenced audio and available originals with the session. The manifest lists missing files and external URLs. **Restore project backup** creates a new session, preserving existing sessions. Backups are limited to 256 MB; larger projects can be copied using their JSON and referenced files from local storage. Missing library audio offers **Recover sound** for reimporting the original file.

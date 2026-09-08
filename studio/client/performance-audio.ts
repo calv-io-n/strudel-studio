@@ -1,9 +1,13 @@
 import * as audio from '@strudel/webaudio';
 
 type Handle = { node: AudioNode & { gain?: AudioParam }; stop?: (time: number) => void; nodes?: Record<string, AudioNode[]> };
+export function assertIsolated(values: Record<string, any>) {
+  if (values.bus !== undefined || values.duckorbit !== undefined || values.source !== undefined) throw new Error('This sound uses shared audio routing and cannot be isolated. Choose the fallback synth.');
+  for (const fx of values.FX ?? []) assertIsolated(fx);
+}
 /** A private orbit per voice keeps captured effects separate from the arrangement. */
 export class PerformanceAudio {
-  private voices = new Map<string, { orbit: any; id: number; handle?: Handle; cancelled: boolean }>();
+  private voices = new Map<string, { orbit: any; id: number; handle?: Handle; cancelled: boolean; release: number }>();
   private nextOrbit = -1;
   private bus?: GainNode;
   private initialized = false;
@@ -23,23 +27,26 @@ export class PerformanceAudio {
         if (!voice || voice.cancelled) return;
         const sound = audio.getSound(value.studioSound);
         if (!sound) throw new Error(`Sound ${value.studioSound} is unavailable. Choose the fallback synth.`);
-        const handle = await sound.onTrigger(time, { ...value, s: value.studioSound }, ended, cps);
+        let gate: GainNode | undefined;
+        const handle = await sound.onTrigger(time, { ...value, s: value.studioSound }, () => { gate?.disconnect(); ended(); }, cps);
         if (voice.cancelled) { handle?.stop?.(audio.getAudioContext().currentTime); return; }
-        voice.handle = handle; return handle;
+        if (!handle) return;
+        gate = audio.getAudioContext().createGain(); handle.node.connect(gate);
+        voice.handle = { ...handle, node: gate }; return voice.handle;
       });
       this.initialized = true;
     }
-    if (values.bus !== undefined || values.duckorbit !== undefined || values.source !== undefined) throw new Error('This sound uses shared audio routing and cannot be isolated. Choose the fallback synth.');
+    assertIsolated(values);
     const context: AudioContext = audio.getAudioContext();
     const id = this.nextOrbit--;
     const controller = audio.getSuperdoughAudioController();
     const orbit = controller.getOrbit(id, [0, 1]);
     orbit.output.disconnect(); orbit.output.connect(this.output);
-    const voice = { orbit, id, cancelled: false };
+    const voice = { orbit, id, cancelled: false, release: Math.max(.02, Math.min(15, Number(values.release) || .04)) };
     this.voices.set(key, voice);
     try {
       await audio.superdough({ ...values, s: 'studio_live_voice', studioSound: values.bank ? `${values.bank}_${values.s}` : values.s || 'triangle', bank: undefined,
-        studioVoice: key, note: pitch, velocity: velocity / 127, orbit: id }, context.currentTime + .025, duration ?? 60, .5);
+        studioVoice: key, note: pitch, velocity: velocity / 127, orbit: id }, context.currentTime + .025, duration ?? 900, .5);
       if (duration !== undefined) setTimeout(() => this.release(key), duration * 1000);
     } catch (error) { this.release(key); throw error; }
   }
@@ -48,8 +55,8 @@ export class PerformanceAudio {
     voice.cancelled = true; this.voices.delete(key);
     const now = this.time;
     const gain = voice.handle?.node.gain;
-    gain?.cancelScheduledValues(now); gain?.setTargetAtTime(0, now, .008);
-    try { voice.handle?.stop?.(now + .04); } catch { /* already released */ }
+    gain?.cancelScheduledValues(now); gain?.setTargetAtTime(0, now, voice.release / 5);
+    try { voice.handle?.stop?.(now + voice.release); } catch { /* already released */ }
     // Keep effect returns alive briefly after releasing the source.
     setTimeout(() => { voice.orbit.disconnect(); const controller = audio.getSuperdoughAudioController(); if (controller.nodes[voice.id] === voice.orbit) delete controller.nodes[voice.id]; }, 15000);
   }

@@ -38,3 +38,10 @@ Implementation will need explicit capture state, selection anchoring, MIDI timin
 The updated [acceptance criteria](../design/strudel-studio.md#first-version-acceptance) cover selection isolation, undo, phrase fidelity, interruption recovery, audio capture, timing, persistence, and export. Future implementation should verify virtual MIDI with deterministic event fixtures, physical MIDI with hardware, and XLR recording with an audio interface, including permission denial and disconnects. Update the as-built architecture and link implementation checks when those features ship.
 
 Verify Record independently with Transcribe disabled: the saved audio preserves live timing and effect movements, excludes accompaniment, and remains unchanged after editing the source instrument. Both internal and external takes must survive save/reopen and render through their sample references. See [current implementation boundaries](../architecture/performance-input.md); this accepted product decision does not imply these workflows have shipped.
+
+## Implementation follow-up
+
+The [implementation stack](../architecture/implementation-stack.md) delivers the
+selection, audition, diff-review, jam and audio-take paths. See
+[performance input](../architecture/performance-input.md) for current boundaries
+and automated verification evidence; physical device validation remains separate.
