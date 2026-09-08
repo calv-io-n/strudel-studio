@@ -33,6 +33,8 @@ Composition projects use schema v3: ordered stable track IDs, named palette colo
 
 See [composition internals](composition.md) for persistence, scheduling, and gesture behavior.
 
+See [performance input](performance-input.md) for the current MIDI, slider, and sound boundaries and the implementation gaps relative to the accepted Transcribe / Record target.
+
 ## Scrollbar styling
 
 [Shared client CSS](../../studio/client/style.css) styles native scrollbars across the editor, tabs, composition, and scrollable panels. Light/dark tokens control neutral thumb colors. Browsers supporting scrollbar pseudo-elements use a 12px scrollbar with a 2px transparent inset, yielding an 8px rounded thumb, plus hover/active colors and transparent tracks/corners. Standard `scrollbar-width`/`scrollbar-color` properties provide a thin themed fallback; they reset to `auto` in the detailed-styling branch to avoid overriding the pseudo-elements. Custom rules are excluded in forced-colors mode. Scrolling stays browser-native; there is no JavaScript scrollbar or visibility timer.

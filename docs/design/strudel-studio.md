@@ -2,7 +2,7 @@
 
 Design target for the project. This describes intended behavior, not a claim that every feature is implemented.
 
-A focused Strudel workspace: write patterns in tabs, arrange them into a composition, and perform with MIDI controls. Generate sounds with ElevenLabs when you need them.
+A focused Strudel workspace: write patterns in tabs, play MIDI notes into selected code sections, record instruments and vocals as reusable sounds, and arrange patterns into a composition. Generate sounds with ElevenLabs when you need them.
 
 ## Design principle
 
@@ -73,11 +73,49 @@ Show a compact set of knobs, sliders, and a small keyboard for testing and perfo
 
 To map a control, select an inline slider, choose **MIDI Learn**, and move a physical or virtual control. Show the resulting mapping beside the selected slider, with a way to remove it. Offer Cancel while learning.
 
+Mapped MIDI sliders and knobs must change their Strudel effect parameters live during tab and composition playback wherever the effect supports it, without restarting playback or requiring Apply changes. For example, moving a slider mapped to filter cutoff or reverb amount updates the audible effect and its inline value together. Keep parameter ranges and scaling consistent between physical MIDI, virtual controls, and inline sliders; smooth rapid changes where appropriate to avoid audible stepping or clicks.
+
+Apply a live value to sounding or sustained audio when the underlying effect supports that update. Parameters evaluated only when a note starts affect the next scheduled notes; label that behavior. If an effect requires recompilation or cannot update live, show the limitation at the mapping and explain when the change will become audible. Live parameter updates must not apply unrelated draft edits, reset the playhead, or retrigger the pattern. Persist the latest control values; offline export captures them at render start rather than recording subsequent controller movements.
+
 Virtual controls use the browser route by default and work without connected hardware. Unassigned keyboard notes play a simple synth; sample assignments override that sound. Connection failures and advanced routing options appear here when relevant, rather than occupying the main workspace.
+
+### Play notes into selected code
+
+Highlight a sound's code section to use its instrument and effects for live MIDI performance. Choose the output explicitly:
+
+| Action | Result | Keeping the result |
+| --- | --- | --- |
+| Audition | Hear the sound while riffing; no saved output | No code or audio is created |
+| Transcribe | Infer editable Strudel notes and rhythm during live play | Replace the selected musical expression after review |
+| Record | Capture the actual played audio, including live effects | Save a reusable sound, then insert a sample reference into a tab |
+
+Record uses the same audio-take workflow for a highlighted sound as for XLR or other external audio input. It does not require Transcribe. These workflows and their implementation status are tracked in [ADR 0003](../adr/0003-midi-note-capture-and-audio-recording.md) and [the architecture notes](../architecture/performance-input.md).
+
+Highlight a note sequence or musical expression in a tab and choose **Play into selection** from an editor action available by keyboard and pointer. This arms that section as the destination for a physical MIDI keyboard or the virtual keyboard. Show the destination tab and highlight the armed range distinctly from ordinary text selection. Users can target different sections in succession; only one section receives notes at a time.
+
+The transcription flow is: highlight a melody → riff alternative melodies on the MIDI keyboard with that section's instrument and effects → see code inferred as the notes are played → keep the preferred take in the highlighted section. The highlighted phrase supplies the musical context; incoming notes supply the new melody and rhythm. Users can freely try different pitches and phrases without being restricted to the notes already written.
+
+- Audition incoming notes immediately using the selected section's sound and effects where supported. Explain when a section cannot be auditioned and offer an explicit fallback sound. Note input must not also trigger an unrelated sample assignment or overwrite a MIDI Learn mapping.
+- Provide distinct **Audition**, **Transcribe**, and **Record** actions. Audition plays without creating code or an audio take. Transcribe infers editable Strudel code from played note pitches, order, timing, durations, rests, chords, and velocity. Update the proposed code beside the highlighted destination during live play, rather than waiting until transcription stops; held-note lengths remain provisional until release. Hearing a riff and seeing its inferred code must not require inserting or applying it first.
+- Let users retry a melody over the same selected phrase without reselecting its sound or effects. Keep the current take available until explicitly replaced or discarded, and offer take preview before insertion. While riffing over running accompaniment, offer temporary suppression of the selected phrase's original notes so the alternative melody can be heard clearly; leave other sections playing and restore the original on cancel or leaving the performance mode. This temporary performance state does not modify saved code or track mute settings.
+- For Transcribe, let the user choose phrase length in cycles and timing quantization, including unquantized timing, with an optional count-in. Use the active playback tempo and cycle position when playing; when stopped, show the transcription tempo and cycle length before starting. Transcription and preview must preserve the intended phrase duration and chord overlaps.
+- **Insert into selection** replaces only the armed musical expression as one undoable edit. Preserve surrounding code, sound choices, effects, and unrelated sections. If an arbitrary selection cannot be safely replaced, explain why and let the user select a supported expression or explicitly insert a new expression. Never silently rewrite a whole tab.
+- Pin a take to its original tab and range. Changing the destination ends transcription or recording and requires keeping or discarding the pending take before arming another section. If intervening edits invalidate the range, block insertion until the user chooses a valid destination. Switching tabs must not redirect incoming notes silently.
+- Offer Stop, Cancel, and retry. Global Stop ends transcription or recording and releases held notes while retaining the take for review; disconnecting a device does the same and reports the interruption. An empty take must not erase existing code. Cancel discards the take without changing the tab.
+
+**Record** captures the actual audio produced by the highlighted sound while the user plays MIDI, including performed timing, note expression, and audible live effect changes. It does not infer or quantize a note pattern, and does not recreate the take later from MIDI events. Save the performance as an audio asset through the same preview, trim, name, save, and sample-insertion flow as XLR/input recording. Inserting that take adds sample-playing code, not a transcription of its melody. Preserve the captured effects in the audio; sample insertion must not automatically apply the original effect chain a second time.
+
+Transcribe and Record can each be used independently; neither requires the other. Label the output before starting: **Editable pattern** or **Audio take**. Recording a highlighted sound captures only that live performance, excluding other tabs, accompaniment, and the original sequenced phrase. Capture effect tails with a visible finishing state and an explicit way to end the tail. If the sound cannot be isolated, explain the limitation before recording rather than silently saving the full mix.
+
+Inserted code remains a draft under the existing Play / Apply changes rules. MIDI Learn continues to map knobs and sliders to parameters; Transcribe and Record are separate contextual actions. Transcribe infers code from MIDI note events; recorded audio does not need automatic pitch transcription for this version.
 
 ## Sound library
 
-Open the library from a single **Sounds** action. It is a temporary panel, closed by default, and contains both saved sounds and sound generation.
+Open the library from a single **Sounds** action. It is a temporary panel, closed by default, with exactly two source tabs: **Generate** and **Import**. Default to Import for new projects and remember the last used tab. Keep one shared searchable library of saved sounds and packs accessible beneath either tab, so users do not have to remember how a sound was acquired. Switching tabs preserves unfinished prompts, import selections, and recording state.
+
+Generate contains sound generation. Import contains **Upload files or pack**, **From GitHub**, and **Record audio**. Upload supports drag-and-drop and a file picker; every flow also works by keyboard. Neither importing nor recording requires an ElevenLabs key or a generation request.
+
+### Generate
 
 The primary generation flow is: describe a sound → generate → preview → insert into the current pattern. Keep duration optional and looping off by default. These are secondary options below the prompt.
 
@@ -85,13 +123,42 @@ Show progress while generating, a useful error if generation fails, and a clear 
 
 Keep sound assignment to MIDI controls contextual. Do not require users to understand sound slots or routing before they can hear and insert a sample.
 
+### Import samples and packs
+
+Make traditional sample use a short flow: upload files or paste a GitHub link → review samples → import → preview → insert into a pattern. Do not require editing sample registrations, cloning a repository, using a terminal, or configuring a separate sample server.
+
+- **Upload files or pack:** accept individual audio files, multiple files, folders where supported, and ZIP sample packs. Support at least WAV, MP3, OGG, and FLAC, converting for playback when needed while retaining the originals. Show supported formats and size limits before upload; report unreadable or unsupported files individually without losing valid selections. A ZIP or multi-file picker remains available when folder upload is unavailable.
+- **From GitHub:** accept a public repository, a folder within a repository, or an individual audio-file link. Resolve the selected branch, tag, or commit; discover playable samples without requiring a particular repository layout. Show a pack name, source, sample count, and available size information, with search, per-sample selection, and Select all. Preserve relative folders as useful browsing groups. Private repositories may report that authentication is unavailable and offer ZIP/file upload as a fallback.
+- Preview individual samples from the review list before importing where available. Show progress and allow cancellation during discovery and import. On network failure, rate limiting, a missing path, or an unsupported pack, explain the issue and offer retry or upload. Report partial successes and allow retry of failed files without duplicating successful imports. Fetch sample data and metadata only; importing a repository must not execute its code or install dependencies.
+- Import selected sounds into durable local storage with stable identifiers. Keep the source URL and resolved revision for GitHub imports, and retain pack names, original filenames, and supplied license/attribution files as metadata. Once imported, playback must work without GitHub access. Upstream changes never silently change an existing sample; refreshing a pack is explicit.
+- Keep packs grouped in the shared library, searchable by pack, sample name, and folder. Offer immediate preview and **Insert into pattern** for each sample. Single files do not require creating a pack manually. Handle duplicate imports and naming collisions visibly, reusing identical assets where possible without overwriting different sounds or breaking references.
+- Insert valid sample-playing code at the chosen editor location as one undoable edit. Preserve surrounding code, use stable sample identifiers, and follow the existing Play / Apply changes rules. Imported sounds support MIDI assignment, reuse across tabs, composition playback, and rendered WAV export just like generated and recorded sounds.
+
+Renaming a pack or sample must not break existing patterns. Save/reopen and project backup/export must retain imported audio and its references, or explicitly identify the files needed for recovery. The library shows missing files with a recovery action. Large packs use a scrollable review list and progressive loading so browsing and cancellation remain responsive.
+
+### Record instruments and vocals
+
+The Sounds panel offers **Record audio** in its Import tab; Record on a highlighted sound opens that same workflow. Support microphones and instruments connected through an XLR-capable audio interface exposed as an audio input by the host. The user selects the interface and available input channel(s), including a single mono input; do not assume that an XLR connector is directly accessible to the browser. Hardware gain and phantom power remain controls on the interface.
+
+Both external input and highlighted-sound recordings produce the same reusable audio-take asset. The Sounds panel shows the source explicitly: an external audio input or the highlighted sound’s live output. Recording internal sound output does not require microphone permission.
+
+The flow is: choose source → check level → record → stop → preview and trim → save sound → insert into a tab.
+
+- Request microphone/audio-input permission only when the user opens input setup or recording. Show the selected input, an input-level meter, clipping feedback, and a clear recording indicator. Explain denied permission, unavailable inputs, unsupported channel selection, and disconnected devices with a way to retry or choose another input.
+- Input monitoring is optional and off by default. Support recording with the tab or composition playing as accompaniment, plus an optional count-in and cycle-length capture. Record the selected external input only; accompaniment must not be mixed into the saved take. Retain the take's tempo and start offset so a cycle-aligned phrase can be inserted without guessing its timing.
+- Stop recording, including global Stop, retains the take for review. Preview, trim start/end, rename, save, discard, and retry are explicit actions. On input loss, preserve recoverable audio and report that the take is incomplete. Never silently replace an existing recording.
+- Save a kept take as a local audio asset with a stable sound identifier and an editable display name. Insert valid sample-playing Strudel code at the chosen location in the current tab, preserving unrelated code as one undoable edit. Insertion does not start playback or apply a running draft.
+- Recorded sounds can be reused across tabs, assigned to MIDI controls, arranged through their source tabs, and included in rendered WAV exports. Renaming a sound or tab must not break its references. A sample's natural duration, trimming, and any explicit loop or timing treatment must be visible when previewing and inserting it; looping is opt-in.
+
+Keep recording controls in the temporary Sounds panel, also reachable through Record on a highlighted sound, rather than adding a permanent recording track or another bottom-drawer view. Saving must retain the audio asset as well as its reference; project backup/export must include referenced recordings or explicitly identify the files needed to reopen the project. Missing assets produce a visible recovery action rather than silent playback failure.
+
 ## Playback and saving
 
 - Use one Play button with a compact target selector: **Current tab** or **Composition**. Default to Current tab. Disable composition playback when the arrangement is empty.
 - Play starts the selected target from the beginning. Stop ends playback and any preview or held notes. Switching tabs or changing the target does not start playback; stop the current target before switching playback modes.
 - During playback, expose **Apply changes** to update the playing code at the next cycle boundary. Typing, saving, or switching tabs alone must not change the sound. MIDI and inline slider movements remain live. Code-defined tempo changes take effect on the next Play. Composition clips use the last applied version of their source pattern.
 - Show the active playback target and playing/stopped state near the transport, including the source tab's name when applicable.
-- Save tabs, composition, mappings, and control values together as one project. Show a quiet save status and a visible error if saving fails.
+- Save tabs, composition, mappings, control values, and sound references together as one project, retaining referenced generated, imported, and recorded local audio assets and pack metadata. Show a quiet save status and a visible error if saving fails.
 
 Audio rendering is available in the Export drawer beside Virtual MIDI, as specified below. Exporting pattern code remains a separate Project action.
 
@@ -101,8 +168,19 @@ Audio rendering is available in the Export drawer beside Virtual MIDI, as specif
 - The editor remains the dominant surface; secondary tools are closed until requested.
 - Users can arrange two overlapping patterns and play the composition without learning a full DAW.
 - Users can map a physical or virtual MIDI control to an inline slider and see the result.
+- During tab and composition playback, moving a mapped physical or virtual MIDI slider changes a supported Strudel effect audibly and updates the inline value without Apply changes, playback restart, or applying unrelated draft code. Verify sustained audio for effects that support continuous updates, next-note behavior for event-based parameters, and visible feedback for effects that cannot update live.
+- Users can highlight a musical expression, audition and transcribe a MIDI phrase containing chords, rests, varied note lengths, and velocities, then insert inferred code into only that section. Repeating the flow on another section targets that section; undo restores the prior code and surrounding code remains intact.
+- Users can highlight an existing melody and riff multiple different melodies with its instrument and effects while accompaniment continues. In Transcribe, inferred code updates visibly during live play; the original phrase can be temporarily suppressed without muting other sections. Keeping a take replaces only the selected phrase, and cancel restores the original playback behavior.
+- Transcription works with the virtual keyboard without hardware. Cancel, an empty take, a device disconnect, or an invalidated selection cannot erase or misdirect code; inserted notes affect running playback only after Apply changes.
+- Users can choose Record on a highlighted sound and save a riff as audio without generating inferred note code. The take preserves performed timing and live effect movements, excludes accompaniment, and remains unchanged when the original sound or effects are later edited. It uses the same review, storage, reuse, and export flow as external-input recordings; inserting it does not double-apply the original effects.
+- Users can select an XLR audio interface input, record an instrument or vocal take, preview and trim it, and insert it as a reusable sound in a tab. Permission denial and input loss have visible recovery paths; monitoring starts off.
+- A recording made alongside playback contains only the selected input. A cycle-aligned take retains its timing when inserted, plays through tab and composition playback, and is audible in rendered WAV export.
 - Users can generate, preview, and insert a sound without leaving the workspace.
-- Reopening a saved project restores its musical content and mappings.
+- Sounds has Generate and Import tabs with a shared saved library. A new project opens Import when Sounds is requested; importing and recording work without generation setup.
+- Users can upload an individual sample, several files, a folder where supported, or a ZIP pack; preview and import selected sounds; and insert a working sample into a tab without editing registrations. Unsupported files do not prevent valid files from importing.
+- Users can paste a public GitHub repository, subfolder, or audio-file link, choose samples, and import a locally retained pack. After importing, disconnecting from GitHub does not prevent playback, reopening, or WAV export. No repository code is executed.
+- Pack/sample renames and repeated imports preserve existing references. Cancellation, partial failures, unavailable GitHub sources, and missing local assets have visible recovery paths. Import progress remains usable for large packs.
+- Reopening a saved project restores its musical content, mappings, and recorded sounds. Renaming recordings preserves references; missing audio is reported with a recovery action.
 - Essential actions work with keyboard input and have visible labels or accessible names.
 
 When deciding whether to add something, ask: does this make writing, arranging, or performing easier right now? If not, defer it.

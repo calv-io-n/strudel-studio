@@ -16,3 +16,5 @@ Architecture decision records document intentional changes from the [target desi
 | --- | --- | --- |
 | [0001](0001-expand-composition-tracks.md) | Accepted | Expand the initial two-lane, whole-cycle design to colored tracks, muting, and fractional snapping |
 | [0002](0002-exclusive-track-solo.md) | Accepted | Add exclusive track solo and an opaque left-anchored header column |
+| [0003](0003-midi-note-capture-and-audio-recording.md) | Accepted | Riff highlighted sounds with live MIDI effects; separately transcribe note code or record audio, including XLR input |
+| [0004](0004-generate-and-import-sound-tabs.md) | Accepted | Split Sounds into Generate and Import with shared sample browsing and GitHub/upload pack import |
