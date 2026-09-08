@@ -4,110 +4,98 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A personal live-coding music workspace built around [Strudel](https://strudel.cc/). The user edits `.strudel` files in VS Code and hears the result in a browser within ~200ms. The full background and composer's workflow are in `README.md` and `COMPOSER.md` — read those for context, especially `COMPOSER.md` if the user asks anything about *making music* rather than the toolchain.
+**Strudel Studio**: a local-first workspace for writing [Strudel](https://strudel.cc/) patterns, arranging them into a composition, performing with MIDI, and exporting WAV. The app lives under `studio/` (TypeScript, Node 24, Vite, CodeMirror, `@strudel/*` packages) and is the daily driver. An older "external editor + strudel.cc watcher" workflow still exists as an explicit opt-in and is documented at the end of this file.
 
-The user is on **Linux** with a **GoXLR** mixer and uses this for both noodling and live streaming via OBS.
+The user is on **Linux** with a **GoXLR** mixer and an **M-Audio Axiom AIR Mini 32** controller, and uses this for both noodling and live streaming via OBS.
+
+Read `README.md` for the product overview, `docs/workspace.md` for what the UI does, `docs/setup.md` for installation and env vars, `docs/architecture/README.md` for code boundaries, and `docs/adr/` for decisions. `COMPOSER.md` and `docs/human/` are about *making music* rather than the toolchain; go there when the user asks about patterns, genres or arrangement.
 
 ## Commands
 
 ```bash
-npm install                       # also runs postinstall — see below
-npm run dev                       # daily driver: sampler + watcher under concurrently
-npm run sampler                   # sampler only (foreground)
-npm run watch                     # file watcher only (foreground)
-npm run reload                    # safely re-push patterns/scratch.strudel to the browser (no edit)
-npm run save -- <name> [--force] [--clear]   # save scratch → patterns/sets/<name>.strudel
-npm run load -- <name> [--force]             # load patterns/sets/<name>.strudel → scratch (refuses on dirty scratch)
+npm ci                          # plain install; there is no postinstall hook anymore
+npm run dev                     # daily driver: sampler (port 5555) + Studio server (port 5173) under concurrently
+npm run studio:app              # Studio server only (tsx studio/server/index.ts)
+npm run sampler                 # @strudel/sampler only, serving ./samples
+npm run studio:demo             # install the Neon Drive demo session into .studio/projects
 
-npm run patch-strudel-server      # re-apply the upstream selector patch (idempotent)
-npm run ensure-deps               # re-run bun + chromium + ffmpeg + yt-dlp readiness check
+npm run studio:build            # tsc --noEmit type check, then vite build
+npm run studio:test             # unit/integration tests (node:test via tsx) in studio/tests/*.test.ts
+npm run studio:e2e              # Playwright browser suite in studio/tests/*.spec.ts
+npm run setup:browser-tests     # playwright install chromium (add -- --with-deps on a fresh Linux box)
 
-npm run rec -- vocals/<name>      # record from PulseAudio source into samples/<name>.wav
+npm run rec -- vocals/<name>    # record from PulseAudio source into samples/<name>.wav
 npm run yt  -- <url> [name] [range]   # pull audio from YouTube into recordings/
-npm run chop -- <input> <outdir>  # split a recording on silence
-npm run trim -- <input> <s> <d> <name>  # cut a time range
-npm run norm -- <file_or_dir>     # loudness-normalize .wav files in place (.bak preserved)
+npm run chop -- <input> <outdir>      # split a recording on silence
+npm run trim -- <input> <s> <d> <name>
+npm run norm -- <file_or_dir>   # loudness-normalize .wav files in place (.bak preserved)
+
+# Legacy watcher (see bottom of file)
+npm run setup:watcher           # needs Bun 1.2+; applies the strudel-server patch and installs its Chromium
+npm run dev:watcher             # sampler + strudel-server watcher on patterns/scratch.strudel
+npm run save -- <name> [--force] [--clear] / npm run load -- <name> [--force] / npm run reload
 ```
 
-There are no tests, no linter, no build step. The repo is configuration + scripts, not an application.
+There is no linter. CI runs build, unit tests and the browser suite on Linux/Node 24. Run `npm run studio:build && npm run studio:test` before calling a change done; run the e2e suite for anything touching UI flows.
 
-## Architecture: the three-process dev stack
-
-`npm run dev` runs `concurrently` with two children, but at runtime there are **three processes** doing real work:
-
-1. **`@strudel/sampler`** (Node, port `5555`) — serves files from `./samples` over HTTP. **Rescans the directory on every request** — new `.wav` files appear without restarting. Real flags are `--dir <path>` (not `--path`) and `PORT=<n>` is an env var (no `--port` flag). Default port if unset is `5432`.
-
-2. **`strudel-server`** (Bun + Playwright) — watches `patterns/scratch.strudel` via chokidar, launches a non-headless Chromium against `https://strudel.cc`, and pushes file contents into the page's CodeMirror editor on every save.
-
-3. **Chromium** — the visible REPL window, also captured by OBS for streaming.
-
-The data flow:
+## Architecture: Studio at runtime
 
 ```
-patterns/scratch.strudel  ──save──▶  strudel-server (Bun)
-                                          │
-                                          ▼ playwright.evaluate
-                                    strudel.cc  ──Web Audio──▶  GoXLR
-                                          ▲
-                                          │ HTTP fetch
-                                    @strudel/sampler ◀── ./samples/*.wav
+Browser (localhost:5173)             studio/server/index.ts (Node)
+  client/main.ts  ── HTTP/WS ──▶   localhost-only API, project store (.studio/projects),
+  client/engine.ts (Strudel audio)   sound-generation jobs, MIDI bridge coordination
+  client/editor.ts (CodeMirror)             │ stdin/stdout JSONL
+        │ Web Audio                         ▼
+        ▼                          studio/midi/bridge.py (Python, python-rtmidi, ALSA)
+      GoXLR                                 ▲ ALSA sequencer
+                                   hardware controllers / virtual loopback
+@strudel/sampler (localhost:5555) ◀── ./samples/*.wav   (fetched by patterns via samples('http://localhost:5555'))
 ```
 
-`strudel-server` only ever watches **one** file: `patterns/scratch.strudel`. Saved compositions live in `patterns/sets/` and are copied in/out of the scratchpad by hand. This is intentional — see "single-file watcher model" in `COMPOSER.md`. **Don't** try to make the watcher follow multiple files; the workflow depends on the simplicity.
+- `studio/shared/` holds the Zod project schema and migrations (currently v3), clip timing, MIDI parsing/pickup and WAV encoding. Persistent-format rules live here, not in UI code.
+- The server refuses requests whose `Host`/`Origin` are not localhost. That is deliberate; do not loosen it.
+- Typed code is a draft until **Apply changes** (Ctrl+Enter). Sliders and MIDI are live. Keep that distinction when touching playback.
+- Sessions autosave to `.studio/projects/` (gitignored). Generated sounds go to `samples/ai/` (gitignored).
 
-## Critical: the strudel-server selector patch
+## MIDI
 
-`strudel-server` is pulled from GitHub (`"strudel-server": "github:micahkepe/strudel-server"`), not npm. Its bin is a `.ts` file that **must** be run with Bun — that's why the `watch` script invokes `bun node_modules/strudel-server/src/main.ts ...` directly.
+Two layers, both optional:
 
-**Upstream `strudel-server` is broken against current `strudel.cc`.** It hardcodes `#code .cm-content[contenteditable='true']` as its editor selector, but strudel.cc removed the `#code` wrapper from its DOM (the editor is now under `.code-container`). Without intervention the watcher silently hangs for 30 seconds and times out.
+1. **Virtual MIDI** in the browser needs nothing installed. Knobs, faders and pads in the drawer send simulated events.
+2. **Hardware / OS loopback** goes through the Python bridge. It needs `.venv-midi` with `python-rtmidi` (see `docs/setup.md`) and `/dev/snd/seq` on the host. The server spawns `studio/midi/bridge.py` on start; `STUDIO_DISABLE_MIDI=1` turns it off, `STUDIO_PYTHON` overrides the interpreter.
 
-`scripts/patch-strudel-server.mjs` rewrites all 7 occurrences of `#code` → `.code-container` in `node_modules/strudel-server/src/main.ts`. It runs from `postinstall` and is idempotent.
+The bridge only subscribes to ports the project has selected. A plugged-in controller does nothing until the user picks its port under **Virtual MIDI → Devices, mappings & advanced controls → Connect**. When debugging "keys do nothing", check that first, then `aconnect -l` and `aseqdump -p <client>` to prove the hardware is sending. The bridge also creates a virtual **Strudel Studio In** port that is always enabled, so `aconnect '<device>':0 'Strudel Studio':0` is a valid temporary route.
 
-If a future Claude is debugging "watcher hangs / times out / can't find editor":
-
-1. First check `grep -c "#code" node_modules/strudel-server/src/main.ts` — should be `0`.
-2. If `>0`, run `npm run patch-strudel-server`.
-3. If `0` and it still hangs, **strudel.cc may have changed its DOM again**. Run a Playwright probe against `https://strudel.cc` to find the new editor selector, update `scripts/patch-strudel-server.mjs` to target whatever the new wrapper is, and re-run.
-4. **Do not delete the patcher** without first verifying upstream `strudel-server` has been fixed. When upstream does fix it, delete `scripts/patch-strudel-server.mjs`, remove its `postinstall` invocation, and the README/COMPOSER notes about it.
-
-## `postinstall` chain (also critical)
-
-`postinstall` runs:
-
-```
-node ./scripts/patch-strudel-server.mjs && node ./scripts/ensure-deps.mjs
-```
-
-`scripts/ensure-deps.mjs` checks four things and warns loudly (without failing) on each one that's missing:
-
-1. **`bun`** — required by `npm run watch` because strudel-server's bin is a `.ts` file
-2. **Playwright Chromium** — runs `node_modules/.bin/playwright install chromium` so the Chromium build matching strudel-server's pinned Playwright version is cached. Idempotent — Playwright is silent when the right build is already present. Skip with `STRUDEL_SKIP_PLAYWRIGHT_INSTALL=1`.
-3. **`ffmpeg`** — required by `rec` / `chop` / `trim` / `norm` / `yt`
-4. **`yt-dlp`** — required by `npm run yt`
-
-Each missing tool prints a yellow warning with a copy-paste install command. Manual re-run: `npm run ensure-deps`.
-
-If a future Claude is debugging "watcher errors with 'Executable doesn't exist at chromium-XXXX'", the fix is `npm run ensure-deps` (or `npm install`, which triggers it via postinstall).
-
-Both postinstall scripts must remain **idempotent** and must **not exit non-zero on benign conditions** — they run on every `npm install` and a hard failure here breaks the boot. The "warn, don't fail" pattern is load-bearing: a fresh clone needs to be able to run `npm install` before its host has every CLI tool installed.
+The Axiom AIR Mini 32 is class-compliant and exposes two ALSA ports; use the one named "MIDI", not "HyperContro" (a DAW auto-map protocol).
 
 ## Linux-specific assumptions
 
-- All shell scripts in `scripts/` are **bash**, not PowerShell. The user is on Linux. Don't suggest Windows tooling.
-- Audio capture goes through **PulseAudio / PipeWire** via `ffmpeg -f pulse`. The `rec.sh` source defaults to `@DEFAULT_SOURCE@` (whatever PulseAudio considers the current default input) but can be overridden with `STRUDEL_REC_SOURCE`. Find sources with `pactl list sources short`.
-- The GoXLR is supported via [goxlr-utility](https://github.com/GoXLR-on-Linux/goxlr-utility), which exposes the GoXLR's faders and Broadcast Mix to PipeWire/PulseAudio. Without that daemon the GoXLR is just a generic USB sound card.
-
-## Editing the `.strudel` scratchpad
-
-VS Code is configured to treat `*.strudel` and `*.str` as JavaScript (see `.vscode/settings.json`). Strudel patterns are JavaScript that calls Strudel's pattern functions — the API reference lives at https://strudel.cc/learn/. The vocab the user actually uses is documented in `COMPOSER.md`'s "vocab you'll actually use" table — refer there before guessing function names.
+- Shell scripts in `scripts/` are **bash**. Don't suggest Windows tooling.
+- Audio capture uses **PulseAudio / PipeWire** via `ffmpeg -f pulse`. `rec.sh` defaults to `@DEFAULT_SOURCE@`, overridable with `STRUDEL_REC_SOURCE`. Find sources with `pactl list sources short`.
+- The GoXLR works through [goxlr-utility](https://github.com/GoXLR-on-Linux/goxlr-utility). Without that daemon it is a generic USB sound card.
+- Hardware MIDI is Linux/ALSA only. macOS and Windows are unverified.
 
 ## Things that look like bugs but aren't
 
-- **`samples('http://localhost:5555')` returning `{}` from the sampler with no .wav files** — that's the empty-bank response. Drop a `.wav` into `samples/<bank>/`, fetch again, sampler returns the new index.
-- **`patterns/sets/` files not being live-reloaded** — by design. Only `patterns/scratch.strudel` is watched. See "single-file watcher model" above.
-- **The watcher's Chromium window stealing focus on every save** — Playwright's default. Acceptable for now since that window is the OBS visual.
-- **`recordings/` and `samples/ai/` being gitignored** — intentional. Recordings are pre-chop staging; AI-generated samples are expected to churn.
+- **`samples('http://localhost:5555')` returns `{}`**: empty-bank response. Drop a `.wav` into `samples/<bank>/`; the sampler rescans on every request.
+- **Edits don't change the sound while playing**: by design. Press **Apply changes**.
+- **Hosted or LAN access returns 403**: by design. Studio is localhost-only.
+- **`patterns/sets/` files aren't live-reloaded**: only the legacy watcher reads `patterns/scratch.strudel`. Studio keeps its own sessions in `.studio/projects/`; the only `patterns/` path it touches is `patterns/sets/neon-drive/`, read once by `npm run studio:demo`.
+- **`recordings/`, `samples/ai/`, `.studio/`, `.venv-midi/` are gitignored**: intentional.
 
-## Where the user ignored the original spec
+## Legacy watcher (opt-in, not the default)
 
-The README in the user's original message described a Windows/PowerShell setup with `winget`, `dshow`, and `.ps1` scripts. **All of that has been replaced** with Linux equivalents (apt/pacman/dnf, PulseAudio, bash). When the user references "the spec", they mean the conceptual layout (directory structure, npm scripts, editor flow), not the literal Windows commands.
+`npm run dev:watcher` runs `@strudel/sampler` plus `strudel-server` (Bun + Playwright, pulled from GitHub, not npm). It watches **one** file, `patterns/scratch.strudel`, and pushes it into a Chromium window pointed at `https://strudel.cc`. Saved sets in `patterns/sets/` are copied in and out by `npm run save` / `npm run load`. See `docs/human/guides/watcher-workflow.md`.
+
+**Upstream `strudel-server` is broken against current `strudel.cc`**: it hardcodes `#code .cm-content[contenteditable='true']`, but the editor now sits under `.code-container`. `scripts/patch-strudel-server.mjs` rewrites the selector in `node_modules/strudel-server/src/main.ts` and is run by `npm run setup:watcher` (there is no longer a `postinstall`). If the watcher hangs for 30 s and times out:
+
+1. `grep -c "#code" node_modules/strudel-server/src/main.ts` should be `0`. If not, `npm run patch-strudel-server`.
+2. If it is `0` and it still hangs, strudel.cc probably changed its DOM again. Probe it with Playwright, update the patcher's target selector, rerun.
+3. `Executable doesn't exist at chromium-XXXX` means the pinned Playwright Chromium is missing: `npm run setup:watcher`.
+4. Don't delete the patcher until upstream is verified fixed; then remove it, the `setup:watcher` call, and the doc notes.
+
+`scripts/ensure-deps.mjs` (bun, Playwright Chromium, ffmpeg, yt-dlp checks) still exists as `npm run ensure-deps` but no longer runs automatically. Keep it and the patcher idempotent and non-failing.
+
+## Editing `.strudel` files
+
+VS Code treats `*.strudel` and `*.str` as JavaScript (`.vscode/settings.json`). Strudel patterns are JavaScript calling Strudel's pattern functions; the API reference is https://strudel.cc/learn/. Check `COMPOSER.md`'s vocab table before guessing function names.
