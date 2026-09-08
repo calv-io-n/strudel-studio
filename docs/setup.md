@@ -26,14 +26,33 @@ Open http://localhost:5173, choose **Sessions → Neon Drive**, set playback to 
 
 The API key is optional. Sound generation sends the requested prompt to ElevenLabs and may incur provider charges. Studio generates only after an explicit action. Use sounds only according to their applicable rights and provider terms.
 
-For the MIDI bridge alone:
+### Hardware MIDI controllers
+
+Studio's hardware bridge is a small Python process (`studio/midi/bridge.py`) that talks to the ALSA sequencer through `python-rtmidi`. Any class-compliant USB controller works without a vendor driver. Install the bridge once:
 
 ```bash
 python3 -m venv .venv-midi
 .venv-midi/bin/pip install -r studio/midi/requirements.txt
 ```
 
-Restart Studio and open **Virtual MIDI → Devices, mappings & advanced controls**. Your host must provide `/dev/snd/seq`; containers and remote hosts often do not. Missing hardware or Python does not prevent browser controls, synth playback or WAV export. `studio/midi/install.py` additionally installs separate MIDI MCP tooling and is not necessary for ordinary hardware MIDI.
+Restart Studio. Then connect the controller inside the app, which is the step most people miss: **plugging the device in is not enough. Studio only listens to ports you have selected.**
+
+1. Plug the controller in and confirm Linux sees it: `aconnect -l` lists it as a client with one or more ports.
+2. Open **Virtual MIDI** in the footer and expand **Devices, mappings & advanced controls**.
+3. Under **MIDI devices**, pick the controller's port from the dropdown and click **Connect**. Controllers that expose several ports (for example, a "MIDI" port and a DAW auto-map port such as "HyperControl" or "DIN") normally want the plain MIDI one.
+4. Press a key. Unmapped notes play the built-in synth, and each event appears in **MIDI feedback** tagged **ALSA**.
+
+The selection is saved with the project, and the bridge reopens the port whenever Studio starts or **Reconnect MIDI** is pressed. Verified controllers: M-Audio Axiom AIR Mini 32.
+
+As a one-off alternative, route the device into Studio's always-enabled **External MIDI input** port from a terminal while Studio is running:
+
+```bash
+aconnect 'Axiom A.I.R. Mini32':0 'Strudel Studio':0
+```
+
+That route lasts only until the bridge restarts, so prefer **Connect** in the app for anything you want to keep.
+
+Your host must provide `/dev/snd/seq`; containers and remote hosts often do not. Missing hardware or Python does not prevent browser controls, synth playback or WAV export. `studio/midi/install.py` additionally installs separate MIDI MCP tooling and is not necessary for ordinary hardware MIDI.
 
 ## Configuration
 
@@ -59,6 +78,7 @@ Changing `STUDIO_SAMPLE_DIR` changes the generated library, not the legacy sampl
 - **Port already in use:** stop the other Studio instance or set `STUDIO_PORT`. The sampler still uses 5555; `npm run studio:app` starts only the app when the legacy sample server is unnecessary.
 - **No sound:** click Play to unlock browser audio, check output volume, and try Neon Drive. External sample patterns require their referenced sources to be available.
 - **Python/MIDI error:** use browser controls, or follow the MIDI setup above. Hardware support is optional.
+- **Controller keys do nothing:** the device is probably not connected in Studio. Open **Virtual MIDI → Devices, mappings & advanced controls**, select its port and click **Connect**. Check that the **MIDI feedback** panel shows events; if it stays empty, run `aseqdump -p <client>` from `aconnect -l` to confirm the hardware is sending at all. Also make sure the route dropdown at the top of the drawer reads **OS MIDI loopback**, not **Browser**.
 - **Missing browser in tests:** run `npm run setup:browser-tests`; use `-- --with-deps` for missing Linux libraries. The watcher may need its own pinned browser version, installed by `setup:watcher`.
 - **Save failure:** keep the tab open, check data-directory permissions and connection status, then use Project → Save project. Export code before clearing browser storage or removing any recovery data.
 - **Hosted access returns 403:** expected. This release is localhost-only, not a production web service. Do not remove the host/origin checks to expose it publicly.
