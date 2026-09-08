@@ -18,9 +18,21 @@ export class PerformancePanel {
   constructor(private editor: () => StudioEditor, private tab: () => { id: string; name: string }, private report: (message: string) => void, private engine: Engine) {
     this.root.className = 'performance-panel'; this.root.hidden = true;
     this.root.setAttribute('aria-label', 'Play into selection');
-    this.root.innerHTML = `<div class="form-row"><strong data-destination></strong><button data-close>Leave performance</button></div><p data-state role="status">Armed · choose an output</p><div data-actions class="form-row"><button data-audition>Audition</button><button data-transcribe>Transcribe</button><button data-fallback>Use fallback synth</button><button data-stop>Stop take</button></div><div class="form-row"><label>Phrase cycles <input data-length type="number" min="0.25" max="64" step="0.25" value="4"></label><label>Quantization <select data-grid><option value="0.0625">1/16 cycle</option><option value="0.125">1/8 cycle</option><option value="0.25">1/4 cycle</option><option value="0">Unquantized</option></select></label><label><input data-countin type="checkbox"> One-cycle count-in</label></div><div class="form-row"><button data-preview>Preview isolated</button><button data-preview-mix>Preview with accompaniment</button><button data-accept>Accept into selection</button><button data-discard>Discard</button><button data-retry>Retry</button></div><div class="performance-diff"><div><h3>Original</h3><pre data-original></pre></div><div><h3>Proposed · editable pattern</h3><pre data-proposed>No take yet</pre></div></div>`;
+    this.root.innerHTML = `<div class="form-row"><strong data-destination></strong><button data-close>Leave performance</button></div><p data-state role="status">Armed · choose an output</p><div data-actions class="form-row"><button data-audition>Audition</button><button data-transcribe>Transcribe</button><button data-fallback>Use fallback synth</button><button data-stop>Stop take</button></div><div class="form-row"><label>Phrase cycles <input data-length type="number" min="0.25" max="64" step="0.25" value="4"></label><label>Quantization <select data-grid><option value="0.0625">1/16 cycle</option><option value="0.125">1/8 cycle</option><option value="0.25">1/4 cycle</option><option value="0">Unquantized</option></select></label><label><input data-countin type="checkbox"> One-cycle count-in</label></div><div class="form-row"><button data-preview>Preview isolated</button><button data-preview-mix>Preview with accompaniment</button><button data-accept>Accept into selection</button><button data-discard>Discard</button><button data-retry>Retry</button></div><div class="form-row"><label>Loop start <input data-jam-start type="number" min="0" step="0.25" value="0"></label><label>Loop end <input data-jam-end type="number" min="0.25" step="0.25" value="4"></label><button data-jam>Jam with composition</button><button data-leave-jam>Leave jam</button><label><input data-suppress type="checkbox"> Suppress original phrase</label></div><p data-jam-state role="status"></p><div class="performance-diff"><div><h3>Original</h3><pre data-original></pre></div><div><h3>Proposed · editable pattern</h3><pre data-proposed>No take yet</pre></div></div>`;
     this.button('audition', async () => { await this.prepare(); this.audition = true; this.status('Audition · no code or audio is saved'); });
     this.button('fallback', () => { this.values = { s: 'triangle', gain: .2 }; this.audition = true; this.status('Audition · fallback triangle synth'); });
+    this.button('jam', async () => {
+      if (!this.take) return;
+      this.stop();
+      await this.engine.startJam(this.take.destination.tabId, Number(this.root.querySelector<HTMLInputElement>('[data-jam-start]')!.value), Number(this.root.querySelector<HTMLInputElement>('[data-jam-end]')!.value));
+      this.root.querySelector('[data-jam-state]')!.textContent = `Loop ${this.engine.jam!.begin}–${this.engine.jam!.end} · excluding ${this.root.querySelector('[data-destination]')!.textContent}`;
+    });
+    this.button('leave-jam', () => { this.stop(); this.engine.endJam(); this.root.querySelector('[data-jam-state]')!.textContent = ''; });
+    this.root.querySelector<HTMLInputElement>('[data-suppress]')!.onchange = async event => {
+      const input = event.target as HTMLInputElement;
+      try { await this.engine.suppressPhrase(this.owner!, this.take!.destination.tabId, this.take!.destination.original, input.checked); }
+      catch (error) { input.checked = false; this.report((error as Error).message); }
+    };
     this.button('transcribe', () => this.start());
     this.button('preview', () => this.preview(true));
     this.button('preview-mix', () => this.preview(false));
@@ -77,12 +89,14 @@ export class PerformancePanel {
     this.status('Stopped · take retained for review'); this.paint();
   }
   private discard() {
-    this.stop(); if (this.take) this.take = new MidiTake(this.take.destination); this.paint(); this.status('Discarded · original code unchanged');
+    this.stop(); if (this.take) void this.engine.suppressPhrase(this.owner!, this.take.destination.tabId, this.take.destination.original, false);
+    this.root.querySelector<HTMLInputElement>('[data-suppress]')!.checked = false;
+    if (this.take) this.take = new MidiTake(this.take.destination); this.paint(); this.status('Discarded · original code unchanged');
   }
   private accept() {
     if (this.take?.state === 'capturing') throw new Error('Stop the take before accepting.');
     const code = this.code(); if (!code) throw new Error('An empty take cannot replace code.');
-    this.owner!.acceptTake(code); this.take = undefined; this.stop(); this.close();
+    this.owner!.acceptTake(code); void this.engine.suppressPhrase(this.owner!, this.take!.destination.tabId, this.take!.destination.original, false); this.take = undefined; this.stop(); this.close();
   }
   private async preview(isolated: boolean) {
     if (!this.take?.notes.length) throw new Error('Play a take before previewing.');
@@ -97,13 +111,15 @@ export class PerformancePanel {
     this.previewTimers.push(setTimeout(() => { if (epoch === this.previewEpoch) this.stop(); }, this.length / this.cps * 1000 + 1500));
     this.status(isolated ? 'Preview · isolated take' : 'Preview · with accompaniment');
   }
+  globalStop() { this.stop(); this.engine.endJam(); this.root.querySelector('[data-jam-state]')!.textContent = ''; }
   arm() {
     if (this.take?.notes.length) throw new Error('Accept or discard the pending take before changing destinations.');
-    this.stop(); this.values = undefined;
+    this.globalStop(); this.values = undefined;
     const next = this.editor();
     const destination = next.arm(this.tab().id);
     if (this.owner !== next) this.owner?.disarm();
     this.owner = next; this.take = new MidiTake(destination);
+    this.root.querySelector<HTMLInputElement>('[data-jam-end]')!.value = String(this.engine.arrangementLength || 4);
     this.root.hidden = false;
     this.root.querySelector('[data-destination]')!.textContent = this.tab().name;
     this.root.querySelector('[data-original]')!.textContent = destination.original; this.paint();
@@ -111,7 +127,9 @@ export class PerformancePanel {
   }
   close() {
     if (this.take?.notes.length) throw new Error('Accept or discard the pending take before leaving.');
-    this.stop(); this.engine.performanceAudio.silence();
+    this.stop(); this.engine.endJam();
+    if (this.take) void this.engine.suppressPhrase(this.owner!, this.take.destination.tabId, this.take.destination.original, false);
+    this.engine.performanceAudio.silence();
     this.owner?.disarm(); this.owner = undefined; this.take = undefined; this.root.hidden = true;
   }
 }

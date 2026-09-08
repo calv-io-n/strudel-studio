@@ -6,7 +6,7 @@ import * as draw from '@strudel/draw';
 import * as fonts from '@strudel/soundfonts';
 import { transpiler } from '@strudel/transpiler';
 import { SlotTimeline, slotName } from '../shared/slots';
-import { arrangement, MuteTimeline, PatternTimeline, type Pattern } from '../shared/arrangement';
+import { arrangement, loopRange, MuteTimeline, PatternTimeline, type Pattern } from '../shared/arrangement';
 import type { Asset, Project } from '../shared/model';
 import type { StudioEditor } from './editor';
 import { PerformanceAudio } from './performance-audio';
@@ -15,6 +15,32 @@ import { soundCatalog, soundKey } from './completions';
 type Scheduler = { started: boolean; lastEnd: number; cps: number; now(): number; stop(): void; setCps(cps: number): void; setPattern(pattern: Pattern, start?: boolean): Promise<void> };
 type Repl = { scheduler: Scheduler; state: { evalError?: Error; pattern?: { queryArc(a: number, b: number): unknown[] } }; evaluate(code: string, start: boolean): Promise<unknown> };
 export class Engine {
+  jam?: { tabId: string; begin: number; end: number };
+  private appliedCodes = new Map<string, string>();
+  private suppressed = new Map<string, Pattern>();
+  async startJam(tabId: string, begin: number, end: number) {
+    const maximum = Math.max(0, ...this.project().clips.map(c => c.start + c.length));
+    if (begin < 0 || end <= begin || end > maximum || !Number.isFinite(end)) throw new Error('Choose a loop range inside the composition.');
+    this.stop(); this.jam = { tabId, begin, end };
+    try { await this.compile('composition', false); } catch (error) { this.jam = undefined; throw error; }
+  }
+  endJam() { if (this.jam) this.stop(); }
+  get arrangementLength() { return Math.max(0, ...this.project().clips.map(c => c.start + c.length)); }
+  async suppressPhrase(owner: StudioEditor, tabId: string, original: string, enabled: boolean) {
+    if (!enabled) { this.suppressed.delete(tabId); return; }
+    const code = this.appliedCodes.get(tabId);
+    if (!code || code.indexOf(original) < 0 || code.indexOf(original) !== code.lastIndexOf(original)) throw new Error('The selected phrase must occur once in the playing version. Apply the intended code before suppressing it.');
+    if (this.compilingBusy) throw new Error('Wait for the current compilation.');
+    this.compilingBusy = true; this.compiling = owner;
+    try {
+      await this.compiler.evaluate(code.replace(original, 'silence'.padEnd(original.length)), false);
+      if (this.compiler.state.evalError) throw this.compiler.state.evalError;
+      this.suppressed.set(tabId, this.compiler.state.pattern as Pattern);
+    } finally {
+      this.compiling = undefined; this.compilingBusy = false;
+      core.setTime(() => this.repl.scheduler.now()); core.setCpsFunc(() => this.repl.scheduler.cps); core.setPattern(this.repl.state.pattern);
+    }
+  }
   get tempo() { return this.project().bpm; }
   isolatePerformance(isolated: boolean) {
     const output = audio.getSuperdoughAudioController().output.destinationGain;
@@ -147,11 +173,14 @@ export class Engine {
         await this.compiler.evaluate(code.trim() ? code : 'silence', false);
         if (this.compiler.state.evalError) throw new Error(`${tab.name}: ${this.compiler.state.evalError.message}`);
         if (epoch !== this.epoch) return;
-        next.set(id, this.compiler.state.pattern as Pattern); codes.set(id, revision);
+        const compiled = this.compiler.state.pattern as Pattern;
+        next.set(id, new core.Pattern((state: any) => (this.suppressed.get(id) ?? compiled).query(state))); codes.set(id, revision);
+        this.appliedCodes.set(id, code);
         if (target !== 'composition') cps = this.compiler.scheduler.cps;
       }
       if (epoch !== this.epoch) return;
-      const pattern = target === 'composition' ? arrangement(clips, next, this.mutes) : next.get(target)!;
+      let pattern = target === 'composition' ? arrangement(clips, next, this.mutes, () => this.jam?.tabId) : next.get(target)!;
+      if (this.jam && target === 'composition') pattern = loopRange(pattern, this.jam.begin, this.jam.end);
       // Check queries before replacing a working performance.
       pattern.queryArc(0, 1);
       if (!Number.isFinite(cps) || cps <= 0) throw new Error('Tempo must be greater than zero.');
@@ -164,7 +193,7 @@ export class Engine {
         this.patterns.reset(pattern);
         this.repl.scheduler.setCps(cps);
         this.target = target;
-        this.endCycle = target === 'composition' ? Math.max(...clips.map(c => c.start + c.length)) : Infinity;
+        this.endCycle = target === 'composition' && !this.jam ? Math.max(...clips.map(c => c.start + c.length)) : Infinity;
         const live = this.patterns.pattern();
         this.repl.state.pattern = live;
         await this.repl.scheduler.setPattern(live, true);
@@ -237,6 +266,7 @@ export class Engine {
     this.changed(); return { cycle, cancelled: false };
   }
   stop() {
+    this.jam = undefined; this.suppressed.clear();
     this.performanceAudio.silence();
     this.epoch++;
     this.pendingCycle = undefined; this.pendingMuteCycle = undefined;

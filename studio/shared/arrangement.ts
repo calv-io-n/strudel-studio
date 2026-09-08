@@ -4,13 +4,15 @@ import type { Clip } from './model';
 
 // Strudel's published packages do not include TypeScript declarations.
 export type Pattern = { query(state: any): any[]; queryArc(begin: number, end: number): any[] };
-export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes?: MuteTimeline): Pattern {
+export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes?: MuteTimeline, excluded: () => string | undefined = () => undefined): Pattern {
   return new core.Pattern((state: any) => clips.flatMap(clip => {
+    if (clip.tabId === excluded()) return [];
     const begin = Math.max(Number(state.span.begin), clip.start);
     const end = Math.min(Number(state.span.end), clip.start + clip.length);
     const pattern = patterns.get(clip.tabId);
     if (begin >= end || !pattern) return [];
-    return (mutes ? mutes.segments(clip.id, begin, end) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(new core.TimeSpan(a - clip.start, b - clip.start)).setControls({ studioCycleOffset: clip.start }))
+    const offset = state.controls?.studioLoopOffset ?? 0;
+    return (mutes ? mutes.segments(clip.id, begin + offset, end + offset).map(([a, b]) => [a - offset, b - offset]) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(new core.TimeSpan(a - clip.start, b - clip.start)).setControls({ studioCycleOffset: clip.start + offset }))
       .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(
         Math.max(clip.start, Number(span.begin) + clip.start),
         Math.min(clip.start + clip.length, Number(span.end) + clip.start),
@@ -21,6 +23,22 @@ export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes
         return rest;
       })));
   }));
+}
+
+export function loopRange(pattern: Pattern, begin: number, end: number): Pattern {
+  if (!Number.isFinite(begin) || !Number.isFinite(end) || begin < 0 || end <= begin) throw new Error('Choose a nonempty loop range.');
+  const length = end - begin;
+  return new core.Pattern((state: any) => {
+    const a = Number(state.span.begin), b = Number(state.span.end);
+    const result: any[] = [];
+    for (let pass = Math.floor(a / length); pass * length < b; pass++) {
+      const offset = pass * length - begin;
+      const left = Math.max(a, pass * length), right = Math.min(b, (pass + 1) * length);
+      result.push(...pattern.query(state.setSpan(new core.TimeSpan(left - offset, right - offset)).setControls({ studioLoopOffset: offset }))
+        .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(Number(span.begin) + offset, Number(span.end) + offset))));
+    }
+    return result;
+  });
 }
 
 export class PatternTimeline {
