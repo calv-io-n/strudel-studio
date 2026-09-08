@@ -1,3 +1,4 @@
+import { discoverGitHub, downloadGitHub } from './github';
 import { importSample } from './imports';
 import { saveRecording } from './recordings';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
@@ -43,6 +44,8 @@ const server = createServer(async (req, res) => {
   const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
   if (!url.pathname.startsWith('/api/')) return vite.middlewares(req, res);
   try {
+    if (req.method === 'POST' && url.pathname === '/api/imports/github/discover') return json(res, 200, await discoverGitHub(await body(req)));
+    if (req.method === 'GET' && url.pathname === '/api/imports/github/audio') { const bytes = await downloadGitHub(Object.fromEntries(url.searchParams)); res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' }); return res.end(bytes); }
     if (req.method === 'POST' && url.pathname === '/api/imports/sample') return json(res, 201, await importSample(req, store));
     if (req.method === 'POST' && url.pathname === '/api/recordings') return json(res, 201, await saveRecording(req, store));
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, generation: { configured: generator.configured, fixture: generator.fixture } });
