@@ -89,3 +89,12 @@ identity makes repeated imports reusable and restores missing audio under its ol
 identifier. Packs carry folder metadata and can be renamed without changing sound
 IDs. ZIP review bounds file count and expansion size and rejects unsafe paths.
 Individual decode/upload errors remain visible alongside successful imports.
+
+Public GitHub import resolves the source to a commit, lists supported data blobs,
+and downloads only selected audio into the same review flow. Requests are confined
+to GitHub API/raw hosts, bounded in size/time, and never execute repository code.
+Slash-containing branch names are resolved before folder traversal. Truncated tree
+listings ask for a narrower folder; rate-limit and per-download failures are visible.
+See the [GitHub tree API](https://docs.github.com/en/rest/git/trees#get-a-tree) for
+upstream listing limits. Tests inject responses and verify revision pinning and
+local persistence without relying on external availability.

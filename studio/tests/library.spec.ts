@@ -81,3 +81,21 @@ test('ZIP import reviews playable entries and rejects traversal paths', async ({
   await expect(page.locator('[data-review]')).toContainText('kit/kick.wav');
   await expect(page.locator('[data-review]')).toContainText('unsafe path');
 });
+
+test('GitHub samples are reviewed and imported into the same local library', async ({ page }) => {
+  const { encodeWav } = await import('../shared/wav'); const frames = new Float32Array(4410);
+  const wav = Buffer.from(encodeWav(frames, frames, 44100).buffer);
+  await page.route('**/api/imports/github/discover', route => route.fulfill({ json: { owner: 'fixture', repo: 'samples', revision: 'a'.repeat(40), url: 'https://github.com/fixture/samples', files: [{ path: 'kit/github-tone.wav', size: wav.length }] } }));
+  await page.route('**/api/imports/github/audio?*', route => route.fulfill({ body: wav, contentType: 'application/octet-stream' }));
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await page.getByLabel('Public GitHub link').fill('https://github.com/fixture/samples');
+  await page.getByRole('button', { name: 'Find samples', exact: true }).click();
+  await expect(page.locator('[data-remote]')).toContainText('kit/github-tone.wav');
+  await page.getByRole('button', { name: 'Download selected for review', exact: true }).click();
+  await expect(page.locator('[data-review]')).toContainText('kit/github-tone.wav');
+  await page.getByRole('button', { name: 'Import selected', exact: true }).click();
+  await expect(page.locator('[data-review]')).toContainText('Imported');
+  await page.reload(); await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await expect(page.locator('#assets')).toContainText('github-tone');
+});

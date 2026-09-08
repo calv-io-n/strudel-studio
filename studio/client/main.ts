@@ -1,3 +1,4 @@
+import { GitHubImports } from './github-imports';
 import { SampleImports } from './imports';
 import { RecordingPanel } from './recording';
 import { effectBehavior } from './live-effects';
@@ -109,6 +110,7 @@ const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare
 $('#sound-import').append(recordingPanel.root);
 const sampleImports = new SampleImports(async asset => { assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true));
 $('#sound-import').append(sampleImports.root);
+$('#sound-import').append(new GitHubImports(sampleImports, message => notice(message, true)).root);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
 recordButton.onclick = guard(() => recordingPanel.open('external')); $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';

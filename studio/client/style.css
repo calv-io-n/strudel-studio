@@ -374,3 +374,4 @@ dialog input { width: 100%; }
 [data-drop] { padding: 12px; margin: 8px 0; border: 1px dashed var(--border); }
 [data-level] { width: 100%; }
 [data-preview], [data-audio] { width: 100%; margin: 12px 0; }
+[data-remote] label { display: block; padding: 6px 0; overflow-wrap: anywhere; }
