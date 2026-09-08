@@ -1,5 +1,7 @@
+import { MidiComposition } from './midi-composition';
+import { destinationFor } from '../shared/performance';
 import { isolateHistory } from '@codemirror/commands';
-import { sampleInsertion } from '../shared/sample-insertion';
+import { sampleInsertion, statementEnd } from '../shared/sample-insertion';
 import { assetReferences } from '../shared/asset-references';
 import { GitHubImports } from './github-imports';
 import { SampleImports } from './imports';
@@ -15,7 +17,7 @@ import { parseMidi, Pickup, scaleCC } from '../shared/midi';
 import { StudioEditor } from './editor';
 import { Engine } from './engine';
 import { setupExport } from './export';
-import { soundLabel } from './completions';
+import { soundLabel, soundKey, soundToken } from './completions';
 import { ContextMenu, type MenuAction } from './context-menu';
 import { canPlace, duplicatePlacement } from '../shared/clips';
 
@@ -29,14 +31,14 @@ async function api<T>(path: string, method = 'GET', value?: unknown): Promise<T>
 try { document.documentElement.dataset.appearance = localStorage.getItem('studio.appearance') === 'dark' ? 'dark' : 'light'; } catch { document.documentElement.dataset.appearance = 'light'; }
 const app = $('#app');
 app.innerHTML = `
-<header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Local project</span></div><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sounds</button><label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label></header>
+<header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Local project</span></div><button id="save-now" title="Save session (Ctrl+S)">Save</button><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sample library</button><label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label></header>
 <details class="project-menu"><summary>Project</summary><nav class="sessionbar" aria-label="Project tools"><span class="section-label">Workspace</span><button id="save">Save project</button><button id="import">Import .strudel</button><button id="export">Export code</button><input type="file" id="import-file" accept=".strudel,.str,.js" hidden><span id="connection">Connecting…</span><button id="backup-project">Download project backup</button><button id="restore-backup">Restore project backup</button><input id="backup-file" type="file" accept=".zip" hidden><button id="new-project">New project</button><a class="source-link" href="https://github.com/calv-io-n/strudel" target="_blank" rel="noopener noreferrer">Source code &amp; license ↗</a><a class="source-link" href="https://github.com/calv-io-n/strudel/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">AGPL-3.0-or-later ↗</a></nav></details>
 <main class="workspace">
-  <aside id="sounds-panel" class="sound-panel panel" hidden aria-label="Sound library"><div class="panel-heading"><h1>Sounds <small id="asset-count">0 sounds</small></h1><button id="sounds-close" class="quiet">Back to editor</button></div>
+  <aside id="sounds-panel" class="sound-panel panel" hidden aria-label="Sample library"><div class="panel-heading"><h1>Sample library <small id="asset-count">0 sounds</small></h1><button id="sounds-close" class="quiet">Close library</button></div>
     <div class="form-row" role="tablist" aria-label="Sound sources"><button id="sound-import-tab" role="tab" aria-selected="true">Import</button><button id="sound-generate-tab" role="tab" aria-selected="false">Generate</button></div>
     <section id="sound-import" role="tabpanel" aria-label="Import sounds"><p class="hint">Bring samples and recorded takes into your local library.</p></section>
     <form id="generate-form" class="generate-form"><label for="prompt">Describe your next sound</label><textarea id="prompt" maxlength="450" required placeholder="A warm, dusty bass one-shot. Short attack, soft analog saturation."></textarea><details class="generation-options"><summary>Options</summary><div class="form-row"><label>Duration <input id="duration" type="number" min="0.5" max="30" step="0.5" placeholder="Auto"></label><label class="check"><input id="loop" type="checkbox"> Loop</label></div></details><button id="generate" class="primary" type="submit">Generate sound</button><p id="generation-status" class="hint" role="status">Checking ElevenLabs connection…</p></form>
-    <div class="library-heading"><h2>Your sounds</h2><button id="refresh-assets" class="quiet">Refresh</button></div><label>Search sounds <input id="sound-search" type="search" placeholder="Sound, pack, or folder"></label><div id="assets" class="asset-list"></div>
+    <div class="library-heading"><h2>All sounds</h2><button id="refresh-assets" class="quiet">Refresh</button></div><label>Search sounds <input id="sound-search" type="search" placeholder="Name, tag, description, or pack"></label><div id="assets" class="asset-list"></div>
     <section id="assignment" class="assignment" hidden><button id="insert-sound" class="primary">Insert into pattern</button><details><summary>Assign to a control or slot</summary><h2>Assign selected sound</h2><label for="assign-target">Destination</label><select id="assign-target"></select><button id="assign">Assign sound</button><button id="learn-trigger">Learn a trigger key</button><p class="hint">Pads play one-shots. Slots swap sounds on the next cycle.</p></details></section>
   </aside>
   <section class="editor-panel panel"><div class="tabbar"><div id="tabs" role="tablist" aria-label="Patterns"></div><button id="new-tab" aria-label="New pattern">+</button><details id="tab-menu"><summary aria-label="Pattern actions">•••</summary><div><button id="color-tab">Color…</button><button id="rename-tab">Rename pattern</button><button id="duplicate-tab">Duplicate pattern</button><button id="add-to-composition">Add to composition</button><button id="close-tab">Close pattern</button></div></details></div><div id="editor"></div><div id="mapping-context" hidden></div><div class="editor-footer"><span id="slider-hint">Select an inline slider to map it</span><span id="cycle">Cycle 0</span></div></section>
@@ -57,7 +59,42 @@ app.innerHTML = `
 <dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>`;
 
 // Reuse existing MIDI and sample functionality behind progressive disclosure.
-$('.tabbar').append($('.project-menu'));
+$('.topbar').append($('.project-menu'));
+const patternMenu = document.createElement('details'); patternMenu.id = 'patterns-menu';
+patternMenu.innerHTML = '<summary>Patterns</summary><div class="menu-sheet"><input id="pattern-search" type="search" aria-label="Find a pattern" placeholder="Find a pattern"><div id="pattern-list"></div></div>';
+$('.topbar').insertBefore(patternMenu, $('#sounds-toggle'));
+$('.editor-footer').append($('.transport'), $('#transport-state'));
+$('#play-target').hidden = true;
+$('#play').setAttribute('aria-label', 'Play pattern'); $('#stop').setAttribute('aria-label', 'Stop playback');
+$('.composition-toolbar').insertAdjacentHTML('afterbegin', '<div class="timeline-transport"><button id="composition-return" aria-label="Return to range start" title="Return to range start">↤</button><button id="composition-play" class="primary">Play composition</button><button id="composition-stop">Stop</button><button id="composition-loop" aria-pressed="false">Loop</button><output id="composition-position" aria-label="Timeline position">0.00</output></div>');
+$('.tabbar').insertAdjacentHTML('beforeend', '<button id="expand-editor" class="quiet" aria-label="Expand editor">Expand</button>');
+$('.composition-toolbar').insertAdjacentHTML('beforeend', '<button id="expand-composition" class="quiet" aria-label="Expand composition">Expand</button>');
+$('#tab-menu > div').insertAdjacentHTML('beforeend', '<button id="delete-tab">Delete pattern…</button>');
+const emptyEditor = document.createElement('div'); emptyEditor.id = 'empty-editor'; emptyEditor.hidden = true;
+emptyEditor.innerHTML = '<p>No open patterns</p><button id="open-patterns">Open a pattern</button>'; $('#editor').after(emptyEditor);
+// Sound selection floats above the workspace so previewing never changes its layout.
+const libraryBackdrop = document.createElement('div');
+libraryBackdrop.className = 'library-backdrop'; libraryBackdrop.hidden = true;
+document.body.append(libraryBackdrop, $('#sounds-panel'));
+libraryBackdrop.onclick = () => setSounds(false);
+$('#sounds-panel').setAttribute('role', 'dialog');
+$('#sounds-panel').setAttribute('aria-modal', 'true');
+$('#sounds-panel').setAttribute('aria-label', 'Sample library');
+const addSounds = document.createElement('details'); addSounds.id = 'add-sounds'; addSounds.innerHTML = '<summary>Add sounds</summary>';
+addSounds.append($('#sound-import-tab').parentElement!, $('#sound-import'), $('#generate-form')); $('#sounds-panel > .panel-heading').after(addSounds);
+$('#sound-search').parentElement!.insertAdjacentHTML('afterend', '<select id="library-source" aria-label="Filter sound source"><option value="all">All sources</option><option value="builtin">Built-in</option><option value="upload">Imported</option><option value="recording">Recorded</option><option value="elevenlabs">Generated</option></select><p id="library-destination" class="hint"></p><div id="builtin-sounds" class="asset-list"></div>');
+$('#library-destination').insertAdjacentHTML('afterend', '<div class="library-test"><span id="library-midi-status" role="status">Choose Live on a sound to play it from your controller</span><div id="library-keys" hidden aria-label="Test keyboard">' + ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'].map((n, i) => `<button data-library-note="${60 + i}" aria-label="Test ${n}4" class="${n.includes('♯') ? 'black' : ''}">${n}</button>`).join('') + '</div></div>');
+const libraryHeader = document.createElement('div'); libraryHeader.className = 'library-header';
+const libraryFilters = document.createElement('div'); libraryFilters.className = 'library-filters';
+libraryFilters.append($('#sound-search').parentElement!, $('#library-source'));
+libraryHeader.append($('#sounds-panel > .panel-heading'), libraryFilters, $('#library-destination'));
+const libraryScroll = document.createElement('div'); libraryScroll.id = 'library-scroll';
+libraryScroll.append($('#add-sounds'), $('#builtin-sounds'), $('#assets'), $('#assignment'));
+$('#sounds-panel').append(libraryHeader, libraryScroll, $('.library-test'));
+$('#sounds-close').before($('#refresh-assets'));
+$('#refresh-assets').setAttribute('aria-label', 'Refresh sounds');
+$('.sessionbar').append($('[data-drawer="export"]'));
+$('.footer-hint').textContent = '';
 $('#mapping-context').append($('.mapping-setup'));
 const mappingClose = document.createElement('button'); mappingClose.textContent = 'Close mapping'; mappingClose.className = 'quiet';
 mappingClose.onclick = () => { $('#mapping-context').hidden = true; }; $('#mapping-context').prepend(mappingClose);
@@ -67,8 +104,80 @@ advanced.innerHTML = '<summary>Devices, mappings & advanced controls</summary>';
 advanced.append($('.mapping-panel'), $('.monitor-panel')); $('#midi-content').append(advanced);
 
 let project: Project = newProject();
+let openTabs = new Set(project.tabs.map(t => t.id));
 let assets: Asset[] = [];
 let selectedAsset: string | undefined;
+let selectedSound: string | undefined;
+let libraryTarget: { owner: StudioEditor; code: string; from: number; to: number } | undefined;
+let libraryReturn: HTMLElement | undefined;
+let libraryMidi = false;
+const libraryNotes = new Set<string>();
+function stopLibraryNotes() { for (const key of libraryNotes) engine.performanceAudio.release(key); libraryNotes.clear(); }
+function selectLibrarySound(name: string) { stopLibraryNotes(); previewEpoch++; if (previewKey) engine.performanceAudio.release(previewKey); selectedSound = name; selectedAsset = assets.find(a => soundKey(a) === name)?.id; paintLibrarySelection(); }
+function paintLibrarySelection() {
+  document.querySelectorAll<HTMLElement>('.asset-select').forEach(button => {
+    const selected = button.dataset.selectSound === selectedSound || (!!selectedAsset && button.dataset.selectAsset === selectedAsset);
+    button.setAttribute('aria-pressed', String(selected)); button.closest('.asset')?.classList.toggle('selected', selected);
+  });
+  document.querySelectorAll<HTMLElement>('[data-live-sound]').forEach(button => button.setAttribute('aria-pressed', String(libraryMidi && button.dataset.liveSound === selectedSound)));
+  $('#assignment').hidden = !selectedAsset;
+  paintLibraryLive();
+}
+async function libraryNote(key: string, pitch: number, velocity: number, on: boolean) {
+  const voice = `library-midi:${key}`;
+  if (!on) { libraryNotes.delete(voice); engine.performanceAudio.release(voice); return; }
+  if (!libraryMidi || !selectedSound) return;
+  const name = selectedSound;
+  libraryNotes.add(voice); await engine.unlock();
+  if (!libraryNotes.has(voice) || !libraryMidi || selectedSound !== name) return;
+  $('#library-midi-status').textContent = `Live · ${engine.soundEntries.find(s => s.name === name)?.label ?? name} · MIDI ${pitch}`;
+  await engine.performanceAudio.play(voice, { s: name, gain: .35 }, pitch, velocity);
+}
+async function toggleLive(name: string) {
+  if (midiComposition.running || performancePanel.take?.state === 'capturing' || recordingPanel.pending) throw new Error('Finish the current recording before testing another sound.');
+  const on = !(libraryMidi && selectedSound === name);
+  stopLibraryNotes(); libraryMidi = on;
+  if (on) { releaseNotes(); await engine.unlock(); if (!libraryMidi || $('#sounds-panel').hidden) return; selectLibrarySound(name); } else paintLibrarySelection();
+  paintLibraryLive();
+}
+function paintLibraryLive() {
+  $('#library-keys').hidden = !libraryMidi;
+
+  const label = selectedSound ? engine.soundEntries.find(s => s.name === selectedSound)?.label ?? selectedSound : '';
+  $('#library-midi-status').textContent = libraryMidi ? `Live · ${label} · play your controller or the keys below · nothing is recorded` : 'Choose Live on a sound to play it from your controller';
+}
+$('#library-keys').onpointerdown = e => { const key = (e.target as HTMLElement).closest<HTMLElement>('[data-library-note]'); if (!key) return; key.setPointerCapture(e.pointerId); void guard(() => libraryNote(`pointer:${e.pointerId}`, Number(key.dataset.libraryNote), 100, true))(); };
+$('#library-keys').onpointerup = $('#library-keys').onpointercancel = e => { void libraryNote(`pointer:${e.pointerId}`, 0, 0, false); };
+$('#library-keys').onkeydown = e => { const el = e.target as HTMLElement; if (!e.repeat && [' ', 'Enter'].includes(e.key) && el.dataset.libraryNote) { e.preventDefault(); void guard(() => libraryNote(`keyboard:${el.dataset.libraryNote}`, Number(el.dataset.libraryNote), 100, true))(); } };
+$('#library-keys').onkeyup = e => { const el = e.target as HTMLElement; if ([' ', 'Enter'].includes(e.key)) void libraryNote(`keyboard:${el.dataset.libraryNote}`, 0, 0, false); };
+window.addEventListener('blur', stopLibraryNotes);
+let previewEpoch = 0;
+let previewKey: string | undefined;
+async function previewSound(name: string) {
+  selectLibrarySound(name);
+  const epoch = ++previewEpoch;
+  const button = document.querySelector<HTMLElement>(`[data-preview-sound="${CSS.escape(name)}"], [data-preview="${CSS.escape(assets.find(a => soundKey(a) === name)?.id ?? '-')}"]`);
+  button?.setAttribute('data-playing', 'true');
+  if (previewKey) engine.performanceAudio.release(previewKey);
+  await engine.unlock(); if (epoch !== previewEpoch) return;
+  previewKey = `library:${epoch}`;
+  await engine.performanceAudio.play(previewKey, { s: name, gain: .35 }, 60, 100);
+  const key = previewKey; setTimeout(() => { engine.performanceAudio.release(key); button?.removeAttribute('data-playing'); }, 1800);
+}
+async function useSound(name: string, asset?: Asset) {
+  const target = libraryTarget;
+  const owner = target?.owner ?? editor;
+  const original = owner.code;
+  if (asset) await engine.preload(asset);
+  if (!editorsHas(owner) || owner.code !== original || (target && owner.code !== target.code)) throw new Error('The destination changed. Close the library and select the sound again.');
+  if (!target && !openTabs.has(project.activeTabId)) throw new Error('Open a pattern before inserting a sound.');
+  const change = target ? { from: target.from, to: target.to, insert: name } : asset ? sampleInsertion(owner.code, owner.view.state.selection.main.head, asset, project.bpm) : { from: statementEnd(owner.code, owner.view.state.selection.main.head), insert: `\n$: s("${name}")\n` };
+  owner.view.dispatch({ changes: change, userEvent: 'input.sample', annotations: isolateHistory.of('full') });
+  if (asset && !project.assetIds.includes(asset.id)) project.assetIds.push(asset.id);
+  dirty(); setSounds(false); owner.view.focus(); notice(target ? 'Sound swapped. Apply changes to hear it during playback.' : 'Sound inserted.');
+}
+function editorsHas(owner: StudioEditor) { return [...editors.values()].includes(owner); }
+
 let selectedSlider: string | undefined;
 let learning: Target | undefined;
 let bridge: BridgeStatus = { ready: false, message: 'Connecting…', ports: [], connected: [] };
@@ -109,21 +218,66 @@ editor = getEditor();
 const engine = new Engine(getEditor, () => snapshot(), () => renderTransport(), (message) => notice(message, true));
 const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine, () => selectedProjectName || project.name, () => persistSession());
 $('#editor').after(performancePanel.root);
-const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { project.assetIds.push(asset.id); assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => performancePanel.stop());
+const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { project.assetIds.push(asset.id); assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => performancePanel.stop());
 performancePanel.pendingAudio = () => recordingPanel.pending;
 $('#sound-import').append(recordingPanel.root);
-const sampleImports = new SampleImports(async asset => { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
+const sampleImports = new SampleImports(async asset => { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
 $('#sound-import').append(sampleImports.root);
 $('#sound-import').append(new GitHubImports(sampleImports, message => notice(message, true)).root);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
 recordButton.onclick = guard(async () => { await persistSession(); await recordingPanel.open('external'); }); $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
-recordSelected.onclick = guard(async () => { performancePanel.stop(); await persistSession(); await recordingPanel.open('internal'); setSounds(true); soundSource('import'); });
+recordSelected.onclick = guard(async () => { performancePanel.stop(); await persistSession(); await recordingPanel.open('internal'); setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; });
 performancePanel.root.querySelector('[data-actions]')!.append(recordSelected);
-const performButton = document.createElement('button'); performButton.textContent = 'Play into selection';
-performButton.onclick = guard(() => performancePanel.arm());
+const performButton = document.createElement('button'); performButton.textContent = 'Play MIDI';
+performButton.onclick = guard(() => playMidi());
 $('.editor-footer').prepend(performButton);
+let selectedMidiClip: string | undefined;
+const midiComposition = new MidiComposition(engine, () => snapshot(), async next => {
+  for (const tab of next.tabs) if (!project.tabs.some(t => t.id === tab.id)) openTabs.add(tab.id);
+  project = next; renderTabs(); renderComposition(); renderTransport(); dirty(); await persistSession();
+}, () => selectedProjectName || project.name, message => notice(message, true));
+$('#editor').after(midiComposition.root);
+const compositionRecord = document.createElement('button'); compositionRecord.textContent = 'Record phrase audio'; compositionRecord.onclick = guard(async () => { if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.'); midiComposition.close(); performancePanel.arm(); await performancePanel.prepare(); recordSelected.click(); }); midiComposition.root.querySelector('.midi-more')!.append(compositionRecord);
+const rangeDetails = document.createElement('details'); rangeDetails.className = 'range-details'; rangeDetails.innerHTML = '<summary>Range options</summary>'; rangeDetails.append(midiComposition.range); $('.composition-toolbar').append(rangeDetails);
+async function armCompositionMidi() {
+  if (performancePanel.take?.notes.length || recordingPanel.pending) throw new Error('Resolve the pending performance take first.');
+  performancePanel.close();
+  const clips = project.clips.filter(c => c.tabId === project.activeTabId);
+  if (clips.length > 1 && !clips.some(c => c.id === selectedMidiClip)) {
+    const dialog = document.createElement('dialog'); dialog.innerHTML = '<h2>Choose a destination</h2>' + clips.map(c => `<button data-destination-clip="${c.id}">${escape(project.tracks.find(t => t.id === c.trackId)?.name)} · ${c.start}–${c.start + c.length}</button>`).join('') + '<button data-cancel>Cancel</button>'; document.body.append(dialog);
+    const choice = await new Promise<string | undefined>(resolve => { dialog.onclick = e => { const el = e.target as HTMLElement; if (el.dataset.destinationClip) { selectedMidiClip = el.dataset.destinationClip; dialog.close('chosen'); } else if (el.hasAttribute('data-cancel')) dialog.close(); }; dialog.onclose = () => resolve(dialog.returnValue === 'chosen' ? selectedMidiClip : undefined); dialog.showModal(); }); dialog.remove(); if (!choice) return;
+  }
+  midiComposition.arm(editor, project.activeTabId, selectedMidiClip);
+  await midiComposition.audition();
+  setDrawer('composition'); $('#play-target').value = 'composition'; renderTransport();
+}
+async function playMidi() {
+  if (!openTabs.has(project.activeTabId)) throw new Error('Open a pattern and select a note phrase first.');
+  if (project.clips.some(c => c.tabId === project.activeTabId)) return armCompositionMidi();
+  if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.');
+  midiComposition.close(); performancePanel.arm(); await performancePanel.prepare();
+}
+function expressionActions(pos: number, x: number, y: number) {
+  const token = soundToken(editor.code, pos);
+  if (token) {
+    libraryTarget = { owner: editor, code: editor.code, from: token.from, to: token.to }; selectedSound = editor.code.slice(token.from, token.to); selectedAsset = assets.find(a => soundKey(a) === selectedSound)?.id; $('#sound-search').value = ''; $('#library-source').value = 'all'; setSounds(true); return true;
+  }
+  try {
+    const d = destinationFor(editor.code, project.activeTabId, pos, pos);
+    if (!d.original.startsWith('note(')) return false;
+    editor.view.dispatch({ selection: { anchor: pos } });
+    contextMenu.open([{ label: 'Play MIDI', run: guard(playMidi) }, ...(project.clips.some(c => c.tabId === project.activeTabId) ? [{ label: 'Play MIDI without composition', run: guard(async () => { if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.'); midiComposition.close(); performancePanel.arm(); await performancePanel.prepare(); }) }] : [])], x, y, () => editor.view.contentDOM); return true;
+  } catch { return false; }
+}
+$('#editor').addEventListener('click', event => {
+  if (!(event.target as HTMLElement).closest('.cm-content')) return;
+  const pos = editor.view.posAtCoords({ x: event.clientX, y: event.clientY });
+  if (pos !== null) expressionActions(pos, event.clientX, event.clientY + 12);
+});
+$('#tracks').addEventListener('pointerdown', event => { const id = (event.target as HTMLElement).closest<HTMLElement>('[data-clip]')?.dataset.clip; if (id) selectedMidiClip = id; });
 let saveChain = Promise.resolve();
+let lastSaveError = '';
 let saveRevision = 0;
 function snapshot(): Project {
   return { ...project, sessionId: selectedProjectName || undefined, tabs: project.tabs.map(tab => { const e = editors.get(tab.id); return e ? { ...tab, code: e.code, anchors: e.anchors } : tab; }), name: $('#project-name').value.trim() || 'Untitled project' };
@@ -144,15 +298,17 @@ function persistSession() {
       : await api<Project>('projects', 'POST', state);
     selectedProjectName = saved.sessionId!;
     project.sessionId = selectedProjectName;
-    cacheDraft();
+    saveWorkspace(); cacheDraft();
     await api('recovery', 'PUT', saved);
     await refreshProjects();
     if (revision === saveRevision) {
       try { localStorage.removeItem(draftKey); } catch { /* unavailable storage */ }
-      $('#saved-state').textContent = 'Session saved';
+      $('#saved-state').textContent = 'Session saved'; $('#saved-state').title = ''; lastSaveError = '';
     }
   }).catch(error => {
-    $('#saved-state').textContent = 'Not saved · retry with Save project';
+    const message = error instanceof Error ? error.message : 'Request failed';
+    $('#saved-state').textContent = 'Not saved · press Save to retry'; $('#saved-state').title = message;
+    if (message !== lastSaveError) { lastSaveError = message; notice(`Couldn't save the session: ${message}`, true); }
     throw error;
   });
   saveChain = task;
@@ -187,16 +343,23 @@ function send(value: object) { if (socket?.readyState !== WebSocket.OPEN) throw 
 function connectProfiles() { if (socket?.readyState === WebSocket.OPEN) send({ type: 'connect', ports: project.profiles.filter((p) => p.enabled && !p.port.startsWith('studio:')).map((p) => p.port) }); }
 function renderTransport() {
   const playing = engine.started;
+  $('#composition-play').disabled = playing || engine.busy || !project.clips.length;
+  $('#composition-play').textContent = engine.busy ? 'Preparing…' : 'Play composition';
+  $('#composition-loop').disabled = playing || midiComposition.running || midiComposition.pending;
+  $('#composition-return').disabled = midiComposition.running || midiComposition.pending;
+  $('#composition-position').textContent = engine.timelinePosition.toFixed(2);
+  $('#composition-loop').setAttribute('aria-pressed', String(engine.transport.loop));
   const name = engine.target === 'composition' ? 'Composition' : project.tabs.find(t => t.id === engine.target)?.name ?? '';
   $('#transport-state').textContent = playing ? `Playing · ${name}${engine.pendingCycle !== undefined ? ' · changes queued' : ''}` : 'Stopped';
   $('#transport-state').classList.toggle('playing', playing);
-  $('#play').disabled = playing || engine.busy || ($('#play-target').value === 'composition' && !project.clips.length);
+  $('#play').disabled = !openTabs.has(project.activeTabId) || playing || engine.busy;
   $('#play').textContent = engine.busy ? 'Preparing…' : 'Play';
   $('#play-target').disabled = playing || engine.busy;
   $('#evaluate').hidden = !engine.hasChanges;
   $('#evaluate').disabled = engine.busy;
   $('#bpm').disabled = playing || engine.busy;
   $('#add-track').disabled = playing || engine.busy || project.tracks.length >= 16;
+  $('#arrangement-status').hidden = engine.pendingMuteCycle === undefined;
   $('#arrangement-status').textContent = engine.pendingMuteCycle !== undefined ? `Mix change at cycle ${engine.pendingMuteCycle}` : playing ? 'Stop playback to edit clips' : 'Edit while stopped · 4 beats per cycle';
 }
 
@@ -227,15 +390,46 @@ function renderRoute() {
   $('#route-status').textContent = simulation ? 'Browser controls are ready. No MIDI hardware needed.' : bridge.ready ? 'OS MIDI connected.' : 'OS MIDI unavailable. Use Browser controls or reconnect your device.';
   $('#route-status').classList.toggle('simulation', simulation);
 }
+function soundRepository(asset: Asset) {
+  try {
+    const url = new URL(asset.source?.url ?? '');
+    if (url.protocol !== 'https:' || !['github.com', 'raw.githubusercontent.com'].includes(url.hostname)) return '';
+    const [owner, repository] = url.pathname.split('/').filter(Boolean);
+    return owner && repository ? owner + '/' + repository.replace(/\.git$/, '') : '';
+  } catch { return ''; }
+}
 function renderAssets() {
-  $('#asset-count').textContent = `${assets.length} sound${assets.length === 1 ? '' : 's'}`;
-  const visibleAssets = assets.filter(a => [soundLabel(a), a.pack?.name, a.pack?.folder].join(' ').toLowerCase().includes($('#sound-search').value.toLowerCase()));
-  visibleAssets.sort((a, b) => (a.pack?.name || '').localeCompare(b.pack?.name || ''));
-  $('#assets').innerHTML = visibleAssets.length ? visibleAssets.map((a, index) => `${a.pack && visibleAssets[index - 1]?.pack?.id !== a.pack.id ? '<h3>' + escape(a.pack.name) + ' <button data-rename-pack="' + a.pack.id + '">Rename pack</button></h3>' : ''}<article data-asset="${a.id}" class="asset ${a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span class="sample-mark">${a.loop ? '∞' : '↗'}</span><span><strong>${escape(soundLabel(a))}</strong><small>${a.duration ? a.duration + 's' : 'Auto duration'} · ${a.loop ? 'Loop' : 'One-shot'}${a.provider === 'fixture' ? ' · Test fixture' : ''}${a.pack ? ' · ' + escape(a.pack.name) + ' / ' + escape(a.pack.folder) : ''}${a.missing ? ' · Missing audio: restore from backup or reimport the original file' : ''}</small></span></button>${a.missing ? `<button data-recover="${a.id}">Recover sound</button>` : ''}<button data-insert-existing="${a.id}">Insert</button><button data-rename-asset="${a.id}" aria-label="Rename ${escape(soundLabel(a))}">Rename</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}">▶</button></article>`).join('') : '<div class="empty"><div class="empty-wave">∿</div><h3>Your next sound starts here.</h3><p>Describe a sound above, audition the result, then put it on a pad or into your pattern.</p></div>';
+  $('.library-test').append($('#library-keys'));
+  const query = $('#sound-search').value.trim().toLowerCase(), source = $('#library-source').value;
+  const matches = (values: unknown[]) => query.split(/\s+/).every(term => values.join(' ').toLowerCase().includes(term));
+  const visibleAssets = assets.filter(a => source !== 'builtin' && (source === 'all' || a.provider === source || source === 'upload' && a.provider === 'github' || source === 'elevenlabs' && a.provider === 'fixture') && matches([soundLabel(a), a.description, a.prompt, ...(a.tags ?? []), a.pack?.name, a.pack?.folder, soundRepository(a)]));
+  const builtin = source === 'all' || source === 'builtin' ? engine.soundEntries.filter(e => !assets.some(a => soundKey(a) === e.name) && matches([e.name, e.label])) : [];
+  const total = assets.length + engine.soundEntries.filter(e => !assets.some(a => soundKey(a) === e.name)).length, shown = visibleAssets.length + builtin.length;
+  $('#asset-count').textContent = shown === total ? `${total} sound${total === 1 ? '' : 's'}` : `${shown} of ${total} sounds`;
+  $('#library-destination').textContent = libraryTarget ? `Replace “${libraryTarget.code.slice(libraryTarget.from, libraryTarget.to)}” · preview, then choose Swap` : 'Preview a sound, then insert it into your pattern.';
+  const use = libraryTarget ? 'Swap' : 'Insert';
+  $('#builtin-sounds').innerHTML = builtin.map(e => `<article class="asset ${selectedSound === e.name ? 'selected' : ''}"><button class="asset-select" data-select-sound="${escape(e.name)}"><span><strong>${escape(e.label)}</strong><small>Built-in · ${escape(e.name)}</small></span></button><button data-use-sound="${escape(e.name)}">${use}</button><button data-preview-sound="${escape(e.name)}" aria-label="Preview ${escape(e.label)}">▶</button><button data-live-sound="${escape(e.name)}" aria-pressed="${libraryMidi && selectedSound === e.name}" aria-label="Live ${escape(e.label)}" title="Play this sound from your MIDI controller or the test keys">Live</button></article>`).join('');
+  $('#assets').innerHTML = visibleAssets.map(a => `<article data-asset="${a.id}" class="asset ${selectedSound === soundKey(a) || a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span><strong>${escape(soundLabel(a))}</strong>${soundRepository(a) ? `<small class="sound-repository">GitHub · ${escape(soundRepository(a))}</small>` : ''}<small>${[escape(a.description || a.prompt), a.tags?.length ? escape(a.tags.join(', ')) : '', a.pack ? escape(a.pack.name) : '', a.missing ? 'Audio missing' : ''].filter(Boolean).join(' · ')}</small></span></button>${a.missing ? `<button data-recover="${a.id}">Recover sound</button>` : ''}<button data-insert-existing="${a.id}" ${a.missing ? 'disabled' : ''}>${use}</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}" ${a.missing ? 'disabled' : ''}>▶</button><button data-live-sound="${escape(soundKey(a))}" aria-pressed="${libraryMidi && selectedSound === soundKey(a)}" aria-label="Live ${escape(soundLabel(a))}" title="Play this sound from your MIDI controller or the test keys" ${a.missing ? 'disabled' : ''}>Live</button><details class="asset-options"><summary aria-label="Options for ${escape(soundLabel(a))}">•••</summary><div><button data-rename-asset="${a.id}">Rename</button><button data-metadata="${a.id}">Tags and description</button>${a.pack ? `<button data-rename-pack="${a.pack.id}">Rename pack</button>` : ''}</div></details></article>`).join('') || (builtin.length ? '' : '<p class="empty">No matching sounds. Try another search or add sounds.</p>');
   $('#assignment').hidden = !selectedAsset;
+  paintLibrarySelection();
   $('#assign-target').innerHTML = project.controls.filter((c) => c.kind === 'pad' || c.kind === 'key').map((c) => `<option value="pad:${c.id}">${escape(c.label)} · Note ${c.number}</option>`).join('') + project.slots.map((s) => `<option value="slot:${s.name}">Sound slot: ${escape(s.name)}</option>`).join('');
 }
 $('#sound-search').oninput = renderAssets;
+$('#library-source').onchange = renderAssets;
+$('#builtin-sounds').onclick = e => { const el = (e.target as HTMLElement).closest<HTMLElement>('button'); if (!el) return; if (el.dataset.previewSound) void guard(() => previewSound(el.dataset.previewSound!))(); else if (el.dataset.useSound) void guard(() => useSound(el.dataset.useSound!))(); else if (el.dataset.liveSound) void guard(() => toggleLive(el.dataset.liveSound!))(); else if (el.dataset.selectSound) { selectLibrarySound(el.dataset.selectSound); } };
+$('#assets').addEventListener('click', e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-metadata]')?.dataset.metadata; if (id) void guard(() => editMetadata(id))(); });
+async function editMetadata(id: string) {
+  const a = assetById(id), dialog = document.createElement('dialog');
+  dialog.innerHTML = '<form method="dialog"><h2>Sound details</h2><label>Description<textarea name="description" maxlength="1000"></textarea></label><label>Tags, separated by commas<input name="tags" maxlength="1000"></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="save" class="primary">Save</button></div><p role="status"></p></form>';
+  dialog.querySelector<HTMLTextAreaElement>('[name=description]')!.value = a.description ?? a.prompt;
+  dialog.querySelector<HTMLInputElement>('[name=tags]')!.value = (a.tags ?? []).join(', ');
+  dialog.querySelector('form')!.onsubmit = async event => { if ((event.submitter as HTMLButtonElement)?.value !== 'save') return; event.preventDefault(); try {
+    const updated = await api<Asset>(`samples/${id}`, 'PATCH', { description: dialog.querySelector<HTMLTextAreaElement>('[name=description]')!.value, tags: dialog.querySelector<HTMLInputElement>('[name=tags]')!.value.split(',').map(t => t.trim()).filter(Boolean) });
+    assets = assets.map(a => a.id === id ? updated : a); renderAssets(); dialog.close();
+  } catch (error) { dialog.querySelector('[role=status]')!.textContent = (error as Error).message; } };
+  dialog.onclose = () => dialog.remove(); document.body.append(dialog); dialog.showModal();
+}
+
 function soundSource(source: 'import' | 'generate') {
   $('#sound-import').hidden = source !== 'import'; $('#generate-form').hidden = source !== 'generate';
   $('#sound-import-tab').setAttribute('aria-selected', String(source === 'import')); $('#sound-generate-tab').setAttribute('aria-selected', String(source === 'generate'));
@@ -286,6 +480,8 @@ async function receive(event: MidiEvent) {
   eventRows = eventRows.slice(0, 30); $('#events').innerHTML = eventRows.join('');
   const profile = project.profiles.find((p) => p.port === event.source && p.enabled);
   if (!profile) return;
+  if (libraryMidi && !$('#sounds-panel').hidden) { if (midi.kind === 'note') await libraryNote(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on); return; }
+  if (midi.kind === 'note' && await midiComposition.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
   if (midi.kind === 'note' && await performancePanel.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
   if (learning && ((learning.kind === 'slider' && midi.kind === 'cc') || (learning.kind !== 'slider' && midi.on))) {
     bind(learning, profile.id, midi.channel, midi.kind, midi.number); return;
@@ -313,11 +509,12 @@ function openSocket() {
   socket.onopen = () => { $('#connection').textContent = 'Studio connected'; connectProfiles(); };
   socket.onmessage = ({ data }) => {
     const message = JSON.parse(data);
-    if (message.type === 'status') { if (bridge.connected.some(port => !message.connected.includes(port))) { performancePanel.globalStop(); void recordingPanel.stop(true); } bridge = message; pickup.reset(); renderProfiles(); }
+    if (message.type === 'status') { if (bridge.connected.some(port => !message.connected.includes(port))) { midiComposition.finish(); performancePanel.globalStop(); void recordingPanel.stop(true); } bridge = message; pickup.reset(); renderProfiles(); }
     if (message.type === 'midi') void receive(message).catch((err) => notice(err.message, true));
     if (message.type === 'error') notice(message.message, true);
+    if (message.type === 'library') void guard(async () => { assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); renderAssets(); renderSlots(); notice(`Library pack ready: ${message.pack} (${message.added} sounds)`); })();
   };
-  socket.onclose = () => { performancePanel.stop(); $('#connection').textContent = 'Reconnecting…'; pickup.reset(); setTimeout(openSocket, 1500); };
+  socket.onclose = () => { stopLibraryNotes(); midiComposition.finish(); performancePanel.stop(); $('#connection').textContent = 'Reconnecting…'; pickup.reset(); setTimeout(openSocket, 1500); };
 }
 function virtualSend(id: string, value: number, off = false) {
   const control = project.controls.find((c) => c.id === id)!;
@@ -325,7 +522,7 @@ function virtualSend(id: string, value: number, off = false) {
   send({ type: 'send', bytes: [kind | (control.channel - 1), control.number, value], simulate: $('#route').value === 'simulation' });
 }
 
-$('#play').onclick = guard(startPlayback);
+$('#play').onclick = guard(() => { $('#play-target').value = 'tab'; return startPlayback(); });
 $('#evaluate').onclick = guard(() => engine.apply());
 $('#stop').onclick = stopPlayback;
 $('#project-name').oninput = dirty;
@@ -365,12 +562,13 @@ async function renameSound(id: string) {
   await engine.registerAssets(assets); renderAssets(); renderSlots(); renderBindings();
 }
 $('#assets').onclick = (e) => { const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
-  if (button.dataset.recover) { setSounds(true); soundSource('import'); sampleImports.recover(button.dataset.recover); }
+  if (button.dataset.recover) { setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; sampleImports.recover(button.dataset.recover); }
   if (button.dataset.insertExisting) void guard(() => insertSound(button.dataset.insertExisting!))();
+  if (button.dataset.liveSound) void guard(() => toggleLive(button.dataset.liveSound!))();
   if (button.dataset.renamePack) void guard(async () => { const name = await askEdit('Rename pack', assets.find(a => a.pack?.id === button.dataset.renamePack)?.pack?.name); if (name) { assets = await api<Asset[]>(`packs/${button.dataset.renamePack}`, 'PATCH', { name }); renderAssets(); } })();
   if (button.dataset.renameAsset) void guard(() => renameSound(button.dataset.renameAsset!))();
-  if (button.dataset.selectAsset) { selectedAsset = button.dataset.selectAsset; renderAssets(); }
-  if (button.dataset.preview) void guard(() => engine.trigger(assetById(button.dataset.preview!)))();
+  if (button.dataset.selectAsset) { selectLibrarySound(soundKey(assetById(button.dataset.selectAsset))); }
+  if (button.dataset.preview) void guard(() => previewSound(soundKey(assetById(button.dataset.preview!))))();
 };
 $('#assign').onclick = guard(async () => {
   if (!selectedAsset) return;
@@ -461,7 +659,7 @@ $('#restore-backup').onclick = () => $('#backup-file').click();
 $('#backup-file').onchange = guard(async () => {
   const file = $('#backup-file').files?.[0]; if (!file) return;
   if (file.size > 260_000_000) throw new Error('Backup exceeds 256 MB.');
-  if (recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Resolve pending takes before restoring a backup.');
+  if (midiComposition.pending || recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Resolve pending takes before restoring a backup.');
   await transitionSession(async () => {
     await persistSession();
     const response = await fetch('/api/backups/restore', { method: 'POST', body: file });
@@ -471,10 +669,13 @@ $('#backup-file').onchange = guard(async () => {
     $('#backup-file').value = '';
   });
 });
-$('#save').onclick = guard(async () => { await persistSession(); notice(`Saved ${snapshot().name}.`); });
+const saveNow = guard(async () => { await persistSession(); notice(`Saved ${snapshot().name}.`); });
+$('#save').onclick = saveNow; $('#save-now').onclick = saveNow;
+document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!e.repeat) void saveNow(); } }, true);
 async function loadProject(next: Project) {
+  if (midiComposition.pending || midiComposition.running) throw new Error('Accept or discard the MIDI takes before switching sessions.');
   if (recordingPanel.pending) throw new Error('Save or discard the pending audio take before switching sessions.');
-  recordingPanel.discard(); performancePanel.close();
+  midiComposition.close(); recordingPanel.discard(); performancePanel.close();
   contextMenu.close(false);
   const validated = ProjectSchema.parse(next);
   // Preload before changing the running project. Missing assets are explicit, and
@@ -483,7 +684,7 @@ async function loadProject(next: Project) {
   for (const id of assetReferences(validated)) if (!assets.some(a => a.id === id)) assets.push({ id, label: `Missing sound ${id.slice(0, 8)}`, prompt: '', duration: null, loop: false, provider: 'upload', format: 'wav', createdAt: '', missing: true });
   releaseNotes(); engine.restore(validated);
   editors.forEach(e => e.view.destroy()); editors.clear(); $('#editor').replaceChildren();
-  project = validated; selectedProjectName = validated.sessionId || ''; editor = getEditor();
+  project = validated; selectedProjectName = validated.sessionId || ''; editor = getEditor(); midiComposition.resetRange(); restoreWorkspace();
   selectedSlider = undefined; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
   $('#project-name').value = project.name; $('#mapping-context').hidden = true; pickup.reset(); renderAll(); connectProfiles(); dirty();
 }
@@ -507,8 +708,8 @@ function settleSlots(stopped = !engine.started) {
   if (committed.length) { for (const { name, asset } of committed) { const slot = project.slots.find((s) => s.name === name); if (slot) slot.active = asset; } renderSlots(); dirty(); }
 }
 
-function startPlayback() { return engine.evaluate(true, $('#play-target').value === 'composition' ? 'composition' : project.activeTabId); }
-function stopPlayback() { document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
+function startPlayback() { return engine.evaluate(true, project.activeTabId); }
+function stopPlayback() { midiComposition.finish(); document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
 $('#play-target').onchange = renderTransport;
 $('#dark-mode').checked = document.documentElement.dataset.appearance === 'dark';
 $('#dark-mode').onchange = () => {
@@ -516,14 +717,43 @@ $('#dark-mode').onchange = () => {
   try { localStorage.setItem('studio.appearance', dark ? 'dark' : 'light'); } catch { /* unavailable storage */ }
   editors.forEach(instance => instance.setAppearance(dark));
 };
+function workspaceKey() { return `studio.workspace:${selectedProjectName || project.name}`; }
+function saveWorkspace() {
+  try { localStorage.setItem(workspaceKey(), JSON.stringify({ openTabs: [...openTabs], height: drawerHeight, view: drawerView ?? null, expanded: document.body.dataset.expanded || '' })); } catch { /* optional local preferences */ }
+}
+function restoreWorkspace() {
+  let saved: any = {}; try { saved = JSON.parse(localStorage.getItem(workspaceKey()) || '{}'); } catch { /* old preference */ }
+  openTabs = new Set(Array.isArray(saved.openTabs) ? saved.openTabs.filter((id: string) => project.tabs.some(t => t.id === id)) : project.tabs.map(t => t.id));
+  if (openTabs.size && !openTabs.has(project.activeTabId)) { project.activeTabId = [...openTabs][0]; editor = getEditor(); }
+  resizeDrawer(Number(saved.height) || Math.min(300, window.innerHeight * .38)); document.body.dataset.expanded = ['editor', 'composition'].includes(saved.expanded) ? saved.expanded : '';
+  if (!$('#sounds-panel').hidden) setSounds(false); setDrawer(saved.view === null ? undefined : saved.view === 'midi' || saved.view === 'export' ? saved.view : 'composition');
+  for (const name of ['editor', 'composition']) $(`#expand-${name}`).textContent = document.body.dataset.expanded === name ? 'Restore split' : 'Expand';
+}
+function renderPatterns() {
+  const query = $('#pattern-search').value.toLowerCase();
+  $('#pattern-list').innerHTML = project.tabs.filter(t => t.name.toLowerCase().includes(query)).map(t => `<button data-open-pattern="${t.id}"><span>${escape(t.name)}</span><small>${openTabs.has(t.id) ? 'Open' : 'Closed'}</small></button>`).join('') || '<p>No matching patterns</p>';
+}
 function renderTabs() {
-  $('#tabs').innerHTML = project.tabs.map(tab => `<button role="tab" id="tab-${tab.id}" aria-selected="${tab.id === project.activeTabId}" aria-controls="editor-${tab.id}" tabindex="${tab.id === project.activeTabId ? 0 : -1}" data-color="${tab.color}" data-tab="${tab.id}">${escape(tab.name)}</button>`).join('');
-  editors.forEach((instance, id) => { const root = instance.view.dom.parentElement!; root.hidden = id !== project.activeTabId; root.id = `editor-${id}`; root.setAttribute('role', 'tabpanel'); root.setAttribute('aria-labelledby', `tab-${id}`); });
+  const visible = project.tabs.filter(t => openTabs.has(t.id));
+  $('#tabs').innerHTML = visible.map(tab => `<span class="pattern-tab"><button role="tab" id="tab-${tab.id}" aria-selected="${tab.id === project.activeTabId}" aria-controls="editor-${tab.id}" tabindex="${tab.id === project.activeTabId ? 0 : -1}" data-color="${tab.color}" data-tab="${tab.id}">${escape(tab.name)}</button><button class="tab-close" data-close-tab="${tab.id}" aria-label="Close ${escape(tab.name)}">×</button></span>`).join('');
+  editors.forEach((instance, id) => { const root = instance.view.dom.parentElement!; root.hidden = id !== project.activeTabId || !openTabs.has(id); root.id = `editor-${id}`; root.setAttribute('role', 'tabpanel'); root.setAttribute('aria-labelledby', `tab-${id}`); });
+  $('#editor').hidden = !visible.length; $('#empty-editor').hidden = !!visible.length; $('#tab-menu').hidden = !visible.length;
+  performButton.disabled = !visible.length; $('#play').disabled = !visible.length || engine.busy || engine.started;
+  renderPatterns();
+}
+$('#pattern-search').oninput = renderPatterns;
+$('#pattern-list').onclick = e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-open-pattern]')?.dataset.openPattern; if (id) { switchTab(id); (patternMenu as HTMLDetailsElement).open = false; editor.view.focus(); } };
+$('#open-patterns').onclick = () => { (patternMenu as HTMLDetailsElement).open = true; $('#pattern-search').focus(); };
+function closeTab(id: string) {
+  openTabs.delete(id);
+  if (project.activeTabId === id && openTabs.size) switchTab([...openTabs][0]);
+  renderTabs(); saveWorkspace(); renderTransport();
+  if (!openTabs.size) $('#open-patterns').focus();
 }
 function switchTab(id: string) {
-  project.activeTabId = id; editor = getEditor(id); selectedSlider = undefined;
+  openTabs.add(id); project.activeTabId = id; editor = getEditor(id); selectedSlider = undefined;
   $('#mapping-context').hidden = true; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
-  renderTabs(); renderSliders(); renderBindings(); dirty(); editor.view.requestMeasure();
+  renderTabs(); renderSliders(); renderBindings(); dirty(); saveWorkspace(); editor.view.requestMeasure();
 }
 function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start a new pattern\n$: note("c3 e3 g3").s("triangle").gain(0.2)\n') {
   if (project.tabs.length >= 50) throw new Error('A project can contain up to 50 patterns.');
@@ -532,12 +762,12 @@ function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start
 }
 $('#new-tab').onclick = guard(() => createTab());
 $('#tab-menu').addEventListener('click', event => { if ((event.target as HTMLElement).closest('button')) ($('#tab-menu') as unknown as HTMLDetailsElement).open = false; });
-$('#tabs').onclick = e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) switchTab(id); };
+$('#tabs').onclick = e => { const close = (e.target as HTMLElement).closest<HTMLElement>('[data-close-tab]')?.dataset.closeTab; if (close) { closeTab(close); return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) switchTab(id); };
 $('#tabs').onkeydown = e => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-  e.preventDefault(); const index = project.tabs.findIndex(t => t.id === project.activeTabId);
-  const next = e.key === 'Home' ? 0 : e.key === 'End' ? project.tabs.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + project.tabs.length) % project.tabs.length;
-  switchTab(project.tabs[next].id); $(`#tab-${project.activeTabId}`).focus();
+  e.preventDefault(); const tabs = project.tabs.filter(t => openTabs.has(t.id)); const index = tabs.findIndex(t => t.id === project.activeTabId);
+  const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
+  switchTab(tabs[next].id); $(`#tab-${project.activeTabId}`).focus();
 };
 $('#edit-dialog button[value="cancel"]').onclick = () => {
   ($('#edit-dialog') as unknown as HTMLDialogElement).close('cancel');
@@ -554,21 +784,23 @@ async function renameTab(id: string) {
 }
 $('#rename-tab').onclick = guard(() => renameTab(project.activeTabId));
 $('#duplicate-tab').onclick = guard(() => duplicateTab(project.activeTabId));
-async function closeTab(id: string) {
+async function deleteTab(id: string) {
+  if (midiComposition.destination?.tabId === id) { if (midiComposition.pending || midiComposition.running) throw new Error('Resolve MIDI takes before closing their source tab.'); midiComposition.close(); }
   if (performancePanel.take?.destination.tabId === id) { if (performancePanel.take.notes.length || recordingPanel.pending) throw new Error('Resolve the pending take before closing its destination tab.'); performancePanel.close(); }
   if (engine.busy) throw new Error('Wait for playback preparation to finish.');
   if (project.tabs.length === 1) throw new Error('Keep at least one pattern in the project.');
   const tab = project.tabs.find(t => t.id === id)!;
   const clips = project.clips.filter(c => c.tabId === id).length;
   const mappings = project.bindings.filter(b => b.target.kind === 'slider' && b.target.tabId === id).length;
-  if (!await askEdit(`Close ${tab.name}?`, undefined, `This removes its code, ${clips} composition clip(s), and ${mappings} slider mapping(s) from this project.`)) return;
+  if (!await askEdit(`Delete ${tab.name}?`, undefined, `This removes its code, ${clips} composition clip(s), and ${mappings} slider mapping(s) from this project.`)) return;
   if (engine.started) stopPlayback();
   editors.get(id)?.view.dom.parentElement?.remove(); editors.get(id)?.view.destroy(); editors.delete(id);
   project.tabs = project.tabs.filter(t => t.id !== id); project.clips = project.clips.filter(c => c.tabId !== id);
   project.bindings = project.bindings.filter(b => b.target.kind !== 'slider' || b.target.tabId !== id);
   switchTab(project.activeTabId === id ? project.tabs[0].id : project.activeTabId); renderComposition();
 }
-$('#close-tab').onclick = guard(() => closeTab(project.activeTabId));
+$('#close-tab').onclick = () => closeTab(project.activeTabId);
+$('#delete-tab').onclick = guard(() => deleteTab(project.activeTabId));
 function duplicateTab(id: string) {
   const tab = project.tabs.find(t => t.id === id)!;
   let name = '', index = 1;
@@ -595,56 +827,123 @@ async function addSession() {
 }
 $('#add-session').onclick = guard(addSession);
 $('#new-project').onclick = guard(addSession);
-async function insertSound(id: string) {
-  const targetEditor = editor;
-  const asset = assetById(id); await engine.preload(asset);
-  if (!project.assetIds.includes(id)) project.assetIds.push(id);
-  const change = sampleInsertion(targetEditor.code, targetEditor.view.state.selection.main.head, asset, project.bpm);
-  targetEditor.view.dispatch({ changes: change, userEvent: 'input.sample', annotations: isolateHistory.of('full') });
-  setSounds(false); editor.view.focus(); notice(engine.started ? 'Sound inserted. Apply changes to hear it.' : 'Sound inserted. Press Play to hear it.');
-}
+async function insertSound(id: string) { const asset = assetById(id); await useSound(soundKey(asset), asset); }
 $('#insert-sound').onclick = guard(() => selectedAsset ? insertSound(selectedAsset) : undefined);
 function setSounds(open: boolean) {
-  $('#sounds-panel').hidden = !open; $('#sounds-toggle').setAttribute('aria-expanded', String(open));
+  const wasOpen = !$('#sounds-panel').hidden;
+  if (open && !wasOpen) libraryReturn = document.activeElement as HTMLElement;
+  $('#sounds-panel').hidden = !open; libraryBackdrop.hidden = !open;
+  $('#sounds-toggle').setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('sounds-open', open);
-  if (open) { $('#mapping-context').hidden = true; ($('#generate-form').hidden ? $('#sound-import-tab') : $('#prompt')).focus(); } else $('#sounds-toggle').focus();
+  for (const selector of ['.topbar', '.workspace', '.drawer-bar', '#drawer']) $(selector).inert = open;
+  if (open) {
+    document.querySelectorAll<HTMLDetailsElement>('.topbar details[open]').forEach(el => el.open = false);
+    $('#mapping-context').hidden = true;
+    if (!selectedSound) selectedSound = engine.soundEntries.find(s => s.name === 'triangle')?.name;
+    renderAssets(); $('#sound-search').focus();
+  } else {
+    libraryMidi = false; stopLibraryNotes(); previewEpoch++;
+    if (previewKey) engine.performanceAudio.release(previewKey);
+    paintLibrarySelection(); libraryTarget = undefined;
+    if (wasOpen) libraryReturn?.focus();
+  }
 }
-$('#sounds-toggle').onclick = () => setSounds(!!$('#sounds-panel').hidden);
+$('#sounds-toggle').onclick = () => { libraryTarget = undefined; $('#sound-search').value = ''; $('#library-source').value = 'all'; setSounds(true); };
 $('#sounds-close').onclick = () => setSounds(false);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { setSounds(false); $('#mapping-context').hidden = true; } });
+$('#sounds-panel').addEventListener('keydown', e => {
+  if (e.key !== 'Tab') return;
+  const items = Array.from($('#sounds-panel').querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), summary, a[href]')).filter(el => el.getClientRects().length > 0);
+  const first = items[0], last = items[items.length - 1];
+  if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#sounds-panel').hidden && !document.querySelector('dialog[open]')) setSounds(false); $('#mapping-context').hidden = true; } });
 const openExport = setupExport($('#export-content'), snapshot, () => assets);
-let drawerView: 'composition' | 'midi' | 'export' | undefined;
+type DrawerView = 'composition' | 'midi' | 'export';
+let drawerView: DrawerView | undefined;
 let drawerHeight = 300;
-function setDrawer(view?: 'composition' | 'midi' | 'export') {
+function setDrawer(view?: DrawerView) {
   drawerView = view; $('#drawer').hidden = !view;
   $('#composition-content').hidden = view !== 'composition'; $('#midi-content').hidden = view !== 'midi'; $('#export-content').hidden = view !== 'export';
+  $('#expand-editor').hidden = !view && document.body.dataset.expanded !== 'editor';
   if (view === 'export') openExport();
   document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.setAttribute('aria-expanded', String(b.dataset.drawer === view)));
   document.body.classList.toggle('tools-open', !!view);
-  try { localStorage.setItem('studio.drawer', JSON.stringify({ view, height: drawerHeight })); } catch { /* unavailable storage */ }
+  saveWorkspace();
   editor.view.requestMeasure();
 }
 function resizeDrawer(height: number) {
   drawerHeight = Math.min(600, Math.max(180, height));
   $('#drawer').style.height = `${drawerHeight}px`; $('#drawer').style.setProperty('--drawer-height', `${drawerHeight}px`); $('#drawer-resize').setAttribute('aria-valuenow', String(drawerHeight));
 }
-try { const saved = JSON.parse(localStorage.getItem('studio.drawer') || '{}'); resizeDrawer(Number(saved.height) || 300); if (['composition', 'midi', 'export'].includes(saved.view)) setDrawer(saved.view); } catch { /* default collapsed */ }
-document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.onclick = () => setDrawer(drawerView === b.dataset.drawer ? undefined : b.dataset.drawer as 'composition' | 'midi' | 'export'));
+document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.onclick = () => {
+  if (!$('#sounds-panel').hidden) setSounds(false);
+  setDrawer(drawerView === b.dataset.drawer ? undefined : b.dataset.drawer as DrawerView);
+});
 $('#drawer-resize').onpointerdown = e => {
   const start = e.clientY, height = drawerHeight, handle = e.currentTarget as HTMLElement; handle.setPointerCapture(e.pointerId);
   handle.onpointermove = event => resizeDrawer(height + start - event.clientY);
   handle.onpointerup = handle.onpointercancel = () => { handle.onpointermove = null; setDrawer(drawerView); };
 };
 $('#drawer-resize').onkeydown = e => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); resizeDrawer(drawerHeight + (e.key === 'ArrowUp' ? 20 : -20)); setDrawer(drawerView); } };
+$('#composition-play').onclick = guard(() => { $('#play-target').value = 'composition'; return engine.playComposition(); });
+$('#composition-stop').onclick = stopPlayback;
+$('#composition-loop').onclick = () => { engine.transport.loop = !engine.transport.loop; renderTransport(); };
+$('#composition-return').onclick = guard(() => engine.seek(midiComposition.loopRange.begin));
+function setExpanded(pane: string, on: boolean) {
+  document.body.dataset.expanded = on ? pane : '';
+  for (const name of ['editor', 'composition']) $(`#expand-${name}`).textContent = document.body.dataset.expanded === name ? 'Restore split' : 'Expand';
+  $('#expand-editor').hidden = !drawerView && document.body.dataset.expanded !== 'editor';
+  saveWorkspace(); editor.view.requestMeasure();
+}
+for (const pane of ['editor', 'composition']) $(`#expand-${pane}`).onclick = () => {
+  const on = document.body.dataset.expanded !== pane;
+  if (pane === 'composition') { if (!$('#sounds-panel').hidden) setSounds(false); setDrawer('composition'); }
+  setExpanded(pane, on);
+};
+let timelineDragging = false;
+function changeRange(edge: string, value: number) {
+  if (engine.started || midiComposition.running || midiComposition.pending) throw new Error('Stop playback and resolve the take before changing its range.');
+  const range = midiComposition.loopRange, maximum = engine.arrangementLength || 4;
+  const snapped = Math.round(value / project.snap) * project.snap;
+  if (edge === 'begin') range.begin = Math.max(0, Math.min(range.end - .25, snapped)); else range.end = Math.min(maximum, Math.max(range.begin + .25, snapped));
+  midiComposition.setRange(range.begin, range.end); renderComposition();
+}
+$('#ruler').onpointerdown = event => {
+  const element = event.target as HTMLElement; if (element.closest('.track-corner')) return;
+  if (midiComposition.running || midiComposition.pending || engine.busy) { notice('Finish and resolve the MIDI take before seeking.', true); return; }
+  const edge = element.dataset.rangeEdge;
+  if (edge && engine.started) { notice('Stop playback to change the loop range.', true); return; }
+  event.preventDefault(); timelineDragging = true;
+  const ruler = $('#ruler'); ruler.setPointerCapture(event.pointerId);
+  let value = engine.timelinePosition;
+  const update = (e: PointerEvent) => { value = Math.min(engine.arrangementLength || 4, Math.max(0, (e.clientX - ruler.getBoundingClientRect().left - 180) / 64)); if (edge) { const handle = ruler.querySelector<HTMLElement>(`[data-range-edge="${edge}"]`); if (handle) handle.style.left = `${180 + value * 64}px`; } else { $('#seek-handle').style.left = `${180 + value * 64}px`; } };
+  update(event); ruler.onpointermove = update;
+  ruler.onpointerup = () => { timelineDragging = false; ruler.onpointermove = null; ruler.onpointerup = null; void guard(async () => { if (edge) changeRange(edge, value); else await engine.seek(value); renderComposition(); })(); };
+  ruler.onpointercancel = () => { timelineDragging = false; ruler.onpointermove = null; renderComposition(); };
+};
+$('#ruler').onkeydown = event => {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
+  const el = event.target as HTMLElement; if (!el.matches('[role=slider]')) return;
+  event.preventDefault(); if (midiComposition.running || midiComposition.pending) { notice('Keep or discard the current take first.', true); return; }
+  const edge = el.dataset.rangeEdge, range = midiComposition.loopRange;
+  const current = edge ? range[edge as 'begin' | 'end'] : engine.timelinePosition;
+  const value = event.key === 'Home' ? 0 : event.key === 'End' ? engine.arrangementLength : current + (event.key === 'ArrowRight' ? project.snap : -project.snap);
+  void guard(async () => { if (edge) changeRange(edge, value); else await engine.seek(value); renderComposition(); document.querySelector<HTMLElement>(edge ? `[data-range-edge="${edge}"]` : '#seek-handle')?.focus(); })();
+};
+midiComposition.range.addEventListener('input', () => renderComposition());
+midiComposition.range.addEventListener('click', e => { if ((e.target as HTMLElement).hasAttribute('data-midi-full')) renderComposition(); });
 function editArrangement() { if (engine.started || engine.busy) throw new Error('Stop playback to edit the composition.'); }
 let selectedTrack: string | undefined;
 function renderComposition() {
+  midiComposition.refreshRange();
   if (!project.tracks.some(t => t.id === selectedTrack)) selectedTrack = project.tracks[0].id;
   const length = Math.ceil(Math.max(16, ...project.clips.map(c => c.start + c.length + 4)));
+  const range = midiComposition.loopRange; engine.transport.begin = range.begin; engine.transport.end = range.end;
   $('#bpm').value = String(project.bpm); $('#snap').value = String(project.snap);
   $('#sequencer').style.width = `${length * 64 + 180}px`;
   $('#sequencer').style.setProperty('--grid', `${project.snap * 64}px`);
-  $('#ruler').innerHTML = '<span class="track-corner">Tracks</span>' + Array.from({ length }, (_, i) => `<span>${i}</span>`).join('');
+  $('#ruler').innerHTML = '<span class="track-corner">Tracks</span>' + Array.from({ length }, (_, i) => `<span>${i}</span>`).join('') + `<div id="timeline-range" style="left:${180 + range.begin * 64}px;width:${(range.end - range.begin) * 64}px"></div><button class="range-handle" data-range-edge="begin" role="slider" aria-label="Range start" aria-valuemin="0" aria-valuemax="${range.end - .25}" aria-valuenow="${range.begin}" style="left:${180 + range.begin * 64}px"></button><button class="range-handle" data-range-edge="end" role="slider" aria-label="Range end" aria-valuemin="${range.begin + .25}" aria-valuemax="${engine.arrangementLength || 4}" aria-valuenow="${range.end}" style="left:${180 + range.end * 64}px"></button><button id="seek-handle" role="slider" aria-label="Playhead" aria-valuemin="0" aria-valuemax="${engine.arrangementLength}" aria-valuenow="${engine.timelinePosition}" style="left:${180 + engine.timelinePosition * 64}px">▼</button>`;
   $('#clip-lane').innerHTML = project.tracks.map(t => `<option value="${t.id}">${escape(t.name)}</option>`).join('');
   $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
     const tab = project.tabs.find(t => t.id === c.tabId)!;
@@ -719,7 +1018,11 @@ $('#bpm').onchange = guard(() => { editArrangement(); const bpm = Number($('#bpm
 installCompositionGestures({ reveal: () => setDrawer('composition'), project: () => project, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
 
 const contextMenu = new ContextMenu();
-function showContextMenu(target: HTMLElement, x: number, y: number) {
+function showContextMenu(target: HTMLElement, x: number, y: number, keyboard = false) {
+  if (target.closest('.cm-content')) {
+    const pos = keyboard ? editor.view.state.selection.main.from : editor.view.posAtCoords({ x, y });
+    return pos !== null && expressionActions(pos, x, y);
+  }
   const item = target.closest<HTMLElement>('[data-tab], [data-clip], [data-asset]');
   if (!item) return false;
   const stopped = engine.started || engine.busy ? 'Stop playback to edit the composition.' : undefined;
@@ -732,7 +1035,8 @@ function showContextMenu(target: HTMLElement, x: number, y: number) {
       action('Rename', () => renameTab(id)),
       action('Duplicate', () => duplicateTab(id), project.tabs.length >= 50 ? 'Pattern limit reached (50).' : undefined),
       action('Add to composition', () => addToComposition(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : undefined)),
-      action('Close', () => closeTab(id), project.tabs.length === 1 ? 'Keep at least one pattern.' : engine.busy ? 'Wait for playback preparation.' : undefined),
+      action('Close', () => closeTab(id)),
+      action('Delete…', () => deleteTab(id), project.tabs.length === 1 ? 'Keep at least one pattern.' : stopped),
     ];
   } else if (item.dataset.clip) {
     const id = item.dataset.clip, clip = project.clips.find(c => c.id === id)!;
@@ -746,7 +1050,7 @@ function showContextMenu(target: HTMLElement, x: number, y: number) {
     ];
   } else {
     const id = item.dataset.asset!; selector = `[data-select-asset="${id}"]`;
-    actions = [action('Preview', () => engine.trigger(assetById(id))), action('Insert into pattern', () => insertSound(id)), action('Rename', () => renameSound(id))];
+    actions = [action('Preview', () => previewSound(soundKey(assetById(id)))), action('Insert into pattern', () => insertSound(id)), action('Rename', () => renameSound(id))];
   }
   contextMenu.open(actions, x, y, () => document.querySelector<HTMLElement>(selector) ?? document.querySelector<HTMLElement>('[role=tab][aria-selected=true]'));
   return true;
@@ -758,26 +1062,28 @@ document.addEventListener('contextmenu', event => {
 document.addEventListener('keydown', event => {
   if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
   const target = event.target as HTMLElement, rect = target.getBoundingClientRect();
-  if (showContextMenu(target, rect.left, rect.bottom)) { event.preventDefault(); event.stopPropagation(); }
+  if (showContextMenu(target, rect.left, rect.bottom, true)) { event.preventDefault(); event.stopPropagation(); }
 });
 
 async function boot() {
   await engine.setup(project);
   const [status, library, recovery] = await Promise.all([
-    api<{ bridge: BridgeStatus; generation: { configured: boolean; fixture: boolean } }>('status'), api<Asset[]>('samples'), api<Project | null>('recovery'),
+    api<{ bridge: BridgeStatus; generation: { configured: boolean; fixture: boolean }; format?: number }>('status'), api<Asset[]>('samples'), api<Project | null>('recovery'),
   ]);
   bridge = status.bridge; assets = library; await engine.registerAssets(assets);
+  if (status.format !== newProject().version) notice(`The Studio server is running older code (project format ${status.format ?? 'unknown'}; this page expects ${newProject().version}). Restart npm run dev, then reload.`, true);
   $('#generation-status').textContent = status.generation.fixture ? 'Test fixture mode. No ElevenLabs credits are used.' : status.generation.configured ? 'ElevenLabs connected · generated locally into your library' : 'Add ELEVENLABS_API_KEY to .env, then restart to generate.';
   $('#generate').disabled = !status.generation.configured && !status.generation.fixture;
   let restored = recovery;
   let hasDraft = false;
   try { const cached = localStorage.getItem(draftKey); if (cached) { restored = ProjectSchema.parse(JSON.parse(cached)); hasDraft = true; } } catch { /* Ignore invalid local drafts. */ }
   if (restored) { try { await loadProject(restored); $('#saved-state').textContent = 'Recovery restored'; } catch (error) { notice(`Recovery could not load: ${(error as Error).message}`, true); } }
-  renderAll(); await refreshProjects(); openSocket(); booted = true;
-  try { performancePanel.restore(getEditor); await recordingPanel.restore(); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
+  restoreWorkspace(); renderAll(); await refreshProjects(); openSocket(); booted = true;
+  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); await recordingPanel.restore(); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
+  renderComposition();
   if (hasDraft) dirty();
   setInterval(() => {
-    engine.tick(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = !engine.started || engine.target !== 'composition'; $('#playhead').style.left = `${180 + engine.cycle * 64}px`;
+    engine.tick(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = false; $('#playhead').style.left = `${180 + engine.timelinePosition * 64}px`; const head = document.querySelector<HTMLElement>('#seek-handle'); if (head && !timelineDragging) { head.style.left = `${180 + engine.timelinePosition * 64}px`; head.setAttribute('aria-valuenow', String(engine.timelinePosition)); }
     if (engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }
     if (++frame % 10 === 0 && socket?.readyState === WebSocket.OPEN) send({ type: 'snapshot', diagnostics: engine.diagnostics, sliders: editor.sliders.map((s) => ({ id: s.id, label: s.label, value: s.value })), slots: project.slots });
   }, 100);

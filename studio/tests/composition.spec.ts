@@ -14,7 +14,7 @@ test('tab colors, track controls, clip mute and quarter-cycle keyboard edits per
   await page.getByRole('button', { name: 'rose', exact: true }).click();
   await expect(page.getByRole('tab', { name: 'Pattern 1', exact: true })).toHaveAttribute('data-color', 'rose');
   await expect(page.getByRole('tab', { name: 'Pattern 2', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
   await expect(page.locator('[data-clip=a]')).toHaveAttribute('data-color', 'rose');
   await page.locator('#snap').selectOption('.25'.replace(/^\./, '0.'));
   await page.locator('[data-clip=a]').focus(); await page.keyboard.press('ArrowRight');
@@ -32,7 +32,7 @@ test('tab colors, track controls, clip mute and quarter-cycle keyboard edits per
 });
 
 test('pointer dragging preserves grab offset, previews placement and cancels on Escape', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected'); if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
   const clip = page.locator('[data-clip=a]'); const box = (await clip.boundingBox())!;
   await page.mouse.move(box.x + 100, box.y + 20); await page.mouse.down(); await page.mouse.move(box.x + 164, box.y + 20, { steps: 5 });
   await expect(page.locator('.drag-ghost')).toBeVisible(); await page.waitForTimeout(80); await page.mouse.up();
@@ -43,12 +43,12 @@ test('pointer dragging preserves grab offset, previews placement and cancels on 
 });
 
 test('live mutes use a separate safe-boundary timeline from code updates', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: 'Composition', exact: true }).click();
-  await page.locator('#play-target').selectOption('composition'); await page.locator('#play').click();
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected'); if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  await page.locator('#composition-play').click();
   await expect(page.locator('#transport-state')).toContainText('Playing');
-  await page.locator('.tab-editor:not([hidden]) .cm-content').click(); await page.keyboard.press('Control+a'); await page.keyboard.insertText('$: note("e4").s("triangle")');
+  await page.locator('.tab-editor:not([hidden]) .cm-content').focus(); await page.keyboard.press('Control+a'); await page.keyboard.insertText('$: note("e4").s("triangle")');
   await page.getByRole('button', { name: 'Mute Track 1', exact: true }).click();
-  await expect(page.locator('#arrangement-status')).toContainText('Mix change at cycle');
+  await expect(page.locator('#arrangement-status')).toContainText('Mix change at cycle'); await expect(page.locator('#arrangement-status')).toBeVisible();
   await expect(page.locator('#evaluate')).toBeVisible();
   await page.getByRole('button', { name: 'Unmute Track 1', exact: true }).click();
   await page.locator('#evaluate').click(); await page.locator('#stop').click();
@@ -69,7 +69,7 @@ test('live mutes use a separate safe-boundary timeline from code updates', async
 });
 
 test('tracks enforce the limit and confirm populated removal while preserving the final track', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected'); if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
   await page.getByRole('button', { name: 'Actions for Track 1' }).click(); await page.getByRole('menuitem', { name: 'Remove', exact: true }).click();
   await expect(page.locator('#edit-description')).toContainText('removes all clips'); await page.keyboard.press('Escape');
   await expect(page.locator('[data-clip=a]')).toBeVisible();
@@ -86,7 +86,7 @@ test('resizing snaps to quarter cycles and rejects overlap; dragging tabs create
     { id: 'a', tabId: 'pattern-1', trackId: 'track-1', start: 0, length: 1, muted: false },
     { id: 'b', tabId: 'pattern-1', trackId: 'track-1', start: 2, length: 1, muted: false },
   ]; await request.put('/api/recovery', { data: p });
-  await page.goto('/'); await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected'); if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
   const handle = page.locator('[data-resize=a]'), rect = (await handle.boundingBox())!;
   await page.mouse.move(rect.x + 5, rect.y + 20); await page.mouse.down(); await page.mouse.move(rect.x + 21, rect.y + 20, { steps: 4 }); await page.mouse.up();
   await expect(page.locator('[data-clip=a]')).toHaveCSS('width', '80px');
@@ -100,7 +100,7 @@ test('resizing snaps to quarter cycles and rejects overlap; dragging tabs create
 });
 
 test('opaque track headers mask the scrolled timeline at the left edge in both themes', async ({ page }) => {
-  await page.goto('/'); await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected'); if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
   for (const width of [1440, 700]) {
     await page.setViewportSize({ width, height: 1000 });
     for (const dark of [false, true]) {
@@ -120,9 +120,9 @@ test('opaque track headers mask the scrolled timeline at the left edge in both t
 });
 
 test('solo switches tracks live, restores mute settings, and persists across reload', async ({ page, request }) => {
-  await page.goto('/'); await page.getByRole('button', { name: 'Composition', exact: true }).click();
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected'); if (await page.locator('#composition-content').isHidden()) await page.getByRole('button', { name: 'Composition', exact: true }).click();
   await page.getByRole('button', { name: 'Mute Track 1', exact: true }).click();
-  await page.locator('#play-target').selectOption('composition'); await page.locator('#play').click();
+  await page.locator('#composition-play').click();
   await page.getByRole('button', { name: 'Solo Track 1', exact: true }).click();
   await expect(page.locator('[data-clip=a]')).toHaveAttribute('data-muted', 'true');
   await expect(page.getByRole('button', { name: 'Unmute Track 1', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -135,7 +135,7 @@ test('solo switches tracks live, restores mute settings, and persists across rel
   await expect(page.locator('[data-clip=a]')).toHaveAttribute('data-muted', 'false');
   await page.getByRole('button', { name: 'Mute Track 1', exact: true }).click();
   await expect(page.locator('[data-clip=a]')).toHaveAttribute('data-muted', 'true');
-  await expect(page.locator('#arrangement-status')).toContainText('Mix change at cycle');
+  await expect(page.locator('#arrangement-status')).toContainText('Mix change at cycle'); await expect(page.locator('#arrangement-status')).toBeVisible();
   await page.getByRole('button', { name: 'Solo Track 2', exact: true }).click();
   await expect(page.locator('[data-clip=a]')).toHaveAttribute('data-muted', 'true');
   await expect(page.getByRole('button', { name: 'Solo Track 1', exact: true })).toHaveAttribute('aria-pressed', 'false');
@@ -176,7 +176,7 @@ test('solo gates scheduled pattern queries at the safe boundary without rewritin
 
 test('tab drag reveals Composition and identifies the source before reaching a track', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await expect(page.locator('#composition-content')).not.toBeVisible();
+  await page.getByRole('button', { name: 'Composition', exact: true }).click(); await expect(page.locator('#composition-content')).not.toBeVisible();
   const tab = (await page.getByRole('tab').boundingBox())!;
   await page.mouse.move(tab.x + 20, tab.y + 15); await page.mouse.down();
   await page.mouse.move(tab.x + 40, tab.y + 90, { steps: 5 });

@@ -9,18 +9,19 @@ export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes
     if (clip.tabId === excluded()) return [];
     const begin = Math.max(Number(state.span.begin), clip.start);
     const end = Math.min(Number(state.span.end), clip.start + clip.length);
-    const pattern = patterns.get(clip.tabId);
+    const pattern = patterns.get(clip.id) ?? patterns.get(clip.tabId);
+    const sourceOffset = clip.sourceOffset ?? 0;
     if (begin >= end || !pattern) return [];
     const offset = state.controls?.studioLoopOffset ?? 0;
-    return (mutes ? mutes.segments(clip.id, begin + offset, end + offset).map(([a, b]) => [a - offset, b - offset]) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(new core.TimeSpan(a - clip.start, b - clip.start)).setControls({ studioCycleOffset: clip.start + offset }))
+    return (mutes ? mutes.segments(clip.id, begin + offset, end + offset).map(([a, b]) => [a - offset, b - offset]) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(new core.TimeSpan(a - clip.start + sourceOffset, b - clip.start + sourceOffset)).setControls({ studioCycleOffset: clip.start + offset - sourceOffset }))
       .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(
-        Math.max(clip.start, Number(span.begin) + clip.start),
-        Math.min(clip.start + clip.length, Number(span.end) + clip.start),
+        Math.max(clip.start, Number(span.begin) + clip.start - sourceOffset),
+        Math.min(clip.start + clip.length, Number(span.end) + clip.start - sourceOffset),
       )).withValue((value: any) => {
         // Per-pattern cps must not take over the composition clock.
         if (!value || typeof value !== 'object') return value;
         const { cps: _cps, ...rest } = value;
-        return rest;
+        return { ...rest, studioClipId: clip.id };
       })));
   }));
 }
@@ -82,4 +83,22 @@ export class MuteTimeline {
     });
   }
   settle(cycle: number) { while (this.versions.length > 1 && this.versions[1].cycle <= cycle) this.versions.shift(); }
+}
+
+/** Map scheduler time to timeline time while keeping mute scheduling on its own clock. */
+export function transportPattern(pattern: Pattern, position: number, begin: number, end: number, looping: boolean): Pattern {
+  if (![position, begin, end].every(Number.isFinite) || begin < 0 || end <= begin || position < 0) throw new Error('Invalid timeline range.');
+  return new core.Pattern((state: any) => {
+    const a = Number(state.span.begin), b = Number(state.span.end), result: any[] = [];
+    for (let cursor = a; cursor < b;) {
+      const absolute = position + cursor;
+      const at = looping ? begin + ((absolute - begin) % (end - begin) + end - begin) % (end - begin) : absolute;
+      if (!looping && at >= end) break;
+      const right = Math.min(b, cursor + end - at), offset = cursor - at;
+      result.push(...pattern.query(state.setSpan(new core.TimeSpan(at, at + right - cursor)).setControls({ studioLoopOffset: offset }))
+        .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(Number(span.begin) + offset, Number(span.end) + offset))));
+      cursor = right;
+    }
+    return result;
+  });
 }

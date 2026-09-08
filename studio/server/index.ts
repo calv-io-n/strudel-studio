@@ -1,6 +1,7 @@
 import { backupProject, restoreBackup } from './backup';
 import { discoverGitHub, downloadGitHub } from './github';
 import { importSample } from './imports';
+import { parseLibraries, syncLibraries } from './libraries';
 import { saveRecording } from './recordings';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFile } from 'node:fs/promises';
@@ -9,7 +10,7 @@ import path from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer as createViteServer } from 'vite';
 import { z } from 'zod';
-import { GenerationSchema, ProjectSchema } from '../shared/model';
+import { GenerationSchema, PROJECT_FORMAT, parseProject } from '../shared/model';
 import { parseMidi } from '../shared/midi';
 import { Store } from './store';
 import { Generator } from './generation';
@@ -18,7 +19,7 @@ import { MidiBridge } from './bridge';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 try { process.loadEnvFile(path.join(root, '.env')); } catch { /* Key is optional until generation. */ }
 const port = Number(process.env.STUDIO_PORT || 5173);
-const store = new Store(process.env.STUDIO_DATA_DIR || path.join(root, '.studio/projects'), process.env.STUDIO_SAMPLE_DIR || path.join(root, 'samples/ai'));
+const store = new Store(process.env.STUDIO_DATA_DIR || path.join(root, '.studio/projects'), process.env.STUDIO_SAMPLE_DIR || path.join(root, 'samples/ai'), process.env.STUDIO_LIBRARY_DIR || path.join(root, 'samples/libraries'));
 await store.init();
 const generator = new Generator(store, process.env.ELEVENLABS_API_KEY, process.env.STUDIO_FIXTURE_GENERATION === '1');
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
@@ -49,22 +50,22 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/imports/github/audio') { const bytes = await downloadGitHub(Object.fromEntries(url.searchParams)); res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' }); return res.end(bytes); }
     if (req.method === 'POST' && url.pathname === '/api/imports/sample') return json(res, 201, await importSample(req, store));
     if (req.method === 'POST' && url.pathname === '/api/recordings') return json(res, 201, await saveRecording(req, store));
-    if (req.method === 'POST' && url.pathname === '/api/backups') { const bytes = await backupProject(ProjectSchema.parse(await body(req)), store); res.writeHead(200, { 'Content-Type': 'application/zip' }); return res.end(bytes); }
+    if (req.method === 'POST' && url.pathname === '/api/backups') { const bytes = await backupProject(parseProject(await body(req)), store); res.writeHead(200, { 'Content-Type': 'application/zip' }); return res.end(bytes); }
     if (req.method === 'POST' && url.pathname === '/api/backups/restore') { const chunks: Buffer[] = []; let size = 0; for await (const chunk of req) { size += chunk.length; if (size > 260_000_000) throw new Error('Backup exceeds 256 MB.'); chunks.push(chunk); } return json(res, 201, await restoreBackup(Buffer.concat(chunks), store)); }
-    if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, generation: { configured: generator.configured, fixture: generator.fixture } });
+    if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, generation: { configured: generator.configured, fixture: generator.fixture }, format: PROJECT_FORMAT });
     if (req.method === 'GET' && url.pathname === '/api/feedback') return json(res, 200, { events, receipts, snapshot: studioSnapshot });
     if (req.method === 'GET' && url.pathname === '/api/samples') return json(res, 200, await store.assets());
     const packMatch = url.pathname.match(/^\/api\/packs\/([\da-f-]{36})$/i);
     if (req.method === 'PATCH' && packMatch) return json(res, 200, await store.labelPack(packMatch[1], z.object({ name: z.string().trim().min(1).max(80) }).parse(await body(req)).name));
     const metadataMatch = url.pathname.match(/^\/api\/samples\/([\da-f-]{36})$/i);
     if (req.method === 'PATCH' && metadataMatch) {
-      const { label } = z.object({ label: z.string().trim().min(1).max(80) }).strict().parse(await body(req));
-      return json(res, 200, await store.labelAsset(metadataMatch[1], label));
+      const metadata = z.object({ label: z.string().trim().min(1).max(80).optional(), description: z.string().max(1000).optional(), tags: z.array(z.string().trim().min(1).max(50)).max(20).optional() }).strict().parse(await body(req));
+      return json(res, 200, await store.updateAsset(metadataMatch[1], metadata));
     }
     const sampleMatch = url.pathname.match(/^\/api\/samples\/([\da-f-]{36})\/audio$/i);
     if (req.method === 'GET' && sampleMatch) {
       const asset = await store.asset(sampleMatch[1]);
-      const audio = await readFile(path.join(store.samplesRoot, `${asset.id}.${asset.format}`));
+      const audio = await readFile(await store.audioPath(asset));
       res.writeHead(200, { 'Content-Type': asset.format === 'wav' ? 'audio/wav' : 'audio/mpeg', 'Content-Length': audio.length, 'Cache-Control': 'public, max-age=31536000, immutable' });
       return res.end(audio);
     }
@@ -84,7 +85,7 @@ const server = createServer(async (req, res) => {
     }
     const projectMatch = url.pathname.match(/^\/api\/projects\/([a-zA-Z0-9_-]+)$/);
     if (projectMatch && req.method === 'GET') return json(res, 200, await store.load(projectMatch[1]));
-    if (projectMatch && req.method === 'PUT') return json(res, 200, await store.save(projectMatch[1], ProjectSchema.parse(await body(req))));
+    if (projectMatch && req.method === 'PUT') return json(res, 200, await store.save(projectMatch[1], parseProject(await body(req))));
     if (url.pathname === '/api/midi/reconnect' && req.method === 'POST') { bridge.start(); return json(res, 200, bridge.status); }
     if (url.pathname === '/api/midi/send' && req.method === 'POST') {
       const data = z.object({ bytes: z.array(z.number().int()).length(3) }).parse(await body(req));
@@ -125,6 +126,10 @@ sockets.on('connection', (ws) => {
   ws.on('close', () => { clients.delete(ws); bridge.connect([...new Set([...clients.values()].flat())]); });
 });
 bridge.start();
-server.listen(port, '127.0.0.1', () => console.log(`Strudel Studio: http://127.0.0.1:${port}`));
+server.listen(port, '127.0.0.1', () => {
+  console.log(`Strudel Studio: http://127.0.0.1:${port}`);
+  const libraries = parseLibraries(process.env.STUDIO_LIBRARIES);
+  if (libraries.length) void syncLibraries(libraries, store, { publish }).catch(error => console.error(`Library sync failed: ${(error as Error).message}`));
+});
 async function shutdown() { bridge.close(); for (const ws of sockets.clients) ws.close(); sockets.close(); await vite.close(); server.close(); }
 process.on('SIGINT', () => void shutdown()); process.on('SIGTERM', () => void shutdown());

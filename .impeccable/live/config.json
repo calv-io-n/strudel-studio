@@ -1,0 +1,7 @@
+{
+  "files": ["studio/client/index.html"],
+  "exclude": ["studio/client/render.html"],
+  "insertBefore": "</body>",
+  "commentSyntax": "html",
+  "cspChecked": true
+}

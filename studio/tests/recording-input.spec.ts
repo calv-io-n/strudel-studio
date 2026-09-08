@@ -16,8 +16,8 @@ test('external input capture excludes accompaniment and retains audio after inpu
     navigator.mediaDevices.enumerateDevices = async () => [{ kind: 'audioinput', deviceId: 'fixture-input', label: 'Fixture audio interface', groupId: 'fixture', toJSON: () => ({}) } as MediaDeviceInfo];
   });
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
-  await page.getByRole('button', { name: 'Sounds', exact: true }).click();
+  await page.getByRole('button', { name: 'Play pattern', exact: true }).click();
+  await page.getByRole('button', { name: 'Sample library', exact: true }).click(); await page.locator('#add-sounds').evaluate((el: HTMLDetailsElement) => { el.open = true; });
   await page.getByRole('button', { name: 'Record audio', exact: true }).click();
   await page.getByRole('button', { name: 'Record audio take', exact: true }).click();
   await expect(page.locator('[data-status]')).toContainText('Recording');
@@ -33,5 +33,5 @@ test('external input capture excludes accompaniment and retains audio after inpu
   for (let i = 44; i < wav.length; i += 4) { const sample = wav.readInt16LE(i); peak = Math.max(peak, Math.abs(sample)); if (previous < 0 && sample >= 0) crossings++; previous = sample; }
   expect(peak).toBeGreaterThan(2000); expect(peak).toBeLessThan(4000);
   expect(crossings / asset.duration).toBeGreaterThan(800);
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.locator('#sounds-close').click(); await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
 });

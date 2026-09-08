@@ -10,7 +10,7 @@ test('legacy projects migrate without losing code, slider identity, controls or 
   const anchors = [{ id: 'stable-slider', from: 7, fingerprint: 'slider()' }];
   const result = ProjectSchema.parse({ ...legacy, version: 1, code: 'slider(.5)', anchors,
     bindings: [{ id: 'binding', profileId: 'virtual', channel: 1, kind: 'cc', number: 20, target: { kind: 'slider', sliderId: 'stable-slider' }, pickup: false, enabled: true }] });
-  assert.equal(result.version, 4); assert.equal(result.tabs[0].code, 'slider(.5)');
+  assert.equal(result.version, 5); assert.equal(result.tabs[0].code, 'slider(.5)');
   assert.deepEqual(result.tabs[0].anchors, anchors); assert.deepEqual(result.controls, current.controls);
   assert.deepEqual(result.bindings[0].target, { kind: 'slider', sliderId: 'stable-slider', tabId: result.tabs[0].id });
 });

@@ -56,6 +56,7 @@ Browser (localhost:5173)             studio/server/index.ts (Node)
 - The server refuses requests whose `Host`/`Origin` are not localhost. That is deliberate; do not loosen it.
 - Typed code is a draft until **Apply changes** (Ctrl+Enter). Sliders and MIDI are live. Keep that distinction when touching playback.
 - Sessions autosave to `.studio/projects/` (gitignored). Generated sounds go to `samples/ai/` (gitignored).
+- `STUDIO_LIBRARIES` (see `.env.example`) lists public GitHub packs that `studio/server/libraries.ts` caches into `samples/libraries/` (`STUDIO_LIBRARY_DIR`, gitignored) after the port opens; the store reads that directory alongside `samples/ai/`. WAV only, decoded server-side by `decodeWav` in `studio/shared/wav.ts`; already-cached files are skipped by source URL and path.
 
 ## MIDI
 

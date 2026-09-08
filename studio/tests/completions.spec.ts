@@ -3,7 +3,7 @@ import { newProject } from '../shared/model';
 
 async function edit(page: Page, code: string) {
   const editor = page.locator('.tab-editor:not([hidden]) .cm-content');
-  await editor.click(); await page.keyboard.press('Control+a'); await page.keyboard.insertText(code);
+  await editor.focus(); await page.keyboard.press('Control+a'); await page.keyboard.insertText(code);
   return editor;
 }
 async function complete(page: Page, prefix: string, query: string, label: string) {
@@ -26,9 +26,9 @@ test('IDE completion supports typing, Tab, effects, undo and both themes', async
   await expect(editor).toContainText('.room(0.3)');
   await page.keyboard.insertText('0.4'); await expect(editor).toContainText('.room(0.4)');
   await page.keyboard.press('Escape');
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Play pattern', exact: true }).click();
   await expect(page.locator('#transport-state')).toContainText('Playing');
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
   await page.locator('.project-menu > summary').click(); await page.locator('#dark-mode').check();
   await page.locator('.project-menu > summary').click();
   await complete(page, '$: s("', 'sawt', 'sawtooth');
@@ -60,10 +60,10 @@ test('saved sounds can be labeled, completed and played after reload without pre
   const bad = await request.patch(`/api/samples/${asset.id}`, { data: { label: '' } }); expect(bad.status()).toBe(400);
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
   await page.locator('#sounds-toggle').click();
-  await page.getByRole('button', { name: 'Rename A short metallic impact', exact: true }).click();
+  await page.locator(`[data-asset="${asset.id}"] summary`).click(); await page.locator(`[data-rename-asset="${asset.id}"]`).click();
   await page.locator('#edit-name').fill('Metal impact'); await page.getByRole('button', { name: 'Confirm', exact: true }).click();
-  await expect(page.getByRole('button', { name: 'Rename Metal impact', exact: true })).toBeVisible();
-  await page.locator('#sounds-toggle').click();
+  await expect(page.locator(`[data-asset="${asset.id}"]`)).toContainText('Metal impact');
+  await page.locator('#sounds-close').click();
   const editor = await complete(page, '$: s("', 'Metal', 'Metal impact');
   const key = `studio_${asset.id.replaceAll('-', '')}`;
   await expect(editor).toContainText(key);
@@ -71,10 +71,10 @@ test('saved sounds can be labeled, completed and played after reload without pre
   await expect.poll(async () => (await (await request.get('/api/recovery')).json()).tabs[0].code).toContain(key);
   await page.reload(); await expect(page.locator('#connection')).toHaveText('Studio connected');
   const audioRequest = page.waitForResponse(`/api/samples/${asset.id}/audio`);
-  await page.getByRole('button', { name: 'Play', exact: true }).click();
+  await page.getByRole('button', { name: 'Play pattern', exact: true }).click();
   expect((await audioRequest).ok()).toBe(true);
   await expect(page.locator('#transport-state')).toContainText('Playing');
-  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
 });
 
 test('top bar exposes dark mode and creates saved sessions without losing current code', async ({ page, request }) => {

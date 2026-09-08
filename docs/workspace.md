@@ -32,7 +32,7 @@ Virtual MIDI contains the device settings, mappings, sound slots, and diagnostic
 
 Set `ELEVENLABS_API_KEY` in `.env` and restart Studio to enable generation. Keep the key on the server.
 
-Open **Sounds**, describe a sound, generate, preview, and **Insert into pattern**. Duration is optional; looping defaults off. Inserting does not start playback or apply a running draft. Existing sample-to-pad and sound-slot assignment is available under the selected sound's advanced controls.
+**Sample library** is a drawer view beside Composition and Virtual MIDI: open it from the footer or by clicking a sound name in your code, and keep editing or playing while it is open. Each sound has **Insert** (or **Swap** when you opened it from a sound name), a preview button, and **Live**, which plays that sound from your MIDI controller or the test keys without recording anything. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Describe a sound, generate, preview, and **Insert into pattern**. Duration is optional; looping defaults off. Inserting does not start playback or apply a running draft. Existing sample-to-pad and sound-slot assignment is available under the selected sound's advanced controls.
 
 Type inside `s("…")` or `sound("…")` to find sounds by name or label; use arrow keys and **Tab** to complete. **Ctrl+Space** opens suggestions and **Escape** dismisses them. Typing after a dot suggests effects such as reverb and filters. Saved sound labels can be renamed in the Sounds panel.
 
@@ -40,7 +40,7 @@ Generated sounds are stored in `samples/ai/`. The app never generates automatica
 
 ## Projects
 
-Use **+ beside Sessions** to create a named session; Enter or Confirm creates it. Sessions autosave to `.studio/projects/` and retain their identity and dropdown selection after reload. Switching sessions saves pending edits first. A local browser draft protects edits during interrupted saves; **Project → Save project** retries a failed save. Recovery is also saved to `.studio/projects/recovery.json`. Projects include all tabs, clips, mappings, slots, and controller values. Sounds remain in the local sound library, so retain that folder when backing up projects.
+Use **+ beside Sessions** to create a named session; Enter or Confirm creates it. Press **Ctrl+S** (Cmd+S on macOS) or the **Save** button beside the save status to save immediately. Sessions also autosave to `.studio/projects/` and retain their identity and dropdown selection after reload. Switching sessions saves pending edits first. A local browser draft protects edits during interrupted saves; **Project → Save project** retries a failed save. Recovery is also saved to `.studio/projects/recovery.json`. Projects include all tabs, clips, mappings, slots, and controller values. Sounds remain in the local sound library, so retain that folder when backing up projects.
 
 Older single-pattern and two-lane projects migrate to format v4 when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab asks before removing its code, clips, and mappings.
 
@@ -60,7 +60,7 @@ MIDI proposals, import reviews and audio-take chunks have browser recovery. Reco
 
 ## Import samples and back up projects
 
-Sounds has **Generate** and **Import** tabs above one searchable library. Upload audio files, a folder or a ZIP pack, review the selections, then choose **Import selected**. Public GitHub links have a discovery and download-review step before importing. Identical files reuse existing sound identities; pack and sound renames preserve patterns.
+Sounds has **Generate** and **Import** tabs above one searchable library. Upload audio files, a folder or a ZIP pack, review the selections, then choose **Import selected**. Public GitHub links have a discovery and download-review step before importing. Packs listed in `STUDIO_LIBRARIES` are cached automatically when the server starts and show up here as imported packs. Identical files reuse existing sound identities; pack and sound renames preserve patterns.
 
 Imports support WAV, MP3, OGG and FLAC where the browser decoder supports them, up to 64 MB per source file, 256 MB unpacked and 500 files per review. Originals are retained alongside playback WAVs. Individual failures remain visible; valid imports survive cancellation.
 
