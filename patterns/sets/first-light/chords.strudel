@@ -1,0 +1,12 @@
+// First Light · Chords · full · 174 BPM · F# minor
+// Eight-bar progression with sampled chord colour and extended synth voicings.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[f#3,a3,c#4,e4] [f#3,a3,c#4,e4] [d3,f#3,a3,c#4] [d3,f#3,a3,c#4] [a3,c#4,e4,b4] [a3,c#4,e4,b4] [e3,g#3,b3,f#4] [e3,g#3,b3,f#4]>").s("triangle").attack(.06).release(.45).gain(0.096).lpf(2300).room(.22)
+$: stack(
+  s(soundSlot("minor")).struct("1 0 0 0").speed(0.8408964153).clip(1).attack(.02).release(.3).gain(0.184).hpf(240).lpf(5500),
+  s(soundSlot("dmajor")).struct("0 1 0 0").speed(1).clip(1).attack(.02).release(.3).gain(0.184).hpf(240).lpf(5500),
+  s(soundSlot("amajor")).struct("0 0 1 0").speed(1).clip(1).attack(.02).release(.3).gain(0.184).hpf(240).lpf(5500),
+  s(soundSlot("emajor")).struct("0 0 0 1").speed(1).clip(1).attack(.02).release(.3).gain(0.184).hpf(240).lpf(5500)
+).slow(8)

@@ -1,0 +1,6 @@
+// Higher Ground · Bass · texture · 176 BPM · C minor
+// Recorded C2 bass layer supplies upper harmonics, above the separate sine sub.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: note("<ab1 ab1 bb1 bb1 c2 c2 eb2 eb2>").s(soundSlot("reese")).struct("1 0 1 1 0 1 0 1").clip(1).attack(.012).release(.08).hpf(170).lpf(2100).gain(0.192)

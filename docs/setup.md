@@ -12,7 +12,7 @@ npm run studio:demo
 npm run dev
 ```
 
-Open http://localhost:5173, choose **Sessions → Neon Drive**, set playback to **Composition**, and press **Play**. The sampler uses port 5555. Normal installation does not download a browser or run optional-tool checks. An existing browser is sufficient for Studio; Playwright Chromium is only needed by automated tests and the legacy watcher.
+Open http://localhost:5173, choose **Sessions → Neon Drive**, open **Composition**, and press **Play composition**. The sampler uses port 5555. Normal installation does not download a browser or run optional-tool checks. An existing browser is sufficient for Studio; Playwright Chromium is only needed by automated tests and the legacy watcher.
 
 ## Optional integrations
 
@@ -38,11 +38,11 @@ python3 -m venv .venv-midi
 Restart Studio. Then connect the controller inside the app, which is the step most people miss: **plugging the device in is not enough. Studio only listens to ports you have selected.**
 
 1. Plug the controller in and confirm Linux sees it: `aconnect -l` lists it as a client with one or more ports.
-2. Open **Virtual MIDI** in the footer and expand **Devices, mappings & advanced controls**.
-3. Under **MIDI devices**, pick the controller's port from the dropdown and click **Connect**. Controllers that expose several ports (for example, a "MIDI" port and a DAW auto-map port such as "HyperControl" or "DIN") normally want the plain MIDI one.
-4. Press a key. Unmapped notes play the built-in synth, and each event appears in **MIDI feedback** tagged **ALSA**.
+2. Open **MIDI devices** in the footer. This menu is only for external inputs; browser keys and knobs are under **Project → On-screen controller**.
+3. Pick the controller's port from the dropdown and click **Connect**. Controllers that expose several ports (for example, a "MIDI" port and a DAW auto-map port such as "HyperControl" or "DIN") normally want the plain MIDI one.
+4. Press a key. Unmapped notes play the built-in synth, and the input activity line shows its channel, note and velocity.
 
-The selection is saved with the project, and the bridge reopens the port whenever Studio starts or **Reconnect MIDI** is pressed. Verified controllers: M-Audio Axiom AIR Mini 32.
+Connections are saved for this Studio installation, independently of projects and open browser windows. They survive song switches and restarts. An unplugged controller stays listed as **Waiting for device** and reconnects automatically when it returns. **Refresh devices** restarts discovery without clearing your choices; **Disconnect** explicitly removes a connection. On first upgrade, Studio imports enabled hardware profiles from existing saved sessions once. Verified controllers: M-Audio Axiom AIR Mini 32.
 
 As a one-off alternative, route the device into Studio's always-enabled **External MIDI input** port from a terminal while Studio is running:
 
@@ -85,12 +85,14 @@ Both directories are gitignored, so deleting `samples/libraries/` and restarting
 - **Port already in use:** stop the other Studio instance or set `STUDIO_PORT`. The sampler still uses 5555; `npm run studio:app` starts only the app when the legacy sample server is unnecessary.
 - **No sound:** click Play to unlock browser audio, check output volume, and try Neon Drive. External sample patterns require their referenced sources to be available.
 - **Python/MIDI error:** use browser controls, or follow the MIDI setup above. Hardware support is optional.
-- **Controller keys do nothing:** the device is probably not connected in Studio. Open **Virtual MIDI → Devices, mappings & advanced controls**, select its port and click **Connect**. Check that the **MIDI feedback** panel shows events; if it stays empty, run `aseqdump -p <client>` from `aconnect -l` to confirm the hardware is sending at all. Also make sure the route dropdown at the top of the drawer reads **OS MIDI loopback**, not **Browser**.
+- **Controller keys do nothing:** the device is probably not connected in Studio. Open **MIDI devices**, select its input and click **Connect**. Check that the input activity line shows notes or CC events; if it stays empty, run `aseqdump -p <client>` from `aconnect -l` to confirm the hardware is sending at all. The route selector under On-screen controller affects only the generated browser controls; it does not gate external MIDI input.
 - **Missing browser in tests:** run `npm run setup:browser-tests`; use `-- --with-deps` for missing Linux libraries. The watcher may need its own pinned browser version, installed by `setup:watcher`.
 - **Save failure:** keep the tab open, check data-directory permissions and connection status, then use Project → Save project. Export code before clearing browser storage or removing any recovery data.
 - **Hosted access returns 403:** expected. This release is localhost-only, not a production web service. Do not remove the host/origin checks to expose it publicly.
 
 ## Data and backups
+
+External device subscriptions live in `STUDIO_DATA_DIR/.settings/midi-connections.json` (normally `.studio/projects/.settings/`). They are machine settings and are not included in portable song backups. Project MIDI mappings keep their existing profile identities.
 
 Stop Studio and back up `.studio/projects/` together with `samples/ai/` (or their configured equivalents). Keep any manually added `samples/` files that patterns reference. Session JSON contains sound IDs, not copies of audio. Restoring only JSON can leave missing sounds.
 

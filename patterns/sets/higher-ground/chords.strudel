@@ -1,0 +1,12 @@
+// Higher Ground · Chords · full · 176 BPM · C minor
+// Two bars per chord. Sampled major/minor chord hits are transposed to the written progression.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: note("<[ab3,c4,eb4,bb4] [ab3,c4,eb4,bb4] [bb3,d4,f4,c5] [bb3,d4,f4,c5] [c3,eb3,g3,bb3] [c3,eb3,g3,bb3] [eb3,g3,bb3,f4] [eb3,g3,bb3,f4]>").s("triangle").attack(.07).release(.4).gain(0.072).lpf(2700).room(.22)
+$: stack(
+  s(soundSlot("amajor")).struct("1 0 0 0").speed(0.943874313).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000),
+  s(soundSlot("amajor")).struct("0 1 0 0").speed(1.059463094).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000),
+  s(soundSlot("minor")).struct("0 0 1 0").speed(1.189207115).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000),
+  s(soundSlot("dmajor")).struct("0 0 0 1").speed(1.059463094).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000)
+).slow(8)

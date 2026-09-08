@@ -1,0 +1,409 @@
+{
+  "name": "Northern Lights",
+  "bpm": 174,
+  "key": "E minor",
+  "bars": 128,
+  "tracks": [
+    "Drums",
+    "Breaks",
+    "Sub",
+    "Bass texture",
+    "Chords",
+    "Melody",
+    "Atmosphere",
+    "Transitions",
+    "Sparkle"
+  ],
+  "tabs": [
+    {
+      "id": "drums",
+      "name": "Drums \u00b7 groove",
+      "track": 0,
+      "file": "drums.strudel"
+    },
+    {
+      "id": "drums-b",
+      "name": "Drums \u00b7 second drop",
+      "track": 0,
+      "file": "drums-b.strudel"
+    },
+    {
+      "id": "tops",
+      "name": "Intro \u00b7 hats",
+      "track": 0,
+      "file": "tops.strudel"
+    },
+    {
+      "id": "build",
+      "name": "Build \u00b7 snare lift",
+      "track": 0,
+      "file": "build.strudel"
+    },
+    {
+      "id": "fill",
+      "name": "Drums \u00b7 turnaround",
+      "track": 0,
+      "file": "fill.strudel"
+    },
+    {
+      "id": "breaks",
+      "name": "Breaks \u00b7 rolling layer",
+      "track": 1,
+      "file": "breaks.strudel"
+    },
+    {
+      "id": "breaks-b",
+      "name": "Breaks \u00b7 variation",
+      "track": 1,
+      "file": "breaks-b.strudel"
+    },
+    {
+      "id": "sub",
+      "name": "Sub \u00b7 foundation",
+      "track": 2,
+      "file": "sub.strudel"
+    },
+    {
+      "id": "sub-b",
+      "name": "Sub \u00b7 answering rhythm",
+      "track": 2,
+      "file": "sub-b.strudel"
+    },
+    {
+      "id": "bass",
+      "name": "Bass \u00b7 texture",
+      "track": 3,
+      "file": "bass.strudel"
+    },
+    {
+      "id": "chords",
+      "name": "Chords \u00b7 full",
+      "track": 4,
+      "file": "chords.strudel"
+    },
+    {
+      "id": "chords-soft",
+      "name": "Chords \u00b7 dawn",
+      "track": 4,
+      "file": "chords-soft.strudel"
+    },
+    {
+      "id": "melody",
+      "name": "Melody \u00b7 main hook",
+      "track": 5,
+      "file": "melody.strudel"
+    },
+    {
+      "id": "melody-b",
+      "name": "Melody \u00b7 second flight",
+      "track": 5,
+      "file": "melody-b.strudel"
+    },
+    {
+      "id": "melody-soft",
+      "name": "Melody \u00b7 distant",
+      "track": 5,
+      "file": "melody-soft.strudel"
+    },
+    {
+      "id": "pad",
+      "name": "Atmosphere \u00b7 open fifths",
+      "track": 6,
+      "file": "pad.strudel"
+    },
+    {
+      "id": "pad-out",
+      "name": "Atmosphere \u00b7 dissolve",
+      "track": 6,
+      "file": "pad-out.strudel"
+    },
+    {
+      "id": "impact",
+      "name": "FX \u00b7 arrival",
+      "track": 7,
+      "file": "impact.strudel"
+    },
+    {
+      "id": "riser",
+      "name": "FX \u00b7 breath in",
+      "track": 7,
+      "file": "riser.strudel"
+    },
+    {
+      "id": "sparkle",
+      "name": "Sparkle \u00b7 counterline",
+      "track": 8,
+      "file": "sparkle.strudel"
+    }
+  ],
+  "clips": [
+    {
+      "tabId": "drums",
+      "start": 32,
+      "length": 15
+    },
+    {
+      "tabId": "fill",
+      "start": 47,
+      "length": 1
+    },
+    {
+      "tabId": "drums",
+      "start": 48,
+      "length": 15
+    },
+    {
+      "tabId": "fill",
+      "start": 63,
+      "length": 1
+    },
+    {
+      "tabId": "drums-b",
+      "start": 88,
+      "length": 15
+    },
+    {
+      "tabId": "fill",
+      "start": 103,
+      "length": 1
+    },
+    {
+      "tabId": "drums-b",
+      "start": 104,
+      "length": 15
+    },
+    {
+      "tabId": "fill",
+      "start": 119,
+      "length": 1
+    },
+    {
+      "tabId": "tops",
+      "start": 8,
+      "length": 16
+    },
+    {
+      "tabId": "build",
+      "start": 24,
+      "length": 7
+    },
+    {
+      "tabId": "fill",
+      "start": 31,
+      "length": 1
+    },
+    {
+      "tabId": "build",
+      "start": 80,
+      "length": 7
+    },
+    {
+      "tabId": "fill",
+      "start": 87,
+      "length": 1
+    },
+    {
+      "tabId": "tops",
+      "start": 120,
+      "length": 8
+    },
+    {
+      "tabId": "breaks",
+      "start": 32,
+      "length": 32
+    },
+    {
+      "tabId": "breaks-b",
+      "start": 88,
+      "length": 32
+    },
+    {
+      "tabId": "breaks",
+      "start": 16,
+      "length": 8
+    },
+    {
+      "tabId": "sub",
+      "start": 32,
+      "length": 32
+    },
+    {
+      "tabId": "sub-b",
+      "start": 88,
+      "length": 32
+    },
+    {
+      "tabId": "bass",
+      "start": 32,
+      "length": 32
+    },
+    {
+      "tabId": "bass",
+      "start": 88,
+      "length": 32
+    },
+    {
+      "tabId": "chords-soft",
+      "start": 0,
+      "length": 32
+    },
+    {
+      "tabId": "chords-soft",
+      "start": 64,
+      "length": 24
+    },
+    {
+      "tabId": "chords-soft",
+      "start": 120,
+      "length": 8
+    },
+    {
+      "tabId": "chords",
+      "start": 32,
+      "length": 32
+    },
+    {
+      "tabId": "chords",
+      "start": 88,
+      "length": 32
+    },
+    {
+      "tabId": "melody-soft",
+      "start": 8,
+      "length": 16
+    },
+    {
+      "tabId": "melody",
+      "start": 32,
+      "length": 32
+    },
+    {
+      "tabId": "melody-soft",
+      "start": 76,
+      "length": 12
+    },
+    {
+      "tabId": "melody-b",
+      "start": 88,
+      "length": 32
+    },
+    {
+      "tabId": "melody-soft",
+      "start": 120,
+      "length": 8
+    },
+    {
+      "tabId": "pad",
+      "start": 0,
+      "length": 120
+    },
+    {
+      "tabId": "pad-out",
+      "start": 120,
+      "length": 8
+    },
+    {
+      "tabId": "impact",
+      "start": 0,
+      "length": 2
+    },
+    {
+      "tabId": "impact",
+      "start": 32,
+      "length": 2
+    },
+    {
+      "tabId": "impact",
+      "start": 48,
+      "length": 2
+    },
+    {
+      "tabId": "impact",
+      "start": 64,
+      "length": 2
+    },
+    {
+      "tabId": "impact",
+      "start": 88,
+      "length": 2
+    },
+    {
+      "tabId": "impact",
+      "start": 104,
+      "length": 2
+    },
+    {
+      "tabId": "impact",
+      "start": 120,
+      "length": 2
+    },
+    {
+      "tabId": "riser",
+      "start": 30,
+      "length": 2
+    },
+    {
+      "tabId": "riser",
+      "start": 62,
+      "length": 2
+    },
+    {
+      "tabId": "riser",
+      "start": 86,
+      "length": 2
+    },
+    {
+      "tabId": "riser",
+      "start": 118,
+      "length": 2
+    },
+    {
+      "tabId": "sparkle",
+      "start": 48,
+      "length": 16
+    },
+    {
+      "tabId": "sparkle",
+      "start": 104,
+      "length": 16
+    }
+  ],
+  "sections": [
+    {
+      "name": "Intro",
+      "start": 0,
+      "bars": 16
+    },
+    {
+      "name": "Build",
+      "start": 16,
+      "bars": 16
+    },
+    {
+      "name": "Drop 1",
+      "start": 32,
+      "bars": 32
+    },
+    {
+      "name": "Breakdown",
+      "start": 64,
+      "bars": 16
+    },
+    {
+      "name": "Rebuild",
+      "start": 80,
+      "bars": 8
+    },
+    {
+      "name": "Drop 2",
+      "start": 88,
+      "bars": 32
+    },
+    {
+      "name": "Outro",
+      "start": 120,
+      "bars": 8
+    }
+  ],
+  "description": "Wide nocturnal pads and sparkling delayed motifs that open into a euphoric melodic drop."
+}

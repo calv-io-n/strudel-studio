@@ -1,0 +1,6 @@
+// First Light · Atmosphere · open fifths · 174 BPM · F# minor
+// F-root open-fifth pad transposed to each chord root; gentle fades join phrases.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: s(soundSlot("pad")).speed("<1.059463 .840896 1.259921 .943874>").slow(2).clip(1).attack(.8).release(.6).hpf(450).lpf(3500).gain(0.076).room(.3)

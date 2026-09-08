@@ -1,3 +1,4 @@
+import { openController } from './helpers/controller';
 import { installAudioCapture } from './audio-capture';
 import { test, expect } from '@playwright/test';
 import { newProject } from '../shared/model';
@@ -28,7 +29,7 @@ test('selected sound auditions virtual notes and global Stop releases them', asy
   await page.getByRole('button', { name: 'Play MIDI', exact: true }).click();
   await page.getByRole('button', { name: 'Audition', exact: true }).click();
   await expect(page.locator('[data-state]')).toContainText('Audition');
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   const key = page.getByRole('button', { name: 'C4', exact: true });
   await page.evaluate(() => window.neonCapture.start());
   await key.hover(); await page.mouse.down();
@@ -49,7 +50,7 @@ test('transcription is a live isolated proposal until accepted as one undoable e
   for (let i = 0; i < 10; i++) await page.keyboard.press('Shift+ArrowRight');
   await page.getByRole('button', { name: 'Play MIDI', exact: true }).click();
   await page.getByRole('button', { name: 'Capture notes', exact: true }).click();
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   const key = page.getByRole('button', { name: 'C4', exact: true });
   await key.hover(); await page.mouse.down();
   await expect(page.locator('[data-proposed]')).toContainText('note(60)');
@@ -135,7 +136,7 @@ test('reload restores an unaccepted MIDI proposal without starting playback', as
   for (let i = 0; i < 8; i++) await page.keyboard.press('Shift+ArrowRight');
   await page.getByRole('button', { name: 'Play MIDI', exact: true }).click();
   await page.getByRole('button', { name: 'Capture notes', exact: true }).click();
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   const key = page.getByRole('button', { name: 'D4', exact: true });
   await key.hover(); await page.mouse.down(); await page.waitForTimeout(150); await page.mouse.up();
   await page.getByRole('button', { name: 'Stop take', exact: true }).click();

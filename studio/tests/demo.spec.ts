@@ -1,3 +1,4 @@
+import { openController } from './helpers/controller';
 import { test, expect } from '@playwright/test';
 import { writeFile } from 'node:fs/promises';
 import { createNeonDrive } from '../server/demo';
@@ -61,8 +62,8 @@ test('Neon Drive plays every tab, renders its complete arrangement, and restores
 
   // The pre-mapped lead knob must address a hidden editor and remain a live control.
   await page.getByRole('tab', { name: 'Chords', exact: true }).click();
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
-  await page.getByRole('button', { name: 'Composition', exact: true }).click(); await page.locator('#composition-play').click(); await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
+  await page.getByRole('button', { name: 'Composition', exact: true }).click(); await page.locator('#composition-play').click(); await openController(page);
   await page.getByRole('slider', { name: 'Lead brightness', exact: true }).fill('100');
   await expect(page.locator('#last-receipt')).toContainText('applied');
   await page.getByRole('tab', { name: 'Lead', exact: true }).click();

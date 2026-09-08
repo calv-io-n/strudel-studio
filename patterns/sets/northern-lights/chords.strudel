@@ -1,0 +1,12 @@
+// Northern Lights · Chords · full · 174 BPM · E minor
+// Two bars per chord. Sampled major/minor chord hits are transposed to the written progression.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[e3,g3,b3,f#4] [e3,g3,b3,f#4] [c3,e3,g3,b3] [c3,e3,g3,b3] [a3,c4,e4,g4] [a3,c4,e4,g4] [d3,f#3,a3,e4] [d3,f#3,a3,e4]>").s("triangle").attack(.07).release(.4).gain(0.072).lpf(2700).room(.22)
+$: stack(
+  s(soundSlot("minor")).struct("1 0 0 0").speed(0.749153538).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000),
+  s(soundSlot("dmajor")).struct("0 1 0 0").speed(0.890898718).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000),
+  s(soundSlot("minor")).struct("0 0 1 0").speed(1.000000000).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000),
+  s(soundSlot("dmajor")).struct("0 0 0 1").speed(1.000000000).clip(1).attack(.03).release(.35).gain(0.136).hpf(280).lpf(5000)
+).slow(8)

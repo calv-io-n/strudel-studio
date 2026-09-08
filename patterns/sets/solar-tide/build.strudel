@@ -1,0 +1,7 @@
+// Solar Tide · Build · snare lift · 172 BPM · D minor
+// Eight-bar crescendo; doubles the snare at the end of each four bars.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: s(soundSlot("snare")).struct("1 0 1 0 1 0 1 0").lastOf(4, p => p.fast(2)).gain("<.14 .17 .2 .23 .26 .29 .32 .35>").hpf(700)
+$: s(soundSlot("hat")).fast(8).gain(.09)

@@ -1,0 +1,7 @@
+// First Light · Melody · distant · 174 BPM · F# minor
+// A quiet preview of the hook before the drums arrive.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[c#5 ~ e5 f#5 ~ c#5 b4 a4] [g#4 a4 c#5 ~ e5 c#5 ~ ~] [a4 ~ c#5 e5 ~ f#5 e5 c#5] [a4 f#4 ~ a4 c#5 ~ e5 ~] [e5 ~ c#5 b4 ~ a4 c#5 e5] [f#5 e5 c#5 ~ b4 ~ a4 ~] [g#4 b4 ~ e5 f#5 e5 b4 ~] [c#5 b4 g#4 ~ f#4 ~ ~ ~]>").s(soundSlot("lead")).transpose(-12).clip(1).attack(.008).release(.16).hpf(350).lpf(2200).gain(0.256).room(.2).delay(.18).delaytime(.25862).delayfeedback(.25)
+$: note("<[c#5 ~ e5 f#5 ~ c#5 b4 a4] [g#4 a4 c#5 ~ e5 c#5 ~ ~] [a4 ~ c#5 e5 ~ f#5 e5 c#5] [a4 f#4 ~ a4 c#5 ~ e5 ~] [e5 ~ c#5 b4 ~ a4 c#5 e5] [f#5 e5 c#5 ~ b4 ~ a4 ~] [g#4 b4 ~ e5 f#5 e5 b4 ~] [c#5 b4 g#4 ~ f#4 ~ ~ ~]>").s("sawtooth").attack(.012).decay(.09).sustain(.32).release(.12).lpf(4400).hpf(450).gain(0.02).pan(.6).room(.16)

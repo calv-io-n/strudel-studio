@@ -1,0 +1,7 @@
+// Afterglow · Drums · turnaround · 174 BPM · A minor
+// One-bar fill leaves space before the next phrase.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: s(soundSlot("softsnare")).struct("1 0 1 0 1 1 [1 1] [1 1 1 1]").gain("0.2 0.16 0.24 0.16 0.256 0.28 0.304 0.32").hpf(220)
+$: s(soundSlot("kick")).struct("1 0 0 0").gain(0.32)

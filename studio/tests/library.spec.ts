@@ -1,3 +1,4 @@
+import { openController } from './helpers/controller';
 import { test, expect } from '@playwright/test';
 import { newProject } from '../shared/model';
 
@@ -25,7 +26,7 @@ test('highlighted sound records actual audio without microphone permission and s
   await page.getByRole('button', { name: 'Record highlighted sound', exact: true }).click();
   await page.getByRole('button', { name: 'Record audio take', exact: true }).click();
   await expect(page.locator('[data-status]')).toContainText('Recording');
-  await page.getByRole('button', { name: 'Close library' }).click(); await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await page.getByRole('button', { name: 'Close library' }).click(); await openController(page);
   const key = page.getByRole('button', { name: 'C4', exact: true });
   await key.hover(); await page.mouse.down(); await page.waitForTimeout(400); await page.mouse.up();
   await page.getByRole('button', { name: 'Sample library', exact: true }).click(); await page.getByRole('button', { name: 'Stop recording', exact: true }).click();
@@ -109,7 +110,7 @@ test('audio take chunks survive reload for explicit review and save', async ({ p
   await page.getByRole('button', { name: 'Play MIDI', exact: true }).click();
   await page.getByRole('button', { name: 'Record highlighted sound', exact: true }).click();
   await page.getByRole('button', { name: 'Record audio take', exact: true }).click();
-  await page.getByRole('button', { name: 'Close library' }).click(); await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await page.getByRole('button', { name: 'Close library' }).click(); await openController(page);
   const key = page.getByRole('button', { name: 'C4', exact: true });
   await key.hover(); await page.mouse.down(); await page.waitForTimeout(400); await page.mouse.up();
   await page.getByRole('button', { name: 'Sample library', exact: true }).click(); await page.getByRole('button', { name: 'Stop recording', exact: true }).click(); await page.getByRole('button', { name: 'End tail', exact: true }).click();

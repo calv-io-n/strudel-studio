@@ -1,0 +1,6 @@
+// Afterglow · Sub · foundation · 174 BPM · A minor
+// Root notes follow the eight-bar chord sequence; short attacks avoid clicks.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<a1 a1 f1 f1 c2 c2 g1 g1>").struct("1 0 0 1 0 1 0 0").s("sine").attack(.008).release(.09).gain(0.344).lpf(150)

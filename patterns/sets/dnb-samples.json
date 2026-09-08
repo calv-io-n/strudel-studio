@@ -1,0 +1,177 @@
+{
+  "packs": {
+    "essentials": {
+      "name": "SampleRadar \u00b7 DnB Essentials",
+      "url": "https://www.musicradar.com/news/sampleradar-dnb-essentials-samples",
+      "download": "https://cdn.mos.musicradar.com/audio/samples/sampleradar-dnb-essentials-samples.zip"
+    },
+    "euphoria": {
+      "name": "SampleRadar \u00b7 Old School Euphoria",
+      "url": "https://www.musicradar.com/news/sampleradar-free-euphoric-trance-samples",
+      "download": "https://cdn.mos.musicradar.com/audio/samples/sampleradar-old-school-euphoria-samples.zip"
+    },
+    "pads": {
+      "name": "SampleRadar \u00b7 DnB Pads",
+      "url": "https://www.musicradar.com/news/tech/sampleradar-130-free-drum-n-bass-pad-samples-449476",
+      "download": "https://cdn.mos.musicradar.com/audio/samples/musicradar-dnb-pad-samples.zip"
+    }
+  },
+  "samples": [
+    {
+      "slot": "kick",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Kick 04.wav",
+      "label": "Punch kick"
+    },
+    {
+      "slot": "softkick",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Kick 01.wav",
+      "label": "Liquid kick"
+    },
+    {
+      "slot": "snare",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Snare 04.wav",
+      "label": "Bright snare"
+    },
+    {
+      "slot": "softsnare",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Snare 11.wav",
+      "label": "Liquid snare"
+    },
+    {
+      "slot": "hat",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Hat 02.wav",
+      "label": "Tight hat"
+    },
+    {
+      "slot": "openhat",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Hat 08.wav",
+      "label": "Open hat"
+    },
+    {
+      "slot": "perc",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Perc 04.wav",
+      "label": "Syncopated percussion"
+    },
+    {
+      "slot": "tamb",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Tamb 01.wav",
+      "label": "Tambourine"
+    },
+    {
+      "slot": "crash",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Cymbal 01.wav",
+      "label": "Drop crash"
+    },
+    {
+      "slot": "ride",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/D_B Cymbal 06.wav",
+      "label": "Ride accent"
+    },
+    {
+      "slot": "reverse",
+      "pack": "essentials",
+      "path": "D_B Essentials/Drum Hits/Rev Hit 01.wav",
+      "label": "Reverse hit"
+    },
+    {
+      "slot": "breakA",
+      "pack": "essentials",
+      "path": "D_B Essentials/Beats/DnB Beat 01 (175BPM).wav",
+      "label": "Dancefloor break \u00b7 175 BPM \u00b7 2 bars"
+    },
+    {
+      "slot": "breakB",
+      "pack": "essentials",
+      "path": "D_B Essentials/Beats/DnB Beat 04 (170BPM).wav",
+      "label": "Liquid break \u00b7 170 BPM \u00b7 2 bars"
+    },
+    {
+      "slot": "breakC",
+      "pack": "essentials",
+      "path": "D_B Essentials/Beats/Jungle Beat 01 (170BPM).wav",
+      "label": "Jungle variation \u00b7 170 BPM \u00b7 2 bars"
+    },
+    {
+      "slot": "roll",
+      "pack": "essentials",
+      "path": "D_B Essentials/Beats/Roll 01.wav",
+      "label": "Transition drum roll"
+    },
+    {
+      "slot": "noise",
+      "pack": "essentials",
+      "path": "D_B Essentials/FX/Noise FX 03.wav",
+      "label": "Air transition"
+    },
+    {
+      "slot": "reese",
+      "pack": "essentials",
+      "path": "D_B Essentials/Multis/Dirty Square/Dirty Square C2.wav",
+      "label": "Dirty Square \u00b7 C2"
+    },
+    {
+      "slot": "warmbass",
+      "pack": "essentials",
+      "path": "D_B Essentials/Multis/Deep Chorus/Deep Chorus C2.wav",
+      "label": "Deep Chorus \u00b7 C2"
+    },
+    {
+      "slot": "lead",
+      "pack": "euphoria",
+      "path": "Old School Euphoria/Multisamples/KorStab/OSE_KorStab_C3.wav",
+      "label": "KorStab \u00b7 C3"
+    },
+    {
+      "slot": "pluck",
+      "pack": "euphoria",
+      "path": "Old School Euphoria/Multisamples/PlexStab/OSE_PlexStab_C3.wav",
+      "label": "PlexStab \u00b7 C3"
+    },
+    {
+      "slot": "minor",
+      "pack": "euphoria",
+      "path": "Old School Euphoria/Chord Hits/OSE_Destin[chord]_Amin.wav",
+      "label": "OSE_Destin[chord]_Amin"
+    },
+    {
+      "slot": "dmajor",
+      "pack": "euphoria",
+      "path": "Old School Euphoria/Chord Hits/OSE_Ultasmooth[chord]_Dmaj.wav",
+      "label": "OSE_Ultasmooth[chord]_Dmaj"
+    },
+    {
+      "slot": "amajor",
+      "pack": "euphoria",
+      "path": "Old School Euphoria/Chord Hits/OSE_Ultasmooth[chord]_Amaj.wav",
+      "label": "OSE_Ultasmooth[chord]_Amaj"
+    },
+    {
+      "slot": "emajor",
+      "pack": "euphoria",
+      "path": "Old School Euphoria/Chord Hits/OSE_Ultasmooth[chord]_Emaj.wav",
+      "label": "OSE_Ultasmooth[chord]_Emaj"
+    },
+    {
+      "slot": "pad",
+      "pack": "pads",
+      "path": "musicradar-dnb-pad-samples/DNB_PAD_7.wav",
+      "label": "DnB pad 7 \u00b7 F-based"
+    },
+    {
+      "slot": "airpad",
+      "pack": "pads",
+      "path": "musicradar-dnb-pad-samples/DNB_PAD_1.wav",
+      "label": "DnB pad 1 \u00b7 F-based"
+    }
+  ]
+}

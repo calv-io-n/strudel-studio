@@ -1,0 +1,6 @@
+// Higher Ground · Atmosphere · open fifths · 176 BPM · C minor
+// Open-fifth pad tuned from F to each chord root; two-bar fades keep the texture smooth.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: s(soundSlot("pad")).speed("<1.18920712 1.33483985 0.74915354 0.89089872>").slow(2).clip(1).attack(.8).release(.6).hpf(500).lpf(3000).gain(0.06).room(.28)

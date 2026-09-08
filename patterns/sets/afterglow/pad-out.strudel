@@ -1,0 +1,6 @@
+// Afterglow · Atmosphere · dissolve · 174 BPM · A minor
+// Four two-bar notes fade out across the final eight bars.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: s(soundSlot("pad")).speed("<1.259921 .999999 .749154 1.122462>").slow(2).clip(1).attack(.9).release(.7).hpf(650).lpf(2200).gain("<0.072 0.052 0.032 0.012>").room(.32)

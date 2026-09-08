@@ -1,0 +1,6 @@
+// Skyline · Bass · texture · 174 BPM · B minor
+// Recorded C2 bass layer supplies upper harmonics, above the separate sine sub.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<b1 b1 g1 g1 d2 d2 a1 a1>").s(soundSlot("reese")).struct("1 0 1 0 0 1 1 0").clip(1).attack(.012).release(.08).hpf(170).lpf(2100).gain(0.192)

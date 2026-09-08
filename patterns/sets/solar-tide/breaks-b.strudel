@@ -1,0 +1,6 @@
+// Solar Tide · Breaks · variation · 172 BPM · D minor
+// Alternate break adds movement under the second drop.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: s(soundSlot("breakC")).loopAt(2).hpf(650).lpf(10000).gain(.17).lastOf(8, p => p.chop(16).rev())

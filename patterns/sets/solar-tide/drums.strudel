@@ -1,0 +1,13 @@
+// Solar Tide · Drums · groove · 172 BPM · D minor
+// Two-step kick/snare with quieter ghost notes and alternating hats.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: stack(
+  s(soundSlot("softkick")).struct("1 0 0 1 0 0 1 0").gain(.64),
+  s(soundSlot("snare")).struct("0 1 0 1").gain(.64),
+  s(soundSlot("snare")).struct("0 0 0 0 0 0 0 1").gain(.11),
+  s(soundSlot("hat")).struct("1 1 1 1 1 1 1 1").gain(".22 .11 .19 .12 .22 .1 .2 .13").pan(".42 .58"),
+  s(soundSlot("openhat")).struct("0 0 1 0 0 0 1 0").gain(.16).hpf(450),
+  s(soundSlot("perc")).struct("0 0 0 1 0 0 0 1").gain(.14).pan(.65)
+).lastOf(8, p => p.struct("1 1 1 [1 1]")).postgain(.65)

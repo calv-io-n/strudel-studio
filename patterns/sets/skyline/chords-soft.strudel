@@ -1,0 +1,12 @@
+// Skyline · Chords · dawn · 174 BPM · B minor
+// Two bars per chord. Sampled major/minor chord hits are transposed to the written progression.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[b3,d4,f#4,a4] [b3,d4,f#4,a4] [g3,b3,d4,a4] [g3,b3,d4,a4] [d3,f#3,a3,e4] [d3,f#3,a3,e4] [a3,c#4,e4,b4] [a3,c#4,e4,b4]>").s("triangle").attack(.07).release(.4).gain(0.048).lpf(1400).room(.22)
+$: stack(
+  s(soundSlot("minor")).struct("1 0 0 0").speed(1.122462048).clip(1).attack(.03).release(.35).gain(0.06).hpf(280).lpf(1800),
+  s(soundSlot("dmajor")).struct("0 1 0 0").speed(1.334839854).clip(1).attack(.03).release(.35).gain(0.06).hpf(280).lpf(1800),
+  s(soundSlot("dmajor")).struct("0 0 1 0").speed(1.000000000).clip(1).attack(.03).release(.35).gain(0.06).hpf(280).lpf(1800),
+  s(soundSlot("amajor")).struct("0 0 0 1").speed(1.000000000).clip(1).attack(.03).release(.35).gain(0.06).hpf(280).lpf(1800)
+).slow(8)

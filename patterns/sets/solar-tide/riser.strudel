@@ -1,0 +1,7 @@
+// Solar Tide · FX · breath in · 172 BPM · D minor
+// A two-bar swell leads into the next section.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: s(soundSlot("noise")).slow(2).clip(1).attack(2).release(.12).hpf(1500).gain(.12)
+$: s(soundSlot("reverse")).struct("0 0 0 1").gain(.17).hpf(700)

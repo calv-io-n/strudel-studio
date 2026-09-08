@@ -1,0 +1,6 @@
+// Solar Tide · Sub · answering rhythm · 172 BPM · D minor
+// Eight-bar root sequence follows this song’s chord progression. Keep the sub centered.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: note("<bb1 bb1 f1 f1 c2 c2 d2 d2>").struct("1 0 1 0 0 1 1 1").s("sine").attack(.01).release(.08).gain(.36).lpf(150)

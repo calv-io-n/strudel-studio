@@ -1,3 +1,4 @@
+import { openController } from './helpers/controller';
 import { test, expect } from '@playwright/test';
 import { newProject } from '../shared/model';
 import { installAudioCapture } from './audio-capture';
@@ -15,7 +16,7 @@ test('note menu arms composition playback, records repeated takes and switches t
   await page.locator('.range-details > summary').click(); await page.locator('[data-midi-end]').fill('1'); await page.locator('.range-details > summary').click();
   await page.getByRole('button', { name: 'Capture notes', exact: true }).click();
   await expect(page.locator('[data-midi-status]')).toContainText('Live MIDI');
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   const key = page.getByRole('button', { name: 'C4', exact: true });
   await page.evaluate(() => window.neonCapture.start());
   await key.hover(); await page.mouse.down(); await page.waitForTimeout(200); await page.mouse.up();
@@ -85,7 +86,7 @@ test('full composition loops by default and silent subsequent passes keep the tr
   await expect(page.locator('[data-midi-end]')).toHaveValue('2');
   await page.getByRole('button', { name: 'Capture notes', exact: true }).click();
   await expect(page.locator('[data-midi-sound]')).toContainText('Sawtooth');
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   await page.waitForTimeout(1150);
   const key = page.getByRole('button', { name: 'D4', exact: true });
   await key.hover(); await page.mouse.down(); await page.waitForTimeout(130); await page.mouse.up();
@@ -132,7 +133,7 @@ test('invalid IDE syntax blocks the selected instrument instead of falling back 
   await page.getByRole('menuitem', { name: 'Play MIDI', exact: true }).click();
   await page.getByRole('button', { name: 'Capture notes', exact: true }).click();
   await expect(page.locator('[data-midi-status]')).toContainText('Cannot play the selected IDE instrument');
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   await page.evaluate(() => window.neonCapture.start());
   await page.getByRole('button', { name: 'C4', exact: true }).hover(); await page.mouse.down(); await page.waitForTimeout(150); await page.mouse.up();
   expect((await page.evaluate(() => window.neonCapture.finish())).peak).toBeLessThan(.00001);

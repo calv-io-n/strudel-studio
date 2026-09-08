@@ -400,6 +400,7 @@ export class Engine {
     this.notes.set(number, oscillator); oscillator.start();
   }
   noteOff(number: number) { this.noteRequests.delete(number); const voice = this.notes.get(number); if (voice) { voice.stop(); this.notes.delete(number); } }
+  releaseInputNotes() { this.noteRequests.clear(); for (const number of this.notes.keys()) this.noteOff(number); }
   async preload(asset: Asset) {
     if (this.buffers.has(asset.id)) return;
     if (!this.loading.has(asset.id)) {

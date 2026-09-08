@@ -1,0 +1,7 @@
+// First Light · Melody · second flight · 174 BPM · F# minor
+// The answering phrase reverses every fourth bar; a brighter second drop.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[c#5 ~ e5 f#5 ~ c#5 b4 a4] [g#4 a4 c#5 ~ e5 c#5 ~ ~] [a4 ~ c#5 e5 ~ f#5 e5 c#5] [a4 f#4 ~ a4 c#5 ~ e5 ~] [e5 ~ c#5 b4 ~ a4 c#5 e5] [f#5 e5 c#5 ~ b4 ~ a4 ~] [g#4 b4 ~ e5 f#5 e5 b4 ~] [c#5 b4 g#4 ~ f#4 ~ ~ ~]>").s(soundSlot("lead")).transpose(-12).lastOf(4, p => p.rev()).clip(1).attack(.008).release(.16).hpf(350).lpf(7000).gain(0.256).room(.2).delay(.18).delaytime(.25862).delayfeedback(.25)
+$: note("<[c#5 ~ e5 f#5 ~ c#5 b4 a4] [g#4 a4 c#5 ~ e5 c#5 ~ ~] [a4 ~ c#5 e5 ~ f#5 e5 c#5] [a4 f#4 ~ a4 c#5 ~ e5 ~] [e5 ~ c#5 b4 ~ a4 c#5 e5] [f#5 e5 c#5 ~ b4 ~ a4 ~] [g#4 b4 ~ e5 f#5 e5 b4 ~] [c#5 b4 g#4 ~ f#4 ~ ~ ~]>").s("sawtooth").attack(.012).decay(.09).sustain(.32).release(.12).lpf(4400).hpf(450).gain(0.052).pan(.6).room(.16)

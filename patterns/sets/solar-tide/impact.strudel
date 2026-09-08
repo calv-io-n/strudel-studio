@@ -1,0 +1,7 @@
+// Solar Tide · FX · arrival · 172 BPM · D minor
+// Crash and airy texture mark major arrivals.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: s(soundSlot("crash")).struct("1 0 0 0").slow(4).gain(.27).hpf(900).room(.25)
+$: s(soundSlot("noise")).struct("1 0 0 0").slow(4).clip(.5).attack(.02).release(.6).gain(.075).hpf(1500)

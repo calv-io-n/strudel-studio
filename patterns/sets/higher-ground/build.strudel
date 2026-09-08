@@ -1,0 +1,7 @@
+// Higher Ground · Build · snare lift · 176 BPM · C minor
+// Eight-bar crescendo; doubles the snare at the end of each four bars.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: s(soundSlot("snare")).struct("1 0 1 0 1 0 1 0").lastOf(4, p => p.fast(2)).gain("<0.112 0.136 0.16 0.184 0.208 0.232 0.256 0.28>").hpf(700)
+$: s(soundSlot("hat")).fast(8).gain(0.072)

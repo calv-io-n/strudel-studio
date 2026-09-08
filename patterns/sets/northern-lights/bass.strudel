@@ -1,0 +1,6 @@
+// Northern Lights · Bass · texture · 174 BPM · E minor
+// Recorded C2 bass layer supplies upper harmonics, above the separate sine sub.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<e2 e2 c2 c2 a1 a1 d2 d2>").s(soundSlot("reese")).struct("1 0 0 1 0 1 0 0").clip(1).attack(.012).release(.08).hpf(170).lpf(1400).gain(0.192)

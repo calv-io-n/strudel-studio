@@ -101,7 +101,15 @@ summary { cursor: pointer; color: var(--muted); font-size: 12px; padding: 10px 0
 #drawer { order: 2; flex-shrink: 0; max-height: 65dvh; height: 300px; position: relative; border-top: 1px solid var(--line); background: #fbfcfd; }
 #drawer-resize { position: absolute; top: -4px; left: 0; width: 100%; height: 8px; cursor: ns-resize; z-index: 3; touch-action: none; }
 #drawer-resize:after { content: ''; display: block; width: 35px; height: 3px; background: #c7ced8; margin: 2px auto; border-radius: 3px; }
-#composition-content, #midi-content, #library-content { height: 100%; overflow: auto; }
+#composition-content, #midi-content, #devices-content, #library-content { height: 100%; overflow: auto; }
+#devices-content { padding: 20px 24px 36px; }
+#devices-content h2 { margin: 0 0 8px; }
+#devices-content .form-row { max-width: 800px; flex-wrap: wrap; }
+#available-ports { min-width: 0; max-width: 100%; flex: 1; }
+.device-connection { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+.device-connection>div { min-width: 0; overflow-wrap: anywhere; }
+.device-connection span { display: block; color: var(--muted); margin-top: 4px; }
+#device-activity { overflow-wrap: anywhere; }
 .composition-toolbar { display: flex; align-items: center; gap: 24px; padding: 18px 24px; }
 .composition-toolbar label { display: flex; align-items: center; gap: 7px; font-size: 11px; }
 .composition-toolbar input { margin: 0 !important; width: 65px; }

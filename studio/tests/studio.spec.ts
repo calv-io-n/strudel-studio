@@ -1,3 +1,4 @@
+import { openController } from './helpers/controller';
 import { test, expect, type Page } from '@playwright/test';
 import { newProject } from '../shared/model';
 
@@ -33,7 +34,7 @@ test('minimal workspace, independent tabs, drawer persistence, keyboard layout a
   await page.getByRole('tab', { name: 'Pattern 1', exact: true }).click();
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('$beat');
   await page.getByRole('button', { name: 'Stop playback', exact: true }).click();
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   await expect(page.locator('#midi-content')).toBeVisible();
   await page.getByRole('button', { name: 'Composition', exact: true }).click();
   await expect(page.locator('#midi-content')).toBeHidden(); await expect(page.locator('#composition-content')).toBeVisible();
@@ -52,7 +53,7 @@ test('minimal workspace, independent tabs, drawer persistence, keyboard layout a
   await page.getByRole('button', { name: 'Composition', exact: true }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   await expect(page.getByRole('slider', { name: 'Knob 1', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect(errors).toEqual([]);
@@ -63,7 +64,7 @@ test('MIDI controls stay live across tabs and typed edits apply explicitly', asy
   await page.getByRole('button', { name: 'Play pattern', exact: true }).click();
   await page.getByRole('slider', { name: 'gain inline slider', exact: true }).focus();
   await page.getByRole('button', { name: 'MIDI Learn', exact: true }).click();
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   const knob = page.getByRole('slider', { name: 'Knob 1', exact: true });
   await knob.fill('10'); await expect(page.locator('#learn-status')).toContainText('Connected CC 20');
   await knob.fill('127'); await expect(page.getByRole('slider', { name: 'gain inline slider', exact: true })).toHaveValue('1');
@@ -151,7 +152,7 @@ test('real ALSA output returns through the operating system and changes a bound 
   await expect.poll(async () => (await (await request.get('/api/status')).json()).bridge.ready).toBe(true);
   await page.getByRole('slider', { name: 'gain inline slider', exact: true }).focus();
   await page.getByRole('button', { name: 'MIDI Learn', exact: true }).click();
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   await page.getByLabel('MIDI route').selectOption('alsa');
   await page.getByRole('slider', { name: 'Knob 2', exact: true }).fill('1');
   await expect(page.locator('#learn-status')).toContainText('Connected CC 21');
@@ -211,7 +212,7 @@ test('context menus target inactive patterns, copy draft code, and support keybo
   await editCode(page, '$: note("d3").gain(slider(0.3,0,1))');
   await page.getByRole('slider', { name: 'gain inline slider', exact: true }).focus();
   await page.getByRole('button', { name: 'MIDI Learn', exact: true }).click();
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   await page.getByRole('slider', { name: 'Knob 1', exact: true }).fill('10');
   await expect(page.locator('#learn-status')).toContainText('Connected CC 20');
   await page.locator('#new-tab').click();
