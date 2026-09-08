@@ -31,10 +31,10 @@ Improve setup feedback and accessibility based on reports; validate additional p
 
 - Review and merge only after CI passes and the licensing/security review has no unresolved release blockers.
 - Enable GitHub private vulnerability reporting, then verify the Security tab's reporting link. The current policy includes a no-details contact-request fallback until enabled.
-- Require the `Linux / Node 24` check for protected `master` updates. Do not create a required check before the workflow exists on the default branch.
+- Require the `Linux / Node 24` check for protected `main` updates. Do not create a required check before the workflow exists on the default branch.
 - Update the repository description to “A local-first music workspace built with Strudel: patterns, multitrack composition, MIDI and WAV export.” Suggested topics: `strudel`, `live-coding`, `music`, `midi`, `web-audio`.
 - Review original-content provenance and third-party notices before tagging. Do not add downloaded/generated audio without a rights review.
-- Confirm README media and source links on `master`, then publish a release from the reviewed commit using the draft notes above. No tag or release is created by this preparation PR.
+- Confirm README media and source links on `main`, then publish a release from the reviewed commit using the draft notes above. No tag or release is created by this preparation PR.
 
 ## Audit and validation record
 
