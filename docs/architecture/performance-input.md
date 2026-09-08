@@ -29,3 +29,12 @@ Transcribe consumes MIDI note events and produces a draft code replacement. Reco
 The editor owns the destination tab/range and undoable insertion. Performance routing must keep that destination stable across edits and tab changes. Audio routing must distinguish immediate audition, internal recording, external recording, and offline export. Shared project/storage changes must preserve stable sound references and retain recorded audio across reopening and backup.
 
 These are integration constraints from the design, not new runtime modules or an asserted schema migration. Implementation work must add evidence for stop/disconnect recovery, source isolation, live effects, code insertion safety, asset persistence, and rendered export before marking the target gaps complete.
+
+## Selection foundation
+
+The contextual Play into selection action now resolves a selected `note(...)` call
+(or its contained note string), anchors that musical expression in CodeMirror, and
+shows its original code in a temporary review panel. The editor maps the range
+through unrelated changes and blocks acceptance after overlapping edits. The shared
+take model retains note events and closes held notes on interruption. Audition,
+transcription generation, and audio recording are subsequent stack changes.
