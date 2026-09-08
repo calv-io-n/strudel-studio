@@ -98,7 +98,7 @@ function getEditor(id = project.activeTabId) {
 }
 editor = getEditor();
 const engine = new Engine(getEditor, () => snapshot(), () => renderTransport(), (message) => notice(message, true));
-const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true));
+const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine);
 $('#editor').after(performancePanel.root);
 const performButton = document.createElement('button'); performButton.textContent = 'Play into selection';
 performButton.onclick = guard(() => performancePanel.arm());
@@ -255,6 +255,7 @@ async function receive(event: MidiEvent) {
   eventRows = eventRows.slice(0, 30); $('#events').innerHTML = eventRows.join('');
   const profile = project.profiles.find((p) => p.port === event.source && p.enabled);
   if (!profile) return;
+  if (midi.kind === 'note' && await performancePanel.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
   if (learning && ((learning.kind === 'slider' && midi.kind === 'cc') || (learning.kind !== 'slider' && midi.on))) {
     bind(learning, profile.id, midi.channel, midi.kind, midi.number); return;
   }
@@ -285,7 +286,7 @@ function openSocket() {
     if (message.type === 'midi') void receive(message).catch((err) => notice(err.message, true));
     if (message.type === 'error') notice(message.message, true);
   };
-  socket.onclose = () => { $('#connection').textContent = 'Reconnecting…'; pickup.reset(); setTimeout(openSocket, 1500); };
+  socket.onclose = () => { performancePanel.stop(); $('#connection').textContent = 'Reconnecting…'; pickup.reset(); setTimeout(openSocket, 1500); };
 }
 function virtualSend(id: string, value: number, off = false) {
   const control = project.controls.find((c) => c.id === id)!;
@@ -423,6 +424,7 @@ $('#saved-projects').onpointerdown = guard(refreshProjects);
 
 $('#save').onclick = guard(async () => { await persistSession(); notice(`Saved ${snapshot().name}.`); });
 async function loadProject(next: Project) {
+  performancePanel.close();
   contextMenu.close(false);
   const validated = ProjectSchema.parse(next);
   // Preload before changing the running project. Missing assets are explicit, and
@@ -455,7 +457,7 @@ function settleSlots(stopped = !engine.started) {
 }
 
 function startPlayback() { return engine.evaluate(true, $('#play-target').value === 'composition' ? 'composition' : project.activeTabId); }
-function stopPlayback() { releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
+function stopPlayback() { performancePanel.stop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
 $('#play-target').onchange = renderTransport;
 $('#dark-mode').checked = document.documentElement.dataset.appearance === 'dark';
 $('#dark-mode').onchange = () => {
