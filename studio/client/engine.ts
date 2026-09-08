@@ -15,6 +15,11 @@ import { soundCatalog, soundKey } from './completions';
 type Scheduler = { started: boolean; lastEnd: number; cps: number; now(): number; stop(): void; setCps(cps: number): void; setPattern(pattern: Pattern, start?: boolean): Promise<void> };
 type Repl = { scheduler: Scheduler; state: { evalError?: Error; pattern?: { queryArc(a: number, b: number): unknown[] } }; evaluate(code: string, start: boolean): Promise<unknown> };
 export class Engine {
+  get tempo() { return this.project().bpm; }
+  isolatePerformance(isolated: boolean) {
+    const output = audio.getSuperdoughAudioController().output.destinationGain;
+    if (output) output.gain.setTargetAtTime(isolated ? 0 : 1, audio.getAudioContext().currentTime, .01);
+  }
   readonly performanceAudio = new PerformanceAudio();
   async performanceValues(owner: StudioEditor, soundCode: string): Promise<Record<string, any>> {
     if (this.compilingBusy) throw new Error('Wait for the current pattern to finish preparing.');

@@ -40,3 +40,42 @@ test('selected sound auditions virtual notes and global Stop releases them', asy
   await expect(page.locator('.cm-content')).toHaveText(project.tabs[0].code);
   expect(errors).toEqual([]);
 });
+
+test('transcription is a live isolated proposal until accepted as one undoable edit', async ({ page, request }) => {
+  const project = newProject(); project.tabs[0].code = 'note("c3").s("triangle").gain(0.2)';
+  await request.put('/api/recovery', { data: project });
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  const editor = page.locator('.cm-content'); await editor.click(); await page.keyboard.press('Control+Home');
+  for (let i = 0; i < 10; i++) await page.keyboard.press('Shift+ArrowRight');
+  await page.getByRole('button', { name: 'Play into selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Transcribe', exact: true }).click();
+  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  const key = page.getByRole('button', { name: 'C4', exact: true });
+  await key.dispatchEvent('pointerdown', { pointerId: 1 });
+  await expect(page.locator('[data-proposed]')).toContainText('note(60)');
+  await expect(editor).toHaveText(project.tabs[0].code);
+  await key.dispatchEvent('pointerup', { pointerId: 1 });
+  await page.getByRole('button', { name: 'Stop take', exact: true }).click();
+  await page.getByRole('button', { name: 'Preview isolated', exact: true }).click();
+  await expect(page.locator('[data-state]')).toContainText('isolated');
+  await expect(editor).toHaveText(project.tabs[0].code);
+  await page.getByRole('button', { name: 'Stop take', exact: true }).click();
+  await page.getByRole('button', { name: 'Accept into selection', exact: true }).click();
+  await expect(editor).toContainText('note(60)');
+  await expect(editor).toContainText('.s("triangle").gain(0.2)');
+  await editor.click(); await page.keyboard.press('Control+z');
+  await expect(editor).toHaveText(project.tabs[0].code);
+});
+
+
+test('generated Strudel preserves phrase timing and chord overlaps', async ({ page }) => {
+  await page.goto('/');
+  const result = await page.evaluate(async (root) => {
+    const { transcribe } = await import('/@fs/' + root + '/studio/shared/performance.ts');
+    const core = await import(String('/@id/@strudel/core'));
+    const code = transcribe([{ key: 'a', pitch: 60, velocity: 127, start: .25, end: .75 }, { key: 'b', pitch: 64, velocity: 64, start: .25, end: .5 }], 2, 0, 1);
+    const pattern = new Function('stack', 'timeCat', 'note', 'silence', `return ${code}`)(core.stack, core.timeCat, core.note, core.silence);
+    return pattern.queryArc(0, 2).map((h: any) => [Number(h.whole.begin), Number(h.whole.end), h.value.note, h.value.velocity]);
+  }, process.cwd());
+  expect(result).toEqual([[.25, .75, 60, 1], [.25, .5, 64, .503937]]);
+});

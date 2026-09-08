@@ -19,3 +19,10 @@ test('takes retain chords and release outstanding notes on interruption', () => 
   assert.deepEqual(take.notes.map(n => n.end), [.25, .5]);
   assert.equal(take.state, 'review'); assert.throws(() => take.start(), /current take/);
 });
+
+test('quantization preserves overlaps and clips notes to the phrase boundary', async () => {
+  const { phraseNotes, transcribe } = await import('../shared/performance');
+  const notes = [{ key: 'a', pitch: 60, velocity: 127, start: .24, end: .76 }, { key: 'b', pitch: 64, velocity: 64, start: .26, end: .49 }];
+  assert.deepEqual(phraseNotes(notes, 2, .25, 1).map(n => [n.start, n.end]), [[.25, .75], [.25, .5]]);
+  assert.equal(transcribe([], 4, .0625, 0), '');
+});

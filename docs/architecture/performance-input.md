@@ -45,3 +45,10 @@ bus. Note-off releases the source while effect returns finish. Shared bus/source
 routing is rejected with an explicit fallback synth. Armed note events bypass
 sample bindings and MIDI Learn. The browser test captures real audio output;
 phrase suppression and jam routing follow with the transport changes.
+
+Transcribe now captures MIDI into a separate take and continuously renders a
+before/after proposal. Its full-duration parallel voices preserve rests, overlaps,
+velocity and selected quantization. Stop retains the take; Accept replaces only
+the anchored expression as one editor edit. Preview isolated temporarily attenuates
+the arrangement output; neither preview mode inserts code. Retry explicitly drops
+the current proposal. Runtime phrase settings are separate from saved project code.
