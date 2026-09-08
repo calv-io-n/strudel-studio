@@ -15,6 +15,7 @@ This page describes the current Studio implementation and identifies gaps agains
 | Accepted behavior | Current gap |
 | --- | --- |
 | Highlight a sound and riff using its instrument and effects | No selected-expression performance routing or temporary suppression of that phrase |
+| Loop accompaniment while excluding the destination tab during Transcribe | No dedicated jam loop or temporary tab-level exclusion state; ordinary composition playback stops at the last clip |
 | Transcribe MIDI into code visible during live play | No transcription state, phrase inference, take preview, or anchored replacement workflow |
 | Record the highlighted sound's actual live output independently | No isolated live recording path or audio-take review workflow |
 | Record instruments or singing through an XLR audio interface | No Studio audio-input permission, device/channel selection, or recording UI |
