@@ -146,3 +146,21 @@ test('reload restores an unaccepted MIDI proposal without starting playback', as
   await page.getByRole('button', { name: 'Accept into selection', exact: true }).click();
   await expect(page.locator('.cm-content')).toContainText('note(62)');
 });
+
+test('a nested selection without an instrument requires an explicit fallback', async ({ page, request }) => {
+  const project = newProject(); project.tabs[0].code = 'stack(note(60), note(64)).s("sawtooth")';
+  await request.put('/api/recovery', { data: project });
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.locator('.cm-content').click(); await page.keyboard.press('Control+Home');
+  for (let i = 0; i < 6; i++) await page.keyboard.press('ArrowRight');
+  for (let i = 0; i < 8; i++) await page.keyboard.press('Shift+ArrowRight');
+  await page.getByRole('button', { name: 'Play into selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Transcribe', exact: true }).click();
+  await expect(page.locator('#notice')).toContainText('does not identify its instrument');
+  await page.getByText('Timing and accompaniment', { exact: true }).click();
+  await page.getByRole('button', { name: 'Use fallback synth', exact: true }).click();
+  await page.getByRole('button', { name: 'Transcribe', exact: true }).click();
+  await expect(page.locator('[data-state]')).toContainText('Transcribing');
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+  await expect(page.locator('.cm-content')).toHaveText(project.tabs[0].code);
+});

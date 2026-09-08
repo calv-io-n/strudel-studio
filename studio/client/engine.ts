@@ -62,6 +62,7 @@ export class Engine {
       if (compiler.state.evalError) throw compiler.state.evalError;
       const haps = compiler.state.pattern?.queryArc(0, 1) ?? [];
       if (haps.length !== 1 || !haps[0].value || typeof haps[0].value !== 'object') throw new Error('Select a single instrument chain or choose the fallback synth.');
+      if (typeof haps[0].value.s !== 'string') throw new Error('This selection does not identify its instrument. Select the complete sound expression, or open Timing and accompaniment to choose the fallback synth.');
       assertIsolated(haps[0].value);
       const controls: Record<string, string> = {};
       const destination = owner.destination;
