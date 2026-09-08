@@ -29,7 +29,7 @@ Clip placement uses quarter-cycle increments and prohibits overlap within a trac
 
 When evolving these boundaries, preserve project migration coverage, stop/cancel behavior, mapping identity, and deterministic fixture tests. Extract UI modules when a concrete change benefits from it; a wholesale framework migration is not required.
 
-Composition projects use schema v3: ordered stable track IDs, named palette colors on tabs, per-track and per-clip mute settings, and quarter-cycle clip timing. V1/v2 input migrates through the shared schema. Pointer gestures live in `studio/client/composition.ts`; grid and magnetic placement calculations are shared with keyboard/numeric validation in `studio/shared/clips.ts`. A separate mute timeline gates arrangement queries independently of compiled pattern versions, so Apply changes cannot overwrite queued mutes.
+Composition projects use schema v4: ordered stable track IDs, named palette colors on tabs, per-track and per-clip mute settings, and quarter-cycle clip timing. V1–v3 input migrates through the shared schema. Pointer gestures live in `studio/client/composition.ts`; grid and magnetic placement calculations are shared with keyboard/numeric validation in `studio/shared/clips.ts`. A separate mute timeline gates arrangement queries independently of compiled pattern versions, so Apply changes cannot overwrite queued mutes.
 
 See [composition internals](composition.md) for persistence, scheduling, and gesture behavior.
 

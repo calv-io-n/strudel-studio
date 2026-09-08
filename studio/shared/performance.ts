@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { parser } from '@lezer/javascript';
 
 export type Destination = { tabId: string; from: number; to: number; original: string; soundCode: string; valid: boolean };
@@ -63,3 +64,9 @@ export function transcribe(notes: CapturedNote[], length: number, grid: number, 
   });
   return voices.length ? `stack(\n  ${voices.join(',\n  ')}\n)` : '';
 }
+
+export const PendingMidiSchema = z.object({
+  destination: z.object({ tabId: z.string(), from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), original: z.string().max(200000), soundCode: z.string().max(200000), valid: z.boolean() }),
+  notes: z.array(z.object({ key: z.string(), pitch: z.number().int().min(0).max(127), velocity: z.number().int().min(1).max(127), start: z.number().min(0).max(64), end: z.number().min(0).max(64).optional() })).min(1).max(10000),
+  length: z.number().positive().max(64), grid: z.number().min(0).max(1), cps: z.number().positive(), fallback: z.boolean().default(false),
+});

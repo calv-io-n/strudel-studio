@@ -1,3 +1,4 @@
+import { backupProject, restoreBackup } from './backup';
 import { discoverGitHub, downloadGitHub } from './github';
 import { importSample } from './imports';
 import { saveRecording } from './recordings';
@@ -48,6 +49,8 @@ const server = createServer(async (req, res) => {
     if (req.method === 'GET' && url.pathname === '/api/imports/github/audio') { const bytes = await downloadGitHub(Object.fromEntries(url.searchParams)); res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Cache-Control': 'no-store' }); return res.end(bytes); }
     if (req.method === 'POST' && url.pathname === '/api/imports/sample') return json(res, 201, await importSample(req, store));
     if (req.method === 'POST' && url.pathname === '/api/recordings') return json(res, 201, await saveRecording(req, store));
+    if (req.method === 'POST' && url.pathname === '/api/backups') { const bytes = await backupProject(ProjectSchema.parse(await body(req)), store); res.writeHead(200, { 'Content-Type': 'application/zip' }); return res.end(bytes); }
+    if (req.method === 'POST' && url.pathname === '/api/backups/restore') { const chunks: Buffer[] = []; let size = 0; for await (const chunk of req) { size += chunk.length; if (size > 260_000_000) throw new Error('Backup exceeds 256 MB.'); chunks.push(chunk); } return json(res, 201, await restoreBackup(Buffer.concat(chunks), store)); }
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, generation: { configured: generator.configured, fixture: generator.fixture } });
     if (req.method === 'GET' && url.pathname === '/api/feedback') return json(res, 200, { events, receipts, snapshot: studioSnapshot });
     if (req.method === 'GET' && url.pathname === '/api/samples') return json(res, 200, await store.assets());

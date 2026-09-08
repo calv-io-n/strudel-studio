@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { AssetSchema } from '../shared/model';
 import type { Store } from './store';
 
-const metadataSchema = z.object({ name: z.string().min(1).max(1000), label: z.string().trim().min(1).max(80), originalBytes: z.number().int().positive().max(64_000_000), originalFormat: z.enum(['wav', 'mp3', 'ogg', 'flac']), pack: AssetSchema.shape.pack.optional(), source: AssetSchema.shape.source.optional(), provider: z.enum(['upload', 'github']).default('upload') });
+const metadataSchema = z.object({ recoverId: z.string().uuid().optional(), name: z.string().min(1).max(1000), label: z.string().trim().min(1).max(80), originalBytes: z.number().int().positive().max(64_000_000), originalFormat: z.enum(['wav', 'mp3', 'ogg', 'flac']), pack: AssetSchema.shape.pack.optional(), source: AssetSchema.shape.source.optional(), provider: z.enum(['upload', 'github']).default('upload') });
 let queue = Promise.resolve<unknown>(undefined);
 export async function importSample(req: IncomingMessage, store: Store) {
   const metadata = metadataSchema.parse(JSON.parse(decodeURIComponent(String(req.headers['x-studio-metadata'] || ''))));
@@ -18,13 +18,16 @@ export async function importSample(req: IncomingMessage, store: Store) {
   if (rate < 8000 || rate > 192000 || duration <= 0 || duration > 900) throw new Error('Samples must be at most 15 minutes.');
   const hash = createHash('sha256').update(original).digest('hex');
   const operation = queue.catch(() => {}).then(async () => {
-    const existing = (await store.assets()).find(a => a.contentHash === hash);
+    const library = await store.assets();
+    const existing = metadata.recoverId ? library.find(a => a.id === metadata.recoverId) : library.find(a => a.contentHash === hash);
+    if (metadata.recoverId && existing && !existing.missing) throw new Error('This sound already has audio. Recovery will not overwrite it.');
+    if (metadata.recoverId && existing?.contentHash && existing.contentHash !== hash) throw new Error('This file differs from the original. Choose the original file or import it as a new sound.');
     if (existing && !existing.missing) return { asset: existing, reused: true };
-    const asset = existing ? { ...existing, missing: undefined } : AssetSchema.parse({ id: randomUUID(), createdAt: new Date().toISOString(), label: metadata.label, provider: metadata.provider, duration, format: 'wav', contentHash: hash, pack: metadata.pack, source: { ...metadata.source, name: metadata.name, originalFormat: metadata.originalFormat } });
+    const asset = existing ? { ...existing, missing: undefined } : AssetSchema.parse({ id: metadata.recoverId ?? randomUUID(), createdAt: new Date().toISOString(), label: metadata.label, provider: metadata.provider, duration, format: 'wav', contentHash: hash, pack: metadata.pack, source: { ...metadata.source, name: metadata.name, originalFormat: metadata.originalFormat } });
     const originalPath = path.join(store.samplesRoot, `${asset.id}.original.${metadata.originalFormat}`);
     const tmp = `${originalPath}.${randomUUID()}.tmp`;
     await writeFile(tmp, original); await rename(tmp, originalPath);
-    if (existing) { await writeFile(path.join(store.samplesRoot, `${asset.id}.${asset.format}`), wav, { flag: 'wx' }); }
+    if (existing) { if (asset.format === 'mp3' && metadata.originalFormat !== 'mp3') throw new Error('Restore the original MP3 file.'); await writeFile(path.join(store.samplesRoot, `${asset.id}.${asset.format}`), asset.format === 'mp3' ? original : wav, { flag: 'wx' }); }
     else await store.writeAsset(asset, wav);
     return { asset, reused: !!existing };
   });

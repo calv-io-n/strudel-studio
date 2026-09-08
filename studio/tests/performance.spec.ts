@@ -89,6 +89,7 @@ test('jam repeats accompaniment, excludes the destination and survives take Stop
   await page.locator('.cm-content').click(); await page.keyboard.press('Control+Home');
   for (let i = 0; i < 10; i++) await page.keyboard.press('Shift+ArrowRight');
   await page.getByRole('button', { name: 'Play into selection', exact: true }).click();
+  await page.getByText('Timing and accompaniment', { exact: true }).click();
   await page.getByRole('button', { name: 'Jam with composition', exact: true }).click();
   await expect(page.locator('[data-jam-state]')).toContainText('excluding Pattern 1');
   await page.waitForTimeout(1100);
@@ -124,4 +125,24 @@ test('mapped gain changes sustained audio without applying a draft', async ({ pa
   const after = await page.evaluate(() => window.neonCapture.finish()); expect(after.peak).toBeLessThan(.001);
   await expect(page.locator('#transport-state')).toContainText('Playing');
   await page.getByRole('button', { name: 'Stop', exact: true }).click();
+});
+
+test('reload restores an unaccepted MIDI proposal without starting playback', async ({ page, request }) => {
+  const project = newProject(); project.name = 'Recover MIDI proposal'; project.tabs[0].code = 'note(60).s("triangle")';
+  await request.put('/api/recovery', { data: project });
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.locator('.cm-content').click(); await page.keyboard.press('Control+Home');
+  for (let i = 0; i < 8; i++) await page.keyboard.press('Shift+ArrowRight');
+  await page.getByRole('button', { name: 'Play into selection', exact: true }).click();
+  await page.getByRole('button', { name: 'Transcribe', exact: true }).click();
+  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  const key = page.getByRole('button', { name: 'D4', exact: true });
+  await key.dispatchEvent('pointerdown', { pointerId: 1 }); await page.waitForTimeout(150); await key.dispatchEvent('pointerup', { pointerId: 1 });
+  await page.getByRole('button', { name: 'Stop take', exact: true }).click();
+  await page.reload(); await expect(page.locator('[data-state]')).toContainText('Recovered MIDI');
+  await expect(page.locator('[data-proposed]')).toContainText('note(62)');
+  await expect(page.locator('.cm-content')).toHaveText(project.tabs[0].code);
+  await expect(page.locator('#transport-state')).toHaveText('Stopped');
+  await page.getByRole('button', { name: 'Accept into selection', exact: true }).click();
+  await expect(page.locator('.cm-content')).toContainText('note(62)');
 });

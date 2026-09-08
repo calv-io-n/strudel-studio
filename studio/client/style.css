@@ -373,5 +373,13 @@ dialog input { width: 100%; }
 .import-row span { font-size: 12px; color: var(--muted); }
 [data-drop] { padding: 12px; margin: 8px 0; border: 1px dashed var(--border); }
 [data-level] { width: 100%; }
-[data-preview], [data-audio] { width: 100%; margin: 12px 0; }
+audio[data-preview], audio[data-audio] { width: 100%; margin: 12px 0; }
 [data-remote] label { display: block; padding: 6px 0; overflow-wrap: anywhere; }
+
+.performance-diff { margin: 8px 0; }
+.performance-diff h3 { font-size: 12px; font-weight: 600; margin: 4px 0; color: var(--muted); }
+.performance-diff pre { max-height: 130px; overflow: auto; margin: 0; padding: 8px 10px; background: var(--editor-bg); border-left: 2px solid var(--border); }
+.performance-diff [data-proposed] { border-left-color: var(--accent); }
+.performance-options { margin: 8px 0; }
+.performance-panel > .form-row { margin: 6px 0; gap: 6px; }
+@media (max-width: 650px) { .performance-panel { max-height: 60vh; } .performance-diff pre { max-height: 90px; } }

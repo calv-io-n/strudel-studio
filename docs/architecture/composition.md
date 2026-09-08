@@ -4,7 +4,7 @@ The [target design](../design/strudel-studio.md#composition) defines intended be
 
 ## Stored state
 
-[model.ts](../../studio/shared/model.ts) validates format v3. Projects have 1–16 ordered tracks with stable IDs, names, and mute flags; tabs have one of eight named colors. Clips reference a tab and track, carry their own mute flag, and store start/length in quarter-cycle increments. The selected grid and optional `soloTrackId` are persisted. Missing solo state in existing v3 projects means no isolation; dangling solo references are rejected. Start and length retain the 4096-cycle numeric limits; clips cannot overlap within a track, including muted clips.
+[model.ts](../../studio/shared/model.ts) validates format v4. Projects have 1–16 ordered tracks with stable IDs, names, and mute flags; tabs have one of eight named colors. Clips reference a tab and track, carry their own mute flag, and store start/length in quarter-cycle increments. The selected grid and optional `soloTrackId` are persisted. Missing solo state in existing v3 projects means no isolation; dangling solo references are rejected. Start and length retain the 4096-cycle numeric limits; clips cannot overlap within a track, including muted clips.
 
 V1 input first gains a tab and mapped slider ownership. V2 lanes 0/1 become Track 1/Track 2. Tabs receive palette colors in order and mute flags default to false. Validation rejects duplicate or missing IDs and dangling references. Autosave and session loading use this shared schema; existing code, anchors, mappings, slots, and session IDs survive migration.
 

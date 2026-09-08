@@ -42,7 +42,7 @@ test('minimal workspace, independent tabs, drawer persistence, keyboard layout a
   await page.getByRole('button', { name: 'Save project', exact: true }).click();
   await expect(page.locator('#notice')).toContainText('Saved Design acceptance');
   const saved = await (await request.get('/api/projects/Design-acceptance')).json();
-  expect(saved.version).toBe(3); expect(saved.tabs).toHaveLength(2);
+  expect(saved.version).toBe(4); expect(saved.tabs).toHaveLength(2);
   await expect.poll(async () => (await (await request.get('/api/recovery')).json()).name).toBe('Design acceptance');
   await page.getByLabel('Dark mode', { exact: true }).check();
   await expect(page.locator('html')).toHaveAttribute('data-appearance', 'dark');
@@ -293,7 +293,7 @@ test('sound context actions use the clicked sound and menus fit both appearances
     await page.keyboard.press('Escape');
   }
   await renamed.click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Insert into pattern', exact: true }).click();
-  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('Context sound A');
+  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('Renamed sound A');
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).not.toContainText('Context sound B');
 });
 

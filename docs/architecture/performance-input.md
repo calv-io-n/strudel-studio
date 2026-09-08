@@ -1,100 +1,41 @@
-# Performance input: current implementation boundaries
+# Performance input and reusable audio
 
-This page describes the current Studio implementation and identifies gaps against [the performance design](../design/strudel-studio.md#play-notes-into-selected-code) and [ADR 0003](../adr/0003-midi-note-capture-and-audio-recording.md). Transcribe and Record are accepted target workflows, not implemented features of this documentation change.
+The performance workspace implements the [design target](../design/strudel-studio.md#play-notes-into-selected-code) through separate audition, MIDI transcription and audio recording paths.
 
-## Existing paths
+## Selection and MIDI review
 
-- [main.ts](../../studio/client/main.ts) routes MIDI events to slider bindings, sample triggers, sound-slot controls, or the default keyboard voice. Slider bindings use pickup and range scaling before updating the target editor value.
-- [editor.ts](../../studio/client/editor.ts) owns inline slider identities, values, and editor updates. [engine.ts](../../studio/client/engine.ts) exposes live slider values through pattern references, allowing explicit control movements to affect playback without applying unrelated drafts. This does not establish continuous updates to every effect on already-sounding notes; that behavior depends on effect scheduling and requires verification.
-- The engine's unassigned MIDI keyboard voice is a triangle oscillator with velocity-controlled gain. It does not derive its instrument or effect chain from highlighted code. Assigned sample triggers follow a separate path.
-- The engine registers saved sound assets and previews them; [main.ts](../../studio/client/main.ts) provides sound insertion and generation actions. [store.ts](../../studio/server/store.ts) and [model.ts](../../studio/shared/model.ts) define the existing storage and project model boundaries.
-- [export.ts](../../studio/client/export.ts) starts offline WAV rendering from a snapshot. This is distinct from recording a live performance and does not capture controller movements made after rendering starts.
+`StudioEditor` resolves a selected note expression, note string, or supported compound expression and anchors only its musical replacement range. CodeMirror maps that range through unrelated edits; overlapping edits invalidate acceptance. Retargeting requires an explicit new selection. Closing the destination or switching sessions requires resolving pending takes.
 
-## Target gaps
+The performance panel pins the destination, compiles its sound/effect suffix for audition, and consumes armed note events before MIDI Learn or sample bindings. Knob mappings continue independently. Unsupported or shared-routing instruments require an explicit fallback synth.
 
-| Accepted behavior | Current gap |
-| --- | --- |
-| Highlight a sound and riff using its instrument and effects | No selected-expression performance routing or temporary suppression of that phrase |
-| Loop accompaniment while excluding the destination tab during Transcribe or Record | No dedicated jam loop, temporary tab-level exclusion, or continuous audio-take capture across loop passes; ordinary composition playback stops at the last clip |
-| Transcribe MIDI into code visible during live play | No transcription state, phrase inference, take preview, or anchored replacement workflow |
-| Record the highlighted sound's actual live output independently | No isolated live recording path or audio-take review workflow |
-| Record instruments or singing through an XLR audio interface | No Studio audio-input permission, device/channel selection, or recording UI |
-| Use both recording sources as durable samples in tabs | Existing sound paths provide integration points; recorded-take creation, metadata, trimming, and recovery remain to be implemented |
-| Update supported effects live and disclose limitations | Live slider references exist; per-effect sustained-note behavior and limitation feedback remain to be verified or implemented |
+Transcribe captures pitches, velocities, onset/release timing and overlapping notes on the audio clock. It renders a live before/after proposal, including provisional held notes. Each generated parallel voice spans the chosen phrase with leading/trailing rests. Quantization is optional. Preview can isolate the take or retain accompaniment. Accept performs one isolated undo transaction and leaves the result under normal Play / Apply changes rules. Empty takes and invalid anchors cannot replace source.
 
-## Boundaries to preserve when implementing the target
+Stop and device/socket loss release held voices and retain the proposal. Pending MIDI drafts recover separately from project code after reload; recovery never starts playback.
 
-Transcribe consumes MIDI note events and produces a draft code replacement. Record consumes audio from either an isolated performed sound or a selected external input and produces an audio asset. Record must work without transcription, preserve the actual performance and effects, and exclude accompaniment. Inserting an audio take references that asset rather than reconstructing its notes or applying captured effects twice.
+## Playback routing and effects
 
-The editor owns the destination tab/range and undoable insertion. Performance routing must keep that destination stable across edits and tab changes. Audio routing must distinguish immediate audition, internal recording, external recording, and offline export. Shared project/storage changes must preserve stable sound references and retain recorded audio across reopening and backup.
+Performed voices use private Superdough orbits feeding a dedicated bus. Their source handles release on note-off while effect returns finish. Isolated preview attenuates the arrangement output without changing stored mix flags. Original-phrase suppression uses the last applied source snapshot, never unrelated draft edits.
 
-These are integration constraints from the design, not new runtime modules or an asserted schema migration. Implementation work must add evidence for stop/disconnect recovery, source isolation, live effects, code insertion safety, asset persistence, and rendered export before marking the target gaps complete.
+Jam repeats a selected composition range with an absolute scheduler clock while excluding every clip from the pinned destination tab. Remaining clips retain track/clip mute and Solo behavior. Take Stop preserves accompaniment; global Stop and leaving jam restore ordinary playback eligibility. Ordinary composition still stops at its final clip.
 
-## Selection foundation
+Slider identities travel through pattern context to live AudioParams for simple gain and low-pass controls, with smoothing. Modulated filters retain native scheduling. Room, delay and envelope changes affect next scheduled notes; unknown controls have explicit limitation feedback. Export uses ordinary offline Strudel rendering with a snapshot of current values.
 
-The contextual Play into selection action now resolves a selected `note(...)` call
-(or its contained note string), anchors that musical expression in CodeMirror, and
-shows its original code in a temporary review panel. The editor maps the range
-through unrelated changes and blocks acceptance after overlapping edits. The shared
-take model retains note events and closes held notes on interruption. Audition,
-transcription generation, and audio recording are subsequent stack changes.
+## Audio takes
 
-Selected-sound audition now compiles the selected expression's effect suffix and
-routes incoming notes through private Superdough voice orbits into a performance
-bus. Note-off releases the source while effect returns finish. Shared bus/source
-routing is rejected with an explicit fallback synth. Armed note events bypass
-sample bindings and MIDI Learn. The browser test captures real audio output;
-phrase suppression and jam routing follow with the transport changes.
+`AudioTakeCapture` records actual source samples in an AudioWorklet. Internal recording taps only the performance bus and requests no microphone permission. External recording uses the selected MediaStream input, reported channels, level feedback and optional monitoring, initially off. No accompaniment enters either capture path.
 
-Transcribe now captures MIDI into a separate take and continuously renders a
-before/after proposal. Its full-duration parallel voices preserve rests, overlaps,
-velocity and selected quantization. Stop retains the take; Accept replaces only
-the anchored expression as one editor edit. Preview isolated temporarily attenuates
-the arrangement output; neither preview mode inserts code. Retry explicitly drops
-the current proposal. Runtime phrase settings are separate from saved project code.
+Both sources share count-in, length limits, jam, Stop, preview, trimming, naming, save and discard. Internal Stop has a visible tail-finishing state. Input loss preserves received frames as an incomplete take. Audio chunks are written incrementally to browser recovery storage; recovered takes remain stopped and require review. A saved take is a PCM WAV with tempo, offset and trim metadata. Insertion creates a separate sample phrase without copying the original effect chain.
 
-Jam uses a repeating arrangement query with absolute scheduling offsets and a
-runtime destination-tab exclusion. Take Stop leaves the loop intact; global Stop
-and leaving performance end it. Ordinary composition still stops at its last clip.
-Phrase suppression recompiles only the last applied source snapshot with the
-selected expression replaced by silence; ambiguity blocks suppression. Neither
-mechanism edits saved mix flags or draft source.
+## Library, imports and portability
 
-Simple mapped gain and low-pass controls carry slider identity through pattern
-context into dedicated voice AudioParams with 15 ms smoothing. This works for
-scheduled playback and performed voices without applying drafts. Modulated filters
-retain native scheduling; room/delay/envelope controls update next scheduled notes.
-Mapping feedback names these boundaries. Offline export uses ordinary Strudel
-rendering and snapshots the latest saved control values. A browser audio-capture
-regression verifies muting a sustained note through its live gain control.
+Generate and Import share one searchable library. Imports review file/folder/ZIP selections, retain original bytes and decode a playback WAV. SHA-256 identity reuses duplicate imports and restores missing files under existing identifiers. Pack and sample names are metadata, so renaming preserves code references.
 
-Sounds now separates Generate and Import while retaining one searchable library.
-Asset metadata supports upload, GitHub and recording provenance independently of
-the generation request schema. Legacy generated metadata and sample URLs remain
-valid. The store reports missing audio and removes a newly written audio file if
-its metadata cannot be committed.
+GitHub discovery resolves a branch/tag/commit before listing supported data blobs. Downloads are pinned to that commit and restricted to GitHub hosts, with bounded time and size. Truncated listings require a narrower folder; cancellation and per-file errors retain completed work. Repository code is never executed. See the [GitHub tree API](https://docs.github.com/en/rest/git/trees#get-a-tree) for upstream listing limits.
 
-The audio-take panel captures either the private performed-sound bus or a selected
-MediaStream input through an AudioWorklet. External setup requests permission,
-exposes reported channels and level metering, and defaults monitoring off. Internal
-capture requests no microphone permission. Both sources share count-in, duration
-limits, preview, trim, save and discard. Internal Stop offers a finishing tail;
-input loss retains received frames as incomplete. Saved PCM WAVs use stable library
-IDs and include tempo, offset and trim metadata. Hardware channel reporting still
-requires validation on the user's interface.
+Format v4 adds explicit asset references and migrates v1–v3 input. Project backups contain project JSON, referenced audio, available originals and a manifest identifying missing/external files. Restore creates a collision-safe session and refuses conflicting audio identities. Import review, MIDI proposals and unsaved audio recover separately from accepted project content.
 
-File/folder/ZIP import now reviews entries before committing them. Browser decoding
-produces a stereo WAV derivative while the server retains original bytes; SHA-256
-identity makes repeated imports reusable and restores missing audio under its old
-identifier. Packs carry folder metadata and can be renamed without changing sound
-IDs. ZIP review bounds file count and expansion size and rejects unsafe paths.
-Individual decode/upload errors remain visible alongside successful imports.
+## Verification boundaries
 
-Public GitHub import resolves the source to a commit, lists supported data blobs,
-and downloads only selected audio into the same review flow. Requests are confined
-to GitHub API/raw hosts, bounded in size/time, and never execute repository code.
-Slash-containing branch names are resolved before folder traversal. Truncated tree
-listings ask for a narrower folder; rate-limit and per-download failures are visible.
-See the [GitHub tree API](https://docs.github.com/en/rest/git/trees#get-a-tree) for
-upstream listing limits. Tests inject responses and verify revision pinning and
-local persistence without relying on external availability.
+Unit and browser fixtures cover phrase fidelity, explicit acceptance/undo, audible live gain, isolated audio capture, interruption/reload recovery, jam looping, upload/GitHub imports, duplicate reuse and backup restoration. The complete browser suite retains existing playback and export checks. Physical ALSA MIDI and audio-interface channel behavior require hardware verification; browser fixtures do not establish those results.
+
+Limits are visible in the UI: 64 MB per imported source file, 256 MB per pack/backup, 500 files per import review and 15 minutes per sample or recording. Browser decoder/input capabilities determine supported device channels and codec availability. Unsupported inputs/formats report errors without discarding valid takes or files.

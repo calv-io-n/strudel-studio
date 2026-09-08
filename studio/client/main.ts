@@ -1,3 +1,6 @@
+import { isolateHistory } from '@codemirror/commands';
+import { sampleInsertion } from '../shared/sample-insertion';
+import { assetReferences } from '../shared/asset-references';
 import { GitHubImports } from './github-imports';
 import { SampleImports } from './imports';
 import { RecordingPanel } from './recording';
@@ -27,7 +30,7 @@ try { document.documentElement.dataset.appearance = localStorage.getItem('studio
 const app = $('#app');
 app.innerHTML = `
 <header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Local project</span></div><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sounds</button><label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label></header>
-<details class="project-menu"><summary>Project</summary><nav class="sessionbar" aria-label="Project tools"><span class="section-label">Workspace</span><button id="save">Save project</button><button id="import">Import .strudel</button><button id="export">Export code</button><input type="file" id="import-file" accept=".strudel,.str,.js" hidden><span id="connection">Connecting…</span><button id="new-project">New project</button><a class="source-link" href="https://github.com/calv-io-n/strudel" target="_blank" rel="noopener noreferrer">Source code &amp; license ↗</a><a class="source-link" href="https://github.com/calv-io-n/strudel/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">AGPL-3.0-or-later ↗</a></nav></details>
+<details class="project-menu"><summary>Project</summary><nav class="sessionbar" aria-label="Project tools"><span class="section-label">Workspace</span><button id="save">Save project</button><button id="import">Import .strudel</button><button id="export">Export code</button><input type="file" id="import-file" accept=".strudel,.str,.js" hidden><span id="connection">Connecting…</span><button id="backup-project">Download project backup</button><button id="restore-backup">Restore project backup</button><input id="backup-file" type="file" accept=".zip" hidden><button id="new-project">New project</button><a class="source-link" href="https://github.com/calv-io-n/strudel" target="_blank" rel="noopener noreferrer">Source code &amp; license ↗</a><a class="source-link" href="https://github.com/calv-io-n/strudel/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">AGPL-3.0-or-later ↗</a></nav></details>
 <main class="workspace">
   <aside id="sounds-panel" class="sound-panel panel" hidden aria-label="Sound library"><div class="panel-heading"><h1>Sounds <small id="asset-count">0 sounds</small></h1><button id="sounds-close" class="quiet">Back to editor</button></div>
     <div class="form-row" role="tablist" aria-label="Sound sources"><button id="sound-import-tab" role="tab" aria-selected="true">Import</button><button id="sound-generate-tab" role="tab" aria-selected="false">Generate</button></div>
@@ -104,17 +107,18 @@ function getEditor(id = project.activeTabId) {
 }
 editor = getEditor();
 const engine = new Engine(getEditor, () => snapshot(), () => renderTransport(), (message) => notice(message, true));
-const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine);
+const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine, () => selectedProjectName || project.name, () => persistSession());
 $('#editor').after(performancePanel.root);
-const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true));
+const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { project.assetIds.push(asset.id); assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => performancePanel.stop());
+performancePanel.pendingAudio = () => recordingPanel.pending;
 $('#sound-import').append(recordingPanel.root);
-const sampleImports = new SampleImports(async asset => { assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true));
+const sampleImports = new SampleImports(async asset => { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
 $('#sound-import').append(sampleImports.root);
 $('#sound-import').append(new GitHubImports(sampleImports, message => notice(message, true)).root);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
-recordButton.onclick = guard(() => recordingPanel.open('external')); $('#sound-import').prepend(recordButton);
+recordButton.onclick = guard(async () => { await persistSession(); await recordingPanel.open('external'); }); $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
-recordSelected.onclick = guard(async () => { performancePanel.stop(); await recordingPanel.open('internal'); setSounds(true); soundSource('import'); });
+recordSelected.onclick = guard(async () => { performancePanel.stop(); await persistSession(); await recordingPanel.open('internal'); setSounds(true); soundSource('import'); });
 performancePanel.root.querySelector('[data-actions]')!.append(recordSelected);
 const performButton = document.createElement('button'); performButton.textContent = 'Play into selection';
 performButton.onclick = guard(() => performancePanel.arm());
@@ -309,7 +313,7 @@ function openSocket() {
   socket.onopen = () => { $('#connection').textContent = 'Studio connected'; connectProfiles(); };
   socket.onmessage = ({ data }) => {
     const message = JSON.parse(data);
-    if (message.type === 'status') { bridge = message; pickup.reset(); renderProfiles(); }
+    if (message.type === 'status') { if (bridge.connected.some(port => !message.connected.includes(port))) { performancePanel.globalStop(); void recordingPanel.stop(true); } bridge = message; pickup.reset(); renderProfiles(); }
     if (message.type === 'midi') void receive(message).catch((err) => notice(err.message, true));
     if (message.type === 'error') notice(message.message, true);
   };
@@ -361,7 +365,7 @@ async function renameSound(id: string) {
   await engine.registerAssets(assets); renderAssets(); renderSlots(); renderBindings();
 }
 $('#assets').onclick = (e) => { const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
-  if (button.dataset.recover) { setSounds(true); soundSource('import'); sampleImports.root.querySelector<HTMLInputElement>('[data-files]')!.click(); }
+  if (button.dataset.recover) { setSounds(true); soundSource('import'); sampleImports.recover(button.dataset.recover); }
   if (button.dataset.insertExisting) void guard(() => insertSound(button.dataset.insertExisting!))();
   if (button.dataset.renamePack) void guard(async () => { const name = await askEdit('Rename pack', assets.find(a => a.pack?.id === button.dataset.renamePack)?.pack?.name); if (name) { assets = await api<Asset[]>(`packs/${button.dataset.renamePack}`, 'PATCH', { name }); renderAssets(); } })();
   if (button.dataset.renameAsset) void guard(() => renameSound(button.dataset.renameAsset!))();
@@ -402,7 +406,7 @@ $('#generate-form').onsubmit = (e) => { e.preventDefault(); if (generationBusy) 
       let job = await api<Job>('generations', 'POST', { prompt: $('#prompt').value, duration: $('#duration').value ? Number($('#duration').value) : null, loop: $('#loop').checked });
       while (job.state === 'running') { await new Promise((resolve) => setTimeout(resolve, 1000)); job = await api<Job>(`generations/${job.id}`); }
       if (job.state === 'failed') throw new Error(job.error);
-      assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); selectedAsset = job.asset!.id; renderAssets();
+      assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); selectedAsset = job.asset!.id; if (!project.assetIds.includes(selectedAsset)) project.assetIds.push(selectedAsset); renderAssets(); dirty();
       $('#generation-status').textContent = 'Ready to preview and insert.';
     } catch (error) { $('#generation-status').textContent = error instanceof Error ? error.message : 'Generation failed.'; throw error; }
     finally { generationBusy = false; $('#generate').disabled = false; $('#generate').textContent = 'Generate sound'; }
@@ -452,6 +456,21 @@ function refreshProjects() {
 $('#saved-projects').onfocus = guard(refreshProjects);
 $('#saved-projects').onpointerdown = guard(refreshProjects);
 
+$('#backup-project').onclick = guard(async () => { const state = snapshot(); state.assetIds = assetReferences(state); const response = await fetch('/api/backups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state) }); if (!response.ok) throw new Error((await response.json()).error); const url = URL.createObjectURL(await response.blob()), link = document.createElement('a'); link.href = url; link.download = `${state.name.replace(/[^a-zA-Z0-9_-]/g, '-')}.studio.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); notice('Backup downloaded. Its manifest lists any missing or external files.'); });
+$('#restore-backup').onclick = () => $('#backup-file').click();
+$('#backup-file').onchange = guard(async () => {
+  const file = $('#backup-file').files?.[0]; if (!file) return;
+  if (file.size > 260_000_000) throw new Error('Backup exceeds 256 MB.');
+  if (recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Resolve pending takes before restoring a backup.');
+  await transitionSession(async () => {
+    await persistSession();
+    const response = await fetch('/api/backups/restore', { method: 'POST', body: file });
+    const result = await response.json(); if (!response.ok) throw new Error(result.error);
+    assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); await loadProject(result.project); await persistSession();
+    notice(result.missing.length ? `Restored with ${result.missing.length} missing assets; use Recover sound in Sounds.` : 'Project and audio restored.');
+    $('#backup-file').value = '';
+  });
+});
 $('#save').onclick = guard(async () => { await persistSession(); notice(`Saved ${snapshot().name}.`); });
 async function loadProject(next: Project) {
   if (recordingPanel.pending) throw new Error('Save or discard the pending audio take before switching sessions.');
@@ -460,7 +479,8 @@ async function loadProject(next: Project) {
   const validated = ProjectSchema.parse(next);
   // Preload before changing the running project. Missing assets are explicit, and
   // leave the current session intact instead of partially applying a load.
-  for (const slot of validated.slots) if (slot.active) await engine.preload(assetById(slot.active));
+  for (const slot of validated.slots) if (slot.active) { const asset = assets.find(a => a.id === slot.active); if (asset && !asset.missing) { try { await engine.preload(asset); } catch { asset.missing = true; } } }
+  for (const id of assetReferences(validated)) if (!assets.some(a => a.id === id)) assets.push({ id, label: `Missing sound ${id.slice(0, 8)}`, prompt: '', duration: null, loop: false, provider: 'upload', format: 'wav', createdAt: '', missing: true });
   releaseNotes(); engine.restore(validated);
   editors.forEach(e => e.view.destroy()); editors.clear(); $('#editor').replaceChildren();
   project = validated; selectedProjectName = validated.sessionId || ''; editor = getEditor();
@@ -488,7 +508,7 @@ function settleSlots(stopped = !engine.started) {
 }
 
 function startPlayback() { return engine.evaluate(true, $('#play-target').value === 'composition' ? 'composition' : project.activeTabId); }
-function stopPlayback() { void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
+function stopPlayback() { document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
 $('#play-target').onchange = renderTransport;
 $('#dark-mode').checked = document.documentElement.dataset.appearance === 'dark';
 $('#dark-mode').onchange = () => {
@@ -535,6 +555,7 @@ async function renameTab(id: string) {
 $('#rename-tab').onclick = guard(() => renameTab(project.activeTabId));
 $('#duplicate-tab').onclick = guard(() => duplicateTab(project.activeTabId));
 async function closeTab(id: string) {
+  if (performancePanel.take?.destination.tabId === id) { if (performancePanel.take.notes.length || recordingPanel.pending) throw new Error('Resolve the pending take before closing its destination tab.'); performancePanel.close(); }
   if (engine.busy) throw new Error('Wait for playback preparation to finish.');
   if (project.tabs.length === 1) throw new Error('Keep at least one pattern in the project.');
   const tab = project.tabs.find(t => t.id === id)!;
@@ -577,9 +598,9 @@ $('#new-project').onclick = guard(addSession);
 async function insertSound(id: string) {
   const targetEditor = editor;
   const asset = assetById(id); await engine.preload(asset);
-  const key = `studio_${asset.id.replaceAll('-', '')}`;
-  const code = `\n// ${asset.prompt.replace(/[\r\n]+/g, ' ')}\nsamples({ ${key}: [location.origin + '/api/samples/${asset.id}/audio'] })\n$: s("${key}").gain(0.5)\n`;
-  targetEditor.view.dispatch({ changes: { from: targetEditor.view.state.doc.length, insert: code } });
+  if (!project.assetIds.includes(id)) project.assetIds.push(id);
+  const change = sampleInsertion(targetEditor.code, targetEditor.view.state.selection.main.head, asset, project.bpm);
+  targetEditor.view.dispatch({ changes: change, userEvent: 'input.sample', annotations: isolateHistory.of('full') });
   setSounds(false); editor.view.focus(); notice(engine.started ? 'Sound inserted. Apply changes to hear it.' : 'Sound inserted. Press Play to hear it.');
 }
 $('#insert-sound').onclick = guard(() => selectedAsset ? insertSound(selectedAsset) : undefined);
@@ -753,6 +774,7 @@ async function boot() {
   try { const cached = localStorage.getItem(draftKey); if (cached) { restored = ProjectSchema.parse(JSON.parse(cached)); hasDraft = true; } } catch { /* Ignore invalid local drafts. */ }
   if (restored) { try { await loadProject(restored); $('#saved-state').textContent = 'Recovery restored'; } catch (error) { notice(`Recovery could not load: ${(error as Error).message}`, true); } }
   renderAll(); await refreshProjects(); openSocket(); booted = true;
+  try { performancePanel.restore(getEditor); await recordingPanel.restore(); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
   if (hasDraft) dirty();
   setInterval(() => {
     engine.tick(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = !engine.started || engine.target !== 'composition'; $('#playhead').style.left = `${180 + engine.cycle * 64}px`;

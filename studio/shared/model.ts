@@ -96,15 +96,17 @@ export const ProjectV3Schema = LegacyProjectSchema.omit({ code: true, anchors: t
   }
   if (p.bindings.some(b => b.target.kind === 'slider' && !tabs.has(b.target.tabId!))) issue('Slider mapping references a missing pattern');
 });
-export type Project = z.infer<typeof ProjectV3Schema>;
+export const ProjectV4Schema = z.object({ ...ProjectV3Schema.shape, version: z.literal(4), assetIds: z.array(z.string().uuid()).max(10000).default([]) }).superRefine((p, ctx) => { const result = ProjectV3Schema.safeParse({ ...p, version: 3 }); if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path }); });
+export type Project = z.infer<typeof ProjectV4Schema>;
 const migrateV2 = (p: z.infer<typeof ProjectV2Schema>) => ({ ...p, version: 3 as const, tracks: defaultTracks(), snap: 1 as const,
   tabs: p.tabs.map((t, i) => ({ ...t, color: palette[i % palette.length] })),
   clips: p.clips.map(({ lane, ...c }) => ({ ...c, trackId: `track-${lane + 1}`, muted: false })),
 });
-export const ProjectSchema = z.union([ProjectV3Schema, ProjectV2Schema.transform(migrateV2), LegacyProjectSchema.transform(({ code, anchors, ...p }) => migrateV2({
+const OlderProjectSchema = z.union([ProjectV3Schema, ProjectV2Schema.transform(migrateV2), LegacyProjectSchema.transform(({ code, anchors, ...p }) => migrateV2({
   ...p, version: 2, tabs: [{ id: 'pattern-1', name: 'Pattern 1', code, anchors }], activeTabId: 'pattern-1', clips: [], bpm: 120,
   bindings: p.bindings.map(b => b.target.kind === 'slider' ? { ...b, target: { ...b.target, tabId: 'pattern-1' } } : b),
 }))]).pipe(ProjectV3Schema);
+export const ProjectSchema = z.union([ProjectV4Schema, OlderProjectSchema.transform(p => ({ ...p, version: 4 as const, assetIds: [] as string[] }))]);
 export type MidiEvent = { source: string; bytes: number[]; receivedAt: number; sequence: number; route: 'alsa' | 'simulation' };
 export type BridgeStatus = { ready: boolean; message: string; ports: string[]; connected: string[] };
 export type Receipt = { sequence: number; bindingId: string; target: Target; status: string; value?: number; at: number };
@@ -112,7 +114,7 @@ export type Job = { id: string; state: 'running' | 'complete' | 'failed'; asset?
 
 export const defaultCode = `// Select an inline slider, then choose MIDI Learn.\nsetCpm(120/4)\n\n$beat: note("c2*4").s("triangle")\n  .decay(0.12).sustain(0)\n  .gain(slider(0.45, 0, 1, 0.01))\n\n$bass: note("<a2 f2 c3 g2>")\n  .s("sawtooth")\n  .lpf(slider(900, 100, 6000, 10))\n  .gain(0.18)\n\n// Open Sounds to generate and insert a sample.\n`;
 export function newProject(): Project {
-  return { version: 3, tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
+  return { version: 4, assetIds: [], tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
     profiles: [ { id: 'virtual', name: 'Virtual controller', port: 'studio:virtual', enabled: true },
       { id: 'external', name: 'External MIDI input', port: 'studio:input', enabled: true } ],
     slots: [{ name: 'bass', assets: [], active: null }],
