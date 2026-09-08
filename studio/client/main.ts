@@ -1,3 +1,4 @@
+import { effectBehavior } from './live-effects';
 import { PerformancePanel } from './performance';
 import { isClipMuted } from '../shared/mix';
 import { palette } from '../shared/model';
@@ -88,8 +89,8 @@ function getEditor(id = project.activeTabId) {
     $('#editor').append(root);
     instance = new StudioEditor(root, tab, {
       sounds: () => engine.soundEntries, functions: () => engine.functionNames,
-      change: () => { if (id === project.activeTabId) renderSliders(); renderBindings(); renderTransport(); dirty(); },
-      select: (sliderId) => { selectedSlider = sliderId; $('#slider-target').value = sliderId; $('#mapping-context').hidden = false; $('#slider-hint').textContent = 'Ready to map'; renderBindings(); },
+      change: () => { for (const slider of instance?.sliders ?? []) engine.liveEffects.update(slider.id, instance!.values.get(slider.id) ?? slider.value); if (id === project.activeTabId) renderSliders(); renderBindings(); renderTransport(); dirty(); },
+      select: (sliderId) => { selectedSlider = sliderId; $('#slider-target').value = sliderId; $('#mapping-context').hidden = false; $('#slider-hint').textContent = effectBehavior(instance!.sliders.find(s => s.id === sliderId)?.label ?? ''); renderBindings(); },
       evaluate: () => void guard(() => engine.started ? engine.apply() : startPlayback())(), stop: () => stopPlayback(),
     });
     editors.set(id, instance);
@@ -189,7 +190,7 @@ function renderBindings() {
   $('#mapping-count').textContent = String(project.bindings.length);
   $('#bindings').innerHTML = project.bindings.length ? project.bindings.map((b) => {
     const missing = b.target.kind === 'slider' && !getEditor(b.target.tabId).sliders.some((s) => s.id === (b.target as { sliderId: string }).sliderId);
-    return `<div data-binding="${escape(b.id)}" class="binding ${missing ? 'missing' : ''}"><div><strong>${escape(targetLabel(b.target))}</strong><span>${escape(project.profiles.find((p) => p.id === b.profileId)?.name ?? 'Missing device')} · CH ${b.channel} · ${b.kind.toUpperCase()} ${b.number}${b.pickup ? ' · pickup' : ''}</span></div><button data-remove-binding="${b.id}" aria-label="Remove binding">×</button></div>`;
+    return `<div data-binding="${escape(b.id)}" class="binding ${missing ? 'missing' : ''}"><div><strong>${escape(targetLabel(b.target))}</strong><span>${escape(project.profiles.find((p) => p.id === b.profileId)?.name ?? 'Missing device')} · CH ${b.channel} · ${b.kind.toUpperCase()} ${b.number}${b.pickup ? ' · pickup' : ''}${b.target.kind === 'slider' ? ' · ' + escape(effectBehavior(getEditor(b.target.tabId).sliders.find(s => s.id === (b.target as { sliderId: string }).sliderId)?.label ?? '')) : ''}</span></div><button data-remove-binding="${b.id}" aria-label="Remove binding">×</button></div>`;
   }).join('') : '<p class="empty small">No mappings yet.<br>Select an inline slider to get started.</p>';
   const selected = project.bindings.filter(b => b.target.kind === 'slider' && b.target.tabId === project.activeTabId && b.target.sliderId === selectedSlider);
   $('#selected-bindings').replaceChildren(...selected.map(b => $('#bindings').querySelector(`[data-binding="${CSS.escape(b.id)}"]`)!.cloneNode(true)));

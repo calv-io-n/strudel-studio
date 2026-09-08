@@ -111,3 +111,17 @@ test('loop queries repeat only eligible clips with continuous absolute timing', 
   }, process.cwd());
   expect(result).toEqual([[0, 1, 64], [1, 2, 64], [2, 3, 64]]);
 });
+
+test('mapped gain changes sustained audio without applying a draft', async ({ page, request }) => {
+  const project = newProject(); project.tabs[0].code = 'note(60).s("triangle").slow(8).gain(slider(0.3, 0, 1, 0.01))';
+  await request.put('/api/recovery', { data: project }); await installAudioCapture(page);
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await page.evaluate(() => window.neonCapture.start());
+  await page.getByRole('button', { name: 'Play', exact: true }).click(); await page.waitForTimeout(500);
+  const before = await page.evaluate(() => window.neonCapture.finish()); expect(before.peak).toBeGreaterThan(.01);
+  await page.getByRole('slider', { name: 'gain inline slider' }).fill('0');
+  await page.waitForTimeout(250); await page.evaluate(() => window.neonCapture.start()); await page.waitForTimeout(250);
+  const after = await page.evaluate(() => window.neonCapture.finish()); expect(after.peak).toBeLessThan(.001);
+  await expect(page.locator('#transport-state')).toContainText('Playing');
+  await page.getByRole('button', { name: 'Stop', exact: true }).click();
+});
