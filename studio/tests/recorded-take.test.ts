@@ -22,7 +22,7 @@ test('a recorded take creates a tab on the selected track, preserves timing and 
   assert.equal(placeRecordedTake(next, asset, id), next);
   assert.throws(() => checkTakeCapacity({ ...newProject(), tabs: Array.from({ length: 50 }, (_, i) => ({ ...newProject().tabs[0], id: `tab-${i}` })) }), /50-tab/);
 });
-test('recording commits audio and placement together, retries once, and rejects a stale project', async () => {
+test('recording commits audio and placement together, retries once, and preserves a conflicting recording as a copy', async () => {
   const project = await createProject(newProject()), id = identity(), audio = await recorded(id);
   await write([{ collection: 'pending', key: 'record-meta', value: id }]);
   const put = IDBObjectStore.prototype.put;
@@ -30,10 +30,12 @@ test('recording commits audio and placement together, retries once, and rejects 
   try { await assert.rejects(commitRecordedTake(project, id, [audio], 'record-meta')); }
   finally { IDBObjectStore.prototype.put = put; }
   assert.equal(await read('audio', id.assetId), undefined); assert.equal((await loadProject(project.sessionId!)).tabs.length, 1); assert.ok(await read('pending', 'record-meta'));
-  const next = await commitRecordedTake(project, id, [audio], 'record-meta');
+  const { project: next } = await commitRecordedTake(project, id, [audio], 'record-meta');
   assert.equal(next.tabs.length, 2); assert.ok(await read('audio', id.assetId)); assert.equal(await read('pending', 'record-meta'), undefined);
-  assert.equal((await commitRecordedTake(project, id, [audio], 'record-meta')).tabs.length, 2);
+  assert.equal((await commitRecordedTake(project, id, [audio], 'record-meta')).project.tabs.length, 2);
   await saveProject(next.sessionId!, { ...next, name: 'Newer edit' });
-  const other = identity(); await assert.rejects(commitRecordedTake(next, other, [await recorded(other)], 'other-meta'), /another tab/);
-  assert.equal(await read('audio', other.assetId), undefined);
+  const other = { ...identity(), trackId: 'track-1' }; const copied = await commitRecordedTake(next, other, [await recorded(other)], 'other-meta');
+  assert.equal(copied.kind, 'copied'); assert.ok(await read('audio', other.assetId));
+  assert.equal((await loadProject(next.sessionId!)).name, 'Newer edit');
+  assert.equal((await commitRecordedTake(next, other, [await recorded(other)], 'other-meta')).project.sessionId, copied.project.sessionId);
 });

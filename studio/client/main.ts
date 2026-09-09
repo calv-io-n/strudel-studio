@@ -1,3 +1,5 @@
+import { saveSession } from './storage/session-save';
+import { SessionDrafts } from './session-draft';
 import { AUDIO_EDITOR, defaultAudioCode, compileAudioEffects } from '../shared/audio-input';
 import { TimelineRecording } from './timeline-recording';
 import { commitRecordedTake } from './storage/recorded-take';
@@ -517,8 +519,10 @@ const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare
 timelineRecording = new TimelineRecording(engine, liveInput, snapshot, ensureAudioInput, async (identity, audio, metaKey) => {
   clearTimeout(saveTimer); await saveChain.catch(() => {});
   const state = snapshot();
-  const operation = commitRecordedTake(state, identity, audio, metaKey).then(async next => {
-    project = next; selectedProjectName = next.sessionId!;
+  const operation = commitRecordedTake(state, identity, audio, metaKey, acceptedProject ?? state).then(async result => {
+    const next = result.project; acceptedProject = structuredClone(next);
+    if (result.kind === 'copied') notice('Another tab changed this session. Your recording was saved in a conflict copy; both versions are kept.');
+    project = next; $('#project-name').value = next.name; selectedProjectName = next.sessionId!;
     assets = await workspace.assets(); await engine.registerAssets(assets);
     openTabs.add(identity.tabId); switchTab(identity.tabId); selectedTrack = identity.trackId;
     renderAll(); saveWorkspace(); cacheDraft(); await refreshProjects();
@@ -608,37 +612,49 @@ function snapshot(): Project {
   const applied = engine.appliedState();
   return { ...project, appliedPatterns: { ...project.appliedPatterns, ...applied.codes }, appliedPatternAnchors: { ...project.appliedPatternAnchors, ...applied.anchors }, sessionId: selectedProjectName || undefined, tabs: project.tabs.map(tab => { const e = editors.get(tab.id); return e ? { ...tab, code: e.code, anchors: e.anchors } : tab; }), name: $('#project-name').value.trim() || 'Untitled project' };
 }
-const draftKey = `studio.pending-session.${sessionStorage.getItem('studio.tab') || (() => { const id = crypto.randomUUID(); sessionStorage.setItem('studio.tab', id); return id; })()}`;
+let acceptedProject: Project | undefined;
+const sessionDrafts = new SessionDrafts();
 function cacheDraft() {
-  try { localStorage.setItem(draftKey, JSON.stringify(snapshot())); } catch { /* Disk saves still work if browser storage is full. */ }
+  if (!booted) return;
+  try { sessionDrafts.cache(snapshot(), acceptedProject); } catch { /* Saving and backups remain available if draft storage is full. */ }
 }
 function persistSession() {
   clearTimeout(saveTimer);
-  const revision = saveRevision;
-  const state = snapshot();
+  // Read the latest editor state when this queued operation starts, not before an older save finishes.
   const task = saveChain.catch(() => {}).then(async () => {
-    // Session transitions await this queue, so a new session acquires its identity only once.
-    const sessionId = state.sessionId || selectedProjectName;
-    const saved = sessionId
-      ? await workspace.saveProject(sessionId, { ...state, sessionId, revision: project.revision })
-      : await workspace.createProject(state);
-    selectedProjectName = saved.sessionId!;
-    project.sessionId = selectedProjectName; project.revision = saved.revision;
-    saveWorkspace(); cacheDraft();
-    await workspace.write([{ collection: 'settings', key: 'recovery', value: saved }]);
-    await refreshProjects();
-    if (revision === saveRevision) {
-      try { localStorage.removeItem(draftKey); } catch { /* unavailable storage */ }
-      $('#saved-state').textContent = 'Saved in this browser'; $('#saved-state').title = ''; lastSaveError = '';
+    const revision = saveRevision, state = snapshot(), base = acceptedProject ? structuredClone(acceptedProject) : undefined;
+    const result = await saveSession(state, base), saved = result.project;
+    const editedDuringSave = revision !== saveRevision;
+    if (result.kind === 'refreshed' && editedDuringSave) {
+      // Keep the old base: the next save must preserve these new edits as a copy.
+      cacheDraft(); return;
     }
+    acceptedProject = structuredClone(saved);
+    if (result.kind === 'refreshed') {
+      if (timelineRecording?.pending || recordingPanel.pending || midiComposition.pending || midiComposition.running || performancePanel.take?.notes.length) {
+        acceptedProject = base; cacheDraft(); return;
+      }
+      if (!await loadProject(saved, false, revision)) { acceptedProject = base; cacheDraft(); return; }
+      notice('Loaded the newer saved session from another tab.');
+    } else {
+      selectedProjectName = saved.sessionId!; project.sessionId = saved.sessionId; project.revision = saved.revision;
+      if (result.kind === 'copied') {
+        if ($('#project-name').value.trim() === state.name) { project.name = saved.name; $('#project-name').value = saved.name; }
+        notice('Another tab changed this session. Saved your edits as a conflict copy; both versions are kept.');
+      }
+    }
+    sessionStorage.setItem('studio.session', saved.sessionId!);
+    saveWorkspace(); cacheDraft(); await refreshProjects();
+    $('#saved-projects').value = selectedProjectName;
+    if (!editedDuringSave) { $('#saved-state').textContent = result.kind === 'copied' ? 'Saved as conflict copy' : 'Saved in this browser'; $('#saved-state').title = ''; lastSaveError = ''; }
   }).catch(error => {
+    cacheDraft();
     const message = error instanceof Error ? error.message : 'Request failed';
     $('#saved-state').textContent = 'Not saved · press Save to retry'; $('#saved-state').title = message;
     if (message !== lastSaveError) { lastSaveError = message; notice(`Couldn't save the session: ${message}`, true); }
     throw error;
   });
-  saveChain = task;
-  return task;
+  saveChain = task; return task;
 }
 let draftTimer: ReturnType<typeof setTimeout>;
 window.addEventListener('pagehide', cacheDraft);
@@ -1027,29 +1043,30 @@ $('#backup-file').onchange = guard(async () => {
     $('#backup-file').value = '';
   });
 });
-const saveNow = guard(async () => { await persistSession(); notice(`Saved ${snapshot().name}.`); });
+const saveNow = guard(() => persistSession());
 $('#save').onclick = saveNow; $('#save-now').onclick = saveNow;
 document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!e.repeat) void saveNow(); } }, true);
 $('.sessionbar').insertAdjacentHTML('beforeend', '<button id="save-copy">Save session as copy</button><button id="reload-session">Reload saved session</button><button id="delete-session">Delete session…</button>');
 $('#save-copy').onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish or save the recording first.'); clearTimeout(saveTimer); await saveChain.catch(() => {}); const next = await workspace.createProject({ ...snapshot(), sessionId: undefined }); await loadProject(next); await persistSession(); });
 $('#reload-session').onclick = guard(async () => { if (!selectedProjectName || !await askEdit('Reload saved session?', undefined, 'Your current draft will be replaced by the saved version.')) return; clearTimeout(saveTimer); await saveChain.catch(() => {}); await loadProject(await workspace.loadProject(selectedProjectName)); });
-$('#delete-session').onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish or save the recording first.'); if (!selectedProjectName || !await askEdit('Delete this session?', undefined, 'Audio stays in your library. Download a backup first if you need this arrangement.')) return; clearTimeout(saveTimer); await saveChain.catch(() => {}); await workspace.deleteProject(selectedProjectName, project.revision ?? 0); localStorage.removeItem(draftKey); await loadProject(await workspace.createProject(newProject())); await persistSession(); });
-async function loadProject(next: Project) {
+$('#delete-session').onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish or save the recording first.'); if (!selectedProjectName || !await askEdit('Delete this session?', undefined, 'Audio stays in your library. Download a backup first if you need this arrangement.')) return; clearTimeout(saveTimer); await saveChain.catch(() => {}); await workspace.deleteProject(selectedProjectName, project.revision ?? 0); sessionDrafts.clear(); await loadProject(await workspace.createProject(newProject())); await persistSession(); });
+async function loadProject(next: Project, markDirty = true, expectedRevision?: number) {
   if (midiComposition.pending || midiComposition.running) throw new Error('Accept or discard the MIDI takes before switching sessions.');
   if (timelineRecording?.pending) throw new Error('Finish or save the recording before switching sessions.');
   if (recordingPanel.pending) throw new Error('Save or discard the pending audio take before switching sessions.');
   midiComposition.close(); recordingPanel.discard(); performancePanel.close();
   contextMenu.close(false);
-  const validated = ProjectSchema.parse(next); instrumentFor(validated); instrumentOpen = false; audioOpen = false; liveInput.disconnect();
+  const validated = ProjectSchema.parse(next); const accepted = structuredClone(validated); instrumentFor(validated); instrumentOpen = false; audioOpen = false; liveInput.disconnect();
   // Preload before changing the running project. Missing assets are explicit, and
   // leave the current session intact instead of partially applying a load.
   for (const slot of validated.slots) if (slot.active) { const asset = assets.find(a => a.id === slot.active); if (asset && !asset.missing) { try { await engine.preload(asset); } catch { asset.missing = true; } } }
   for (const id of assetReferences(validated)) if (!assets.some(a => a.id === id)) assets.push({ id, label: `Missing sound ${id.slice(0, 8)}`, prompt: '', duration: null, loop: false, provider: 'upload', format: 'wav', createdAt: '', missing: true });
-  releaseNotes(); engine.restore(validated);
+  if (expectedRevision !== undefined && expectedRevision !== saveRevision) return false;
+  acceptedProject = accepted; releaseNotes(); engine.restore(validated);
   editors.forEach(e => e.view.destroy()); editors.clear(); $('#editor').replaceChildren();
-  project = validated; selectedProjectName = validated.sessionId || ''; editor = getEditor(); midiComposition.resetRange(); restoreWorkspace();
+  project = validated; selectedProjectName = validated.sessionId || ''; if (selectedProjectName) sessionStorage.setItem('studio.session', selectedProjectName); editor = getEditor(); midiComposition.resetRange(); restoreWorkspace();
   selectedSlider = undefined; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
-  $('#project-name').value = project.name; $('#mapping-context').hidden = true; pickup.reset(); ensureDeviceProfiles(); renderAll(); dirty();
+  $('#project-name').value = project.name; $('#mapping-context').hidden = true; pickup.reset(); ensureDeviceProfiles(); renderAll(); if (markDirty) dirty(); return true;
 }
 $('#saved-projects').onchange = guard(async () => {
   const name = $('#saved-projects').value; if (!name || name === selectedProjectName) return;
@@ -1456,18 +1473,33 @@ document.addEventListener('keydown', event => {
 });
 
 async function boot() {
+  await sessionDrafts.initialize();
   await engine.setup(project);
   await seedStarters(); await browserMidi.init(); void collectOrphanAudio().catch(() => {});
   const [library, recovery] = await Promise.all([workspace.assets(), workspace.read<Project>('settings', 'recovery')]);
   bridge = browserMidi.status; devicePorts = (await browserMidi.connections()).ports; assets = library; await engine.registerAssets(assets);
-  let restored = recovery ?? await workspace.loadProject('Neon-Drive');
-  let hasDraft = false;
-  try { const cached = localStorage.getItem(draftKey) ?? localStorage.getItem('studio.pending-session'); if (cached) { restored = ProjectSchema.parse(JSON.parse(cached)); hasDraft = true; } } catch { /* Ignore invalid local drafts. */ }
-  if (restored) { try { await loadProject(restored); $('#saved-state').textContent = recovery || hasDraft ? 'Recovery restored' : 'Saved in this browser'; } catch (error) { notice(`Recovery could not load: ${(error as Error).message}`, true); } }
+  let restored: Project;
+  const rememberedSession = sessionStorage.getItem('studio.session') || recovery?.sessionId;
+  if (rememberedSession) {
+    try { restored = await workspace.loadProject(rememberedSession); }
+    catch { restored = recovery ? (await saveSession({ ...recovery, revision: undefined })).project : await workspace.loadProject('Neon-Drive'); }
+  } else restored = await workspace.loadProject('Neon-Drive');
+  let draft, pendingDraft = false;
+  try { draft = sessionDrafts.read(); } catch { /* Keep unrecognized draft bytes for manual recovery. */ }
+  if (draft) {
+    try {
+      // An old raw draft without a base cannot overwrite a newer saved revision.
+      const result = await saveSession(draft.project, draft.base); restored = result.project;
+      if (result.kind === 'copied') notice('Recovered your draft as a conflict copy; the newer saved session is preserved.');
+      try { sessionDrafts.clear(); localStorage.removeItem('studio.pending-session'); } catch { /* optional cleanup */ }
+    } catch (error) { restored = draft.project; pendingDraft = true; notice(`Draft retained; saving is unavailable: ${(error as Error).message}`, true); }
+  }
+  await loadProject(restored, false);
+  if (pendingDraft) acceptedProject = draft?.base;
+  $('#saved-state').textContent = pendingDraft ? 'Not saved · draft retained' : draft ? 'Draft recovered and saved' : 'Saved in this browser';
   restoreWorkspace(); renderAll(); await refreshProjects(); await refreshMidiPresets(); await refreshAudioPresets(); connectMidiEvents(); booted = true; routePage();
   try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
   renderComposition();
-  if (hasDraft) dirty();
   setInterval(() => {
     liveInput.mix(); const levels = liveInput.levels(); for (const name of ['input', 'output'] as const) { const meter = $<HTMLMeterElement>(`#audio-${name}-level`); meter.value = levels[name]; meter.title = levels[name] >= 1 ? 'Clipping — reduce gain' : `${Math.round(levels[name] * 100)}%`; } engine.tick(); renderRecording(); paintRecordingClip(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = false; $('#playhead').style.left = `${180 + engine.timelinePosition * 64}px`; const head = document.querySelector<HTMLElement>('#seek-handle'); if (head && !timelineDragging) { head.style.left = `${180 + engine.timelinePosition * 64}px`; head.setAttribute('aria-valuenow', String(engine.timelinePosition)); }
     if (!instrumentOpen && engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }
