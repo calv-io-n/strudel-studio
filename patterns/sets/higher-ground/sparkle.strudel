@@ -1,0 +1,6 @@
+// Higher Ground · Sparkle · counterline · 176 BPM · C minor
+// A high arpeggio enters in the second half of each drop, adding lift without crowding the hook.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: note("<[ab3 c4 eb4 bb4 bb4 eb4 c4 ab3] [ab3 c4 eb4 bb4 bb4 eb4 c4 ab3] [bb3 d4 f4 c5 c5 f4 d4 bb3] [bb3 d4 f4 c5 c5 f4 d4 bb3] [c3 eb3 g3 bb3 bb3 g3 eb3 c3] [c3 eb3 g3 bb3 bb3 g3 eb3 c3] [eb3 g3 bb3 f4 f4 bb3 g3 eb3] [eb3 g3 bb3 f4 f4 bb3 g3 eb3]>").transpose(12).s("triangle").attack(.005).decay(.06).sustain(.15).release(.12).gain(0.04).hpf(900).pan(".25 .75 .4 .6").delay(.16).delaytime(0.255682).room(.18)

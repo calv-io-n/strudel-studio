@@ -1,0 +1,7 @@
+// Northern Lights · Melody · second flight · 174 BPM · E minor
+// Original eight-bar answering hook for the second drop.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[g5 ~ b5 a5 g5 f#5 e5 ~] [f#5 g5 b5 ~ a5 g5 e5 ~] [e5 ~ g5 b5 c6 b5 g5 ~] [e5 d5 c5 e5 g5 e5 d5 ~] [e5 ~ a5 g5 e5 c5 e5 ~] [g5 a5 c6 ~ b5 a5 g5 ~] [f#5 ~ a5 d6 a5 g5 f#5 e5] [d5 f#5 e5 b4 e5 ~ ~ ~]>").s(soundSlot("pluck")).transpose(-12).clip(1).attack(.008).release(.18).hpf(350).lpf(6200).gain(0.24).room(.2).delay(.2).delaytime(0.258621).delayfeedback(.28)
+$: note("<[g5 ~ b5 a5 g5 f#5 e5 ~] [f#5 g5 b5 ~ a5 g5 e5 ~] [e5 ~ g5 b5 c6 b5 g5 ~] [e5 d5 c5 e5 g5 e5 d5 ~] [e5 ~ a5 g5 e5 c5 e5 ~] [g5 a5 c6 ~ b5 a5 g5 ~] [f#5 ~ a5 d6 a5 g5 f#5 e5] [d5 f#5 e5 b4 e5 ~ ~ ~]>").s("sine").fm(.6).fmh(2).attack(.003).decay(.24).sustain(.08).release(.2).gain(0.056).pan(.4).room(.2)

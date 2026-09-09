@@ -1,0 +1,7 @@
+// Solar Tide · Drums · turnaround · 172 BPM · D minor
+// One-bar fill leaves space before the next phrase.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: s(soundSlot("snare")).struct("1 0 1 0 1 1 [1 1] [1 1 1 1]").gain(".25 .2 .3 .2 .32 .35 .38 .4").hpf(220)
+$: s(soundSlot("softkick")).struct("1 0 0 0").gain(.4)

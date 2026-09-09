@@ -1,0 +1,7 @@
+// Afterglow · Melody · second flight · 174 BPM · A minor
+// The answering phrase reverses every fourth bar; a brighter second drop.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[e5 ~ b4 c5 ~ a4 ~ e5] [g5 e5 ~ d5 c5 ~ b4 ~] [c5 ~ e5 g5 ~ e5 c5 ~] [a5 g5 e5 ~ c5 ~ a4 ~] [e5 g5 ~ b5 g5 ~ e5 ~] [d5 ~ e5 g5 ~ e5 c5 ~] [b4 d5 ~ a5 g5 ~ d5 ~] [e5 d5 b4 ~ a4 ~ ~ ~]>").s(soundSlot("pluck")).transpose(-12).lastOf(4, p => p.rev()).clip(1).attack(.008).release(.16).hpf(350).lpf(3200).gain(0.232).room(.2).delay(.18).delaytime(.25862).delayfeedback(.25)
+$: note("<[e5 ~ b4 c5 ~ a4 ~ e5] [g5 e5 ~ d5 c5 ~ b4 ~] [c5 ~ e5 g5 ~ e5 c5 ~] [a5 g5 e5 ~ c5 ~ a4 ~] [e5 g5 ~ b5 g5 ~ e5 ~] [d5 ~ e5 g5 ~ e5 c5 ~] [b4 d5 ~ a5 g5 ~ d5 ~] [e5 d5 b4 ~ a4 ~ ~ ~]>").s("sine").attack(.003).decay(.16).sustain(.1).release(.22).gain(0.08).room(.22)

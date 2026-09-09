@@ -1,0 +1,7 @@
+// Higher Ground · Melody · main hook · 176 BPM · C minor
+// Original eight-bar lead motif. Sample root C3 is corrected for Studio’s C2 default.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: note("<[eb5 eb5 ~ g5 ab5 ~ g5 eb5] [c5 ~ eb5 f5 g5 eb5 ~ ~] [f5 f5 ~ ab5 bb5 ~ ab5 f5] [d5 ~ f5 g5 ab5 f5 d5 ~] [g5 g5 ~ eb5 c5 ~ eb5 g5] [bb5 g5 eb5 ~ f5 eb5 c5 ~] [g5 bb5 ~ g5 f5 eb5 ~ g5] [f5 eb5 d5 ~ c5 ~ ~ ~]>").s(soundSlot("lead")).transpose(-12).clip(1).attack(.008).release(.18).hpf(350).lpf(7600).gain(0.208).room(.2).delay(.2).delaytime(0.255682).delayfeedback(.28)
+$: note("<[eb5 eb5 ~ g5 ab5 ~ g5 eb5] [c5 ~ eb5 f5 g5 eb5 ~ ~] [f5 f5 ~ ab5 bb5 ~ ab5 f5] [d5 ~ f5 g5 ab5 f5 d5 ~] [g5 g5 ~ eb5 c5 ~ eb5 g5] [bb5 g5 eb5 ~ f5 eb5 c5 ~] [g5 bb5 ~ g5 f5 eb5 ~ g5] [f5 eb5 d5 ~ c5 ~ ~ ~]>").s("sawtooth").attack(.014).decay(.11).sustain(.28).release(.16).hpf(500).lpf(4300).gain(0.04).pan(.62).room(.17)

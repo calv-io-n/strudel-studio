@@ -1,0 +1,7 @@
+// Skyline · Intro · hats · 174 BPM · B minor
+// A restrained pulse introduces the groove.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: s(soundSlot("hat")).struct("1 1 1 1 1 1 1 1").gain("0.104 0.048 0.08 0.048").hpf(2500)
+$: s(soundSlot("perc")).struct("0 0 0 1 0 0 1 0").gain(0.064).pan(.65)

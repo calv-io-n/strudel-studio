@@ -1,0 +1,7 @@
+// Solar Tide · Intro · hats · 172 BPM · D minor
+// A restrained pulse introduces the groove.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: s(soundSlot("hat")).struct("1 1 1 1 1 1 1 1").gain(".13 .06 .1 .06").hpf(2500)
+$: s(soundSlot("perc")).struct("0 0 0 1 0 0 1 0").gain(.08).pan(.65)

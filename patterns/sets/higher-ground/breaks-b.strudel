@@ -1,0 +1,6 @@
+// Higher Ground · Breaks · variation · 176 BPM · C minor
+// Alternate break adds movement under the second drop.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: s(soundSlot("breakC")).loopAt(2).hpf(650).lpf(10000).gain(0.136).lastOf(8, p => p.chop(16).rev())

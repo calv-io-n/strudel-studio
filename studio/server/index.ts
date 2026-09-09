@@ -15,6 +15,7 @@ import { parseMidi } from '../shared/midi';
 import { Store } from './store';
 import { Generator } from './generation';
 import { MidiBridge } from './bridge';
+import { MidiConnections } from './midi-connections';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 try { process.loadEnvFile(path.join(root, '.env')); } catch { /* Key is optional until generation. */ }
@@ -30,6 +31,17 @@ function publish(event: object) {
   for (const client of sockets.clients) if (client.readyState === WebSocket.OPEN) client.send(JSON.stringify(event));
 }
 const bridge = new MidiBridge(root, publish, process.env.STUDIO_DISABLE_MIDI === '1');
+const midiConnections = new MidiConnections(path.join(store.root, '.settings'), ports => {
+  bridge.connect(ports);
+  publish({ type: 'midi-connections', ports });
+});
+// Import explicitly enabled hardware choices once. Later session loads never change subscriptions.
+const legacyPorts = new Set<string>();
+for (const name of await store.projects()) {
+  try { for (const profile of (await store.load(name)).profiles) if (profile.enabled && !profile.port.startsWith('studio:')) legacyPorts.add(profile.port); }
+  catch { /* Ignore unrelated or invalid project files during the one-time migration. */ }
+}
+await midiConnections.init([...legacyPorts]);
 const json = (res: ServerResponse, status: number, data: unknown) => { res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
 async function body(req: IncomingMessage) {
   if (!req.headers['content-type']?.startsWith('application/json')) throw new Error('Expected application/json');
@@ -52,7 +64,9 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/recordings') return json(res, 201, await saveRecording(req, store));
     if (req.method === 'POST' && url.pathname === '/api/backups') { const bytes = await backupProject(parseProject(await body(req)), store); res.writeHead(200, { 'Content-Type': 'application/zip' }); return res.end(bytes); }
     if (req.method === 'POST' && url.pathname === '/api/backups/restore') { const chunks: Buffer[] = []; let size = 0; for await (const chunk of req) { size += chunk.length; if (size > 260_000_000) throw new Error('Backup exceeds 256 MB.'); chunks.push(chunk); } return json(res, 201, await restoreBackup(Buffer.concat(chunks), store)); }
-    if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, generation: { configured: generator.configured, fixture: generator.fixture }, format: PROJECT_FORMAT });
+    if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, midiConnections: midiConnections.ports, generation: { configured: generator.configured, fixture: generator.fixture }, format: PROJECT_FORMAT });
+    if (url.pathname === '/api/midi/connections' && req.method === 'GET') return json(res, 200, { ports: midiConnections.ports });
+    if (url.pathname === '/api/midi/connections' && req.method === 'POST') return json(res, 200, await midiConnections.update(await body(req)));
     if (req.method === 'GET' && url.pathname === '/api/feedback') return json(res, 200, { events, receipts, snapshot: studioSnapshot });
     if (req.method === 'GET' && url.pathname === '/api/samples') return json(res, 200, await store.assets());
     const packMatch = url.pathname.match(/^\/api\/packs\/([\da-f-]{36})$/i);
@@ -103,15 +117,14 @@ server.on('upgrade', (req, socket, head) => {
   if (!localRequest(req)) return socket.destroy();
   sockets.handleUpgrade(req, socket, head, (ws) => sockets.emit('connection', ws));
 });
-const clients = new Map<WebSocket, string[]>();
 sockets.on('connection', (ws) => {
+  ws.send(JSON.stringify({ type: 'midi-connections', ports: midiConnections.ports }));
   ws.send(JSON.stringify({ type: 'status', ...bridge.status }));
   ws.on('message', (raw) => {
     try {
       const message = JSON.parse(raw.toString());
       if (message.type === 'connect') {
-        clients.set(ws, z.array(z.string().max(300)).max(50).parse(message.ports));
-        bridge.connect([...new Set([...clients.values()].flat())]);
+        // Older open pages send their song's profiles here. Ignore those obsolete subscriptions.
       } else if (message.type === 'send' && parseMidi(message.bytes)) {
         if (message.simulate === true) bridge.receive({ source: 'studio:virtual', bytes: message.bytes, receivedAt: Date.now(), route: 'simulation' });
         else bridge.send(message.bytes);
@@ -123,7 +136,6 @@ sockets.on('connection', (ws) => {
       }
     } catch (error) { ws.send(JSON.stringify({ type: 'error', message: error instanceof Error ? error.message : 'Invalid MIDI request' })); }
   });
-  ws.on('close', () => { clients.delete(ws); bridge.connect([...new Set([...clients.values()].flat())]); });
 });
 bridge.start();
 server.listen(port, '127.0.0.1', () => {

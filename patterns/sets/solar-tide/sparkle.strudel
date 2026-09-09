@@ -1,0 +1,6 @@
+// Solar Tide · Sparkle · counterline · 172 BPM · D minor
+// A high arpeggio enters in the second half of each drop, adding lift without crowding the hook.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(172 / 4)
+
+$: note("<[bb3 d4 f4 a4 a4 f4 d4 bb3] [bb3 d4 f4 a4 a4 f4 d4 bb3] [f3 a3 c4 g4 g4 c4 a3 f3] [f3 a3 c4 g4 g4 c4 a3 f3] [c4 e4 g4 d5 d5 g4 e4 c4] [c4 e4 g4 d5 d5 g4 e4 c4] [d3 f3 a3 c4 c4 a3 f3 d3] [d3 f3 a3 c4 c4 a3 f3 d3]>").transpose(12).s("triangle").attack(.005).decay(.06).sustain(.15).release(.12).gain(.05).hpf(900).pan(".25 .75 .4 .6").delay(.16).delaytime(0.261628).room(.18)

@@ -1,0 +1,6 @@
+// Northern Lights · Breaks · rolling layer · 174 BPM · E minor
+// Two-bar recorded break locked to the composition tempo; low end removed.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: s(soundSlot("breakB")).loopAt(2).hpf(500).lpf(11000).gain(0.152).lastOf(8, p => p.chop(16).rev())

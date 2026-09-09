@@ -1,0 +1,6 @@
+// Afterglow · Bass · texture · 174 BPM · A minor
+// Recorded C2 bass: sampler default root is C2, so note values transpose correctly.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<a1 a1 f1 f1 c2 c2 g1 g1>").s(soundSlot("warmbass")).struct("1 0 0 1 0 1 0 0").clip(1).attack(.012).release(.08).hpf(160).lpf(900).gain(0.192)

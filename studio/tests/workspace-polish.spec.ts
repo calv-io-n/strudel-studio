@@ -1,3 +1,4 @@
+import { openController } from './helpers/controller';
 import { test, expect } from '@playwright/test';
 import { newProject } from '../shared/model';
 import { installAudioCapture } from './audio-capture';
@@ -68,7 +69,7 @@ test('MIDI auditions without capturing then explicitly captures and retains a ta
   await page.locator('.cm-content').getByText('note', { exact: true }).click();
   await page.getByRole('menuitem', { name: 'Play MIDI', exact: true }).click();
   await expect(page.locator('[data-midi-status]')).toContainText('Capture notes when ready');
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   const key = page.getByRole('button', { name: 'C4', exact: true });
   await page.evaluate(() => window.neonCapture.start());
   await key.hover(); await page.mouse.down(); await page.waitForTimeout(150); await page.mouse.up();

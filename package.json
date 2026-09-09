@@ -24,6 +24,7 @@
     "studio:app": "tsx studio/server/index.ts",
     "dev:watcher": "concurrently -n sam,watch -c blue,green \"npm run sampler\" \"npm run watch\"",
     "studio:demo": "tsx studio/server/demo.ts",
+    "studio:dnb": "tsx scripts/install-dnb.ts",
     "setup:watcher": "node scripts/setup-watcher.mjs",
     "setup:browser-tests": "playwright install chromium"
   },

@@ -1,0 +1,7 @@
+// First Light · FX · breath in · 174 BPM · F# minor
+// A two-bar swell leads into the next section.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: s(soundSlot("noise")).slow(2).clip(1).attack(2).release(.12).hpf(1500).gain(0.096)
+$: s(soundSlot("reverse")).struct("0 0 0 1").gain(0.136).hpf(700)

@@ -1,0 +1,6 @@
+// Northern Lights · Sparkle · counterline · 174 BPM · E minor
+// A high arpeggio enters in the second half of each drop, adding lift without crowding the hook.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[e3 g3 b3 f#4 f#4 b3 g3 e3] [e3 g3 b3 f#4 f#4 b3 g3 e3] [c3 e3 g3 b3 b3 g3 e3 c3] [c3 e3 g3 b3 b3 g3 e3 c3] [a3 c4 e4 g4 g4 e4 c4 a3] [a3 c4 e4 g4 g4 e4 c4 a3] [d3 f#3 a3 e4 e4 a3 f#3 d3] [d3 f#3 a3 e4 e4 a3 f#3 d3]>").transpose(12).s("triangle").attack(.005).decay(.06).sustain(.15).release(.12).gain(0.04).hpf(900).pan(".25 .75 .4 .6").delay(.16).delaytime(0.258621).room(.18)

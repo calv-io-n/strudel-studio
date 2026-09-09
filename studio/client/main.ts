@@ -98,14 +98,27 @@ $('.footer-hint').textContent = '';
 $('#mapping-context').append($('.mapping-setup'));
 const mappingClose = document.createElement('button'); mappingClose.textContent = 'Close mapping'; mappingClose.className = 'quiet';
 mappingClose.onclick = () => { $('#mapping-context').hidden = true; }; $('#mapping-context').prepend(mappingClose);
+const devices = document.createElement('section'); devices.id = 'devices-content'; devices.hidden = true;
+devices.setAttribute('aria-label', 'MIDI devices');
+devices.innerHTML = '<h2>MIDI devices</h2><p class="hint">Connect an external keyboard or controller. Connections stay active when you switch sessions.</p><p id="device-activity" role="status">Play a key or move a control to check input.</p>';
+const deviceControls = $('.devices');
+for (const child of [...deviceControls.children]) if (child.tagName !== 'SUMMARY') devices.append(child);
+deviceControls.remove(); $('#drawer').append(devices);
+const deviceButton = document.createElement('button'); deviceButton.dataset.drawer = 'devices'; deviceButton.textContent = 'MIDI devices';
+deviceButton.setAttribute('aria-expanded', 'false'); deviceButton.setAttribute('aria-controls', 'devices-content');
+$('[data-drawer="midi"]').before(deviceButton);
+$('[data-drawer="midi"]').textContent = 'On-screen controller'; $('.sessionbar').append($('[data-drawer="midi"]'));
+$('.controller-panel h2').textContent = 'On-screen controller';
+$('#reconnect').textContent = 'Refresh devices';
 $('#midi-content').append($('.controller-panel'));
 const advanced = document.createElement('details'); advanced.className = 'midi-advanced';
-advanced.innerHTML = '<summary>Devices, mappings & advanced controls</summary>';
+advanced.innerHTML = '<summary>Mappings, sound slots & diagnostics</summary>';
 advanced.append($('.mapping-panel'), $('.monitor-panel')); $('#midi-content').append(advanced);
 
 let project: Project = newProject();
 let openTabs = new Set(project.tabs.map(t => t.id));
 let assets: Asset[] = [];
+let devicePorts: string[] = [];
 let selectedAsset: string | undefined;
 let selectedSound: string | undefined;
 let libraryTarget: { owner: StudioEditor; code: string; from: number; to: number } | undefined;
@@ -340,7 +353,11 @@ function assetById(id: string) { const asset = assets.find((a) => a.id === id); 
 function assetLabel(id: string) { const asset = assets.find((a) => a.id === id); return asset ? soundLabel(asset) : 'Missing sample'; }
 function targetLabel(target: Target) { return target.kind === 'slider' ? getEditor(target.tabId).sliders.find((s) => s.id === target.sliderId)?.label ?? 'Missing slider • rebind' : target.kind === 'swap' ? `${target.slot} ← ${assetLabel(target.assetId)}` : `Trigger ${assetLabel(target.assetId)}`; }
 function send(value: object) { if (socket?.readyState !== WebSocket.OPEN) throw new Error('Studio connection is offline.'); socket.send(JSON.stringify(value)); }
-function connectProfiles() { if (socket?.readyState === WebSocket.OPEN) send({ type: 'connect', ports: project.profiles.filter((p) => p.enabled && !p.port.startsWith('studio:')).map((p) => p.port) }); }
+function ensureDeviceProfiles() {
+  for (const port of devicePorts) if (project.profiles.length < 50 && !project.profiles.some(profile => profile.port === port)) {
+    project.profiles.push({ id: crypto.randomUUID(), name: port, port, enabled: true });
+  }
+}
 function renderTransport() {
   const playing = engine.started;
   $('#composition-play').disabled = playing || engine.busy || !project.clips.length;
@@ -379,10 +396,19 @@ function renderBindings() {
 
 }
 function renderProfiles() {
-  $('#bridge-status').textContent = bridge.message;
-  $('#profiles').innerHTML = project.profiles.map((p) => `<div class="profile"><label class="check"><input type="checkbox" data-profile-enable="${escape(p.id)}" ${p.enabled ? 'checked' : ''}>${escape(p.name)}</label><span>${p.port.startsWith('studio:') ? (bridge.ready ? 'Ready' : 'No ALSA') : bridge.connected.includes(p.port) ? 'Connected' : 'Disconnected'}</span>${p.port.startsWith('studio:') ? '' : `<select data-profile-port="${p.id}" aria-label="Reassign ${escape(p.name)}">${[...new Set([p.port, ...bridge.ports])].map((port) => `<option ${port === p.port ? 'selected' : ''}>${escape(port)}</option>`).join('')}</select><input data-profile-name="${p.id}" aria-label="Profile name" value="${escape(p.name)}">`}</div>`).join('');
-  $('#available-ports').innerHTML = '<option value="">Choose input…</option>' + bridge.ports.map((p) => `<option>${escape(p)}</option>`).join('');
-  $('#manual-profile').innerHTML = project.profiles.map((p) => `<option value="${p.id}">${escape(p.name)}</option>`).join('');
+  ensureDeviceProfiles();
+  const available = $('#available-ports').value;
+  $('#bridge-status').textContent = bridge.ready ? 'Choose an input below. Unplugged devices reconnect automatically when available.' : bridge.message;
+  $('#profiles').innerHTML = devicePorts.map(port => {
+    const connected = bridge.connected.includes(port);
+    const status = connected ? 'Connected' : !bridge.ready ? 'Bridge unavailable' : bridge.ports.includes(port) ? 'Connecting…' : 'Waiting for device';
+    return `<div class="device-connection"><div><strong>${escape(port)}</strong><span>${status}</span></div><button data-disconnect-port="${escape(port)}" aria-label="Disconnect ${escape(port)}">Disconnect</button></div>`;
+  }).join('') || '<p class="hint">No external devices connected. Plug in your controller, then choose its MIDI input.</p>';
+  $('#available-ports').innerHTML = '<option value="">Choose MIDI input…</option>' + bridge.ports.filter(port => !devicePorts.includes(port)).map(port => `<option>${escape(port)}</option>`).join('');
+  if (bridge.ports.includes(available) && !devicePorts.includes(available)) $('#available-ports').value = available;
+  $('#available-ports').disabled = !bridge.ready;
+  $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value;
+  $('#manual-profile').innerHTML = project.profiles.map(p => `<option value="${p.id}">${escape(p.name)}</option>`).join('');
   renderRoute();
 }
 function renderRoute() {
@@ -478,7 +504,10 @@ async function receive(event: MidiEvent) {
   const midi = parseMidi(event.bytes); if (!midi) return;
   eventRows.unshift(`<div><span>${new Date(event.receivedAt).toLocaleTimeString()}</span><b>${event.route === 'alsa' ? 'ALSA' : 'SIM'}</b><span>CH ${midi.channel} ${midi.kind.toUpperCase()} ${midi.number}</span><strong>${midi.value}</strong></div>`);
   eventRows = eventRows.slice(0, 30); $('#events').innerHTML = eventRows.join('');
-  const profile = project.profiles.find((p) => p.port === event.source && p.enabled);
+  if (!event.source.startsWith('studio:') && !devicePorts.includes(event.source)) return;
+  ensureDeviceProfiles();
+  const profile = project.profiles.find(p => p.port === event.source && (p.enabled || !p.port.startsWith('studio:')));
+  if (profile && !event.source.startsWith('studio:')) $('#device-activity').textContent = `${event.source} · Channel ${midi.channel} · ${midi.kind === 'note' ? 'Note' : 'CC'} ${midi.number} · ${midi.value}`;
   if (!profile) return;
   if (libraryMidi && !$('#sounds-panel').hidden) { if (midi.kind === 'note') await libraryNote(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on); return; }
   if (midi.kind === 'note' && await midiComposition.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
@@ -506,15 +535,16 @@ async function receive(event: MidiEvent) {
 }
 function openSocket() {
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/midi`);
-  socket.onopen = () => { $('#connection').textContent = 'Studio connected'; connectProfiles(); };
+  socket.onopen = () => { $('#connection').textContent = 'Studio connected'; };
   socket.onmessage = ({ data }) => {
     const message = JSON.parse(data);
-    if (message.type === 'status') { if (bridge.connected.some(port => !message.connected.includes(port))) { midiComposition.finish(); performancePanel.globalStop(); void recordingPanel.stop(true); } bridge = message; pickup.reset(); renderProfiles(); }
+    if (message.type === 'status') { if (bridge.connected.some(port => !message.connected.includes(port))) { engine.releaseInputNotes(); stopLibraryNotes(); midiComposition.finish(); performancePanel.globalStop(); void recordingPanel.stop(true); } bridge = message; pickup.reset(); renderProfiles(); }
+    if (message.type === 'midi-connections') { devicePorts = message.ports; ensureDeviceProfiles(); renderProfiles(); renderBindings(); }
     if (message.type === 'midi') void receive(message).catch((err) => notice(err.message, true));
     if (message.type === 'error') notice(message.message, true);
     if (message.type === 'library') void guard(async () => { assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); renderAssets(); renderSlots(); notice(`Library pack ready: ${message.pack} (${message.added} sounds)`); })();
   };
-  socket.onclose = () => { stopLibraryNotes(); midiComposition.finish(); performancePanel.stop(); $('#connection').textContent = 'Reconnecting…'; pickup.reset(); setTimeout(openSocket, 1500); };
+  socket.onclose = () => { engine.releaseInputNotes(); stopLibraryNotes(); midiComposition.finish(); performancePanel.stop(); $('#connection').textContent = 'Reconnecting…'; pickup.reset(); setTimeout(openSocket, 1500); };
 }
 function virtualSend(id: string, value: number, off = false) {
   const control = project.controls.find((c) => c.id === id)!;
@@ -536,19 +566,20 @@ $('#manual-map').onsubmit = (e) => { e.preventDefault(); void guard(() => {
 })(); };
 $('#route').onchange = renderRoute;
 $('#reconnect').onclick = guard(() => api('midi/reconnect', 'POST', {}));
-$('#add-profile').onclick = guard(() => {
+$('#available-ports').onchange = () => { $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value; };
+$('#add-profile').onclick = guard(async () => {
   const port = $('#available-ports').value; if (!port) throw new Error('Select a MIDI input port.');
-  if (!project.profiles.some((p) => p.port === port)) project.profiles.push({ id: crypto.randomUUID(), name: port, port, enabled: true });
-  connectProfiles(); renderProfiles(); dirty();
+  const result = await api<{ ports: string[] }>('midi/connections', 'POST', { port, connected: true });
+  devicePorts = result.ports; ensureDeviceProfiles(); renderProfiles(); renderBindings(); dirty();
 });
-$('#profiles').onchange = (e) => {
-  const input = e.target as HTMLInputElement;
-  const id = input.dataset.profileEnable ?? input.dataset.profilePort ?? input.dataset.profileName;
-  const profile = project.profiles.find((p) => p.id === id); if (!profile) return;
-  if (input.dataset.profileEnable) profile.enabled = input.checked;
-  else if (input.dataset.profilePort) profile.port = input.value;
-  else profile.name = input.value.trim() || profile.port;
-  pickup.reset(); connectProfiles(); renderBindings(); dirty();
+$('#profiles').onclick = e => {
+  const port = (e.target as HTMLElement).closest<HTMLElement>('[data-disconnect-port]')?.dataset.disconnectPort;
+  if (!port) return;
+  void guard(async () => {
+    const result = await api<{ ports: string[] }>('midi/connections', 'POST', { port, connected: false });
+    devicePorts = result.ports; engine.releaseInputNotes(); releaseNotes(); renderProfiles(); pickup.reset();
+    $('#device-activity').textContent = 'Device disconnected.';
+  })();
 };
 const removeBinding = (e: MouseEvent) => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-remove-binding]')?.dataset.removeBinding; if (id) { project.bindings = project.bindings.filter((b) => b.id !== id); renderBindings(); dirty(); } };
 $('#bindings').onclick = removeBinding; $('#selected-bindings').onclick = removeBinding;
@@ -686,7 +717,7 @@ async function loadProject(next: Project) {
   editors.forEach(e => e.view.destroy()); editors.clear(); $('#editor').replaceChildren();
   project = validated; selectedProjectName = validated.sessionId || ''; editor = getEditor(); midiComposition.resetRange(); restoreWorkspace();
   selectedSlider = undefined; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
-  $('#project-name').value = project.name; $('#mapping-context').hidden = true; pickup.reset(); renderAll(); connectProfiles(); dirty();
+  $('#project-name').value = project.name; $('#mapping-context').hidden = true; pickup.reset(); ensureDeviceProfiles(); renderAll(); dirty();
 }
 $('#saved-projects').onchange = guard(async () => {
   const name = $('#saved-projects').value; if (!name || name === selectedProjectName) return;
@@ -726,7 +757,7 @@ function restoreWorkspace() {
   openTabs = new Set(Array.isArray(saved.openTabs) ? saved.openTabs.filter((id: string) => project.tabs.some(t => t.id === id)) : project.tabs.map(t => t.id));
   if (openTabs.size && !openTabs.has(project.activeTabId)) { project.activeTabId = [...openTabs][0]; editor = getEditor(); }
   resizeDrawer(Number(saved.height) || Math.min(300, window.innerHeight * .38)); document.body.dataset.expanded = ['editor', 'composition'].includes(saved.expanded) ? saved.expanded : '';
-  if (!$('#sounds-panel').hidden) setSounds(false); setDrawer(saved.view === null ? undefined : saved.view === 'midi' || saved.view === 'export' ? saved.view : 'composition');
+  if (!$('#sounds-panel').hidden) setSounds(false); setDrawer(saved.view === null ? undefined : saved.view === 'midi' || saved.view === 'devices' || saved.view === 'export' ? saved.view : 'composition');
   for (const name of ['editor', 'composition']) $(`#expand-${name}`).textContent = document.body.dataset.expanded === name ? 'Restore split' : 'Expand';
 }
 function renderPatterns() {
@@ -859,12 +890,12 @@ $('#sounds-panel').addEventListener('keydown', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#sounds-panel').hidden && !document.querySelector('dialog[open]')) setSounds(false); $('#mapping-context').hidden = true; } });
 const openExport = setupExport($('#export-content'), snapshot, () => assets);
-type DrawerView = 'composition' | 'midi' | 'export';
+type DrawerView = 'composition' | 'midi' | 'devices' | 'export';
 let drawerView: DrawerView | undefined;
 let drawerHeight = 300;
 function setDrawer(view?: DrawerView) {
   drawerView = view; $('#drawer').hidden = !view;
-  $('#composition-content').hidden = view !== 'composition'; $('#midi-content').hidden = view !== 'midi'; $('#export-content').hidden = view !== 'export';
+  $('#devices-content').hidden = view !== 'devices'; $('#composition-content').hidden = view !== 'composition'; $('#midi-content').hidden = view !== 'midi'; $('#export-content').hidden = view !== 'export';
   $('#expand-editor').hidden = !view && document.body.dataset.expanded !== 'editor';
   if (view === 'export') openExport();
   document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.setAttribute('aria-expanded', String(b.dataset.drawer === view)));
@@ -1068,9 +1099,9 @@ document.addEventListener('keydown', event => {
 async function boot() {
   await engine.setup(project);
   const [status, library, recovery] = await Promise.all([
-    api<{ bridge: BridgeStatus; generation: { configured: boolean; fixture: boolean }; format?: number }>('status'), api<Asset[]>('samples'), api<Project | null>('recovery'),
+    api<{ bridge: BridgeStatus; midiConnections?: string[]; generation: { configured: boolean; fixture: boolean }; format?: number }>('status'), api<Asset[]>('samples'), api<Project | null>('recovery'),
   ]);
-  bridge = status.bridge; assets = library; await engine.registerAssets(assets);
+  bridge = status.bridge; devicePorts = status.midiConnections || []; assets = library; await engine.registerAssets(assets);
   if (status.format !== newProject().version) notice(`The Studio server is running older code (project format ${status.format ?? 'unknown'}; this page expects ${newProject().version}). Restart npm run dev, then reload.`, true);
   $('#generation-status').textContent = status.generation.fixture ? 'Test fixture mode. No ElevenLabs credits are used.' : status.generation.configured ? 'ElevenLabs connected · generated locally into your library' : 'Add ELEVENLABS_API_KEY to .env, then restart to generate.';
   $('#generate').disabled = !status.generation.configured && !status.generation.fixture;

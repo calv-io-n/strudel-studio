@@ -1,0 +1,6 @@
+// Skyline · Atmosphere · dissolve · 174 BPM · B minor
+// Open-fifth pad tuned from F to each chord root; two-bar fades keep the texture smooth.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: s(soundSlot("pad")).speed("<1.41421356 1.12246205 0.84089642 1.25992105>").slow(2).clip(1).attack(.8).release(.6).hpf(500).lpf(3000).gain("<0.056 0.04 0.024 0.008>").room(.28)

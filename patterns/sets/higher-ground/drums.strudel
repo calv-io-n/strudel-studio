@@ -1,0 +1,13 @@
+// Higher Ground · Drums · groove · 176 BPM · C minor
+// Two-step kick/snare with quieter ghost notes and alternating hats.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(176 / 4)
+
+$: stack(
+  s(soundSlot("kick")).struct("1 0 1 0 0 0 1 0").gain(0.512),
+  s(soundSlot("snare")).struct("0 1 0 1").gain(0.512),
+  s(soundSlot("snare")).struct("0 0 0 0 0 0 0 1").gain(0.088),
+  s(soundSlot("hat")).struct("1 1 1 1 1 1 1 1").gain("0.176 0.088 0.152 0.096 0.176 0.08 0.16 0.104").pan(".42 .58"),
+  s(soundSlot("openhat")).struct("0 0 1 0 0 0 1 0").gain(0.128).hpf(450),
+  s(soundSlot("perc")).struct("0 0 0 1 0 0 0 1").gain(0.112).pan(.65)
+).lastOf(8, p => p.struct("1 1 1 [1 1]")).postgain(.65)

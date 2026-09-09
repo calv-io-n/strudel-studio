@@ -3,9 +3,9 @@
 ## Workspace
 
 - Write in named pattern tabs. Use **+** to add a pattern. Right-click a tab for Color, Rename, Duplicate, Add to composition, or Close; **•••** also offers these actions.
-- Choose **Current tab** or **Composition**, then Play. Stop silences playback, previews, and held notes.
+- Use **Play pattern** below the editor or **Play composition** in the timeline. Stop silences playback, previews, and held notes.
 - Typed code changes wait for **Apply changes** (Ctrl+Enter). MIDI and inline sliders affect the sound immediately. Code-defined tempo changes take effect on the next Play.
-- Open **Composition**, **Virtual MIDI**, or **Export** from the footer. Click the active view again to return to the editor. The drawer remembers its view and height.
+- Open **Composition** or **MIDI devices** from the footer. **Project** contains **On-screen controller** and **Export**. Click the active view again to return to the editor. The drawer remembers its view and height.
 - The **moon/sun toggle** in the top bar switches the entire workspace and editor; light is the default. The choice is remembered in this browser.
 
 ## Composition
@@ -26,13 +26,15 @@ Structural edits require stopped playback. Each clip starts its source pattern f
 
 Select an inline slider, choose **MIDI Learn**, then move a virtual or physical knob. Browser controls work without MIDI hardware. Unassigned keyboard notes play a simple synth.
 
-Virtual MIDI contains the device settings, mappings, sound slots, and diagnostics under **Devices, mappings & advanced controls**. OS MIDI uses the existing Python/ALSA bridge; see [setup](setup.md) for bridge installation. Hardware support requires a host with ALSA MIDI available.
+**MIDI devices** is for connecting external keyboards and controllers. Select an input and choose **Connect**; each saved input shows Connected, Connecting, or Waiting for device, with an explicit **Disconnect** action. Input activity confirms arriving notes and CC messages. Connections are installation-wide: opening a new song or browser cannot clear them. Replugging a selected device reconnects it automatically. **Refresh devices** restarts the bridge while retaining the selection.
+
+**Project → On-screen controller** contains the browser keyboard, knobs and sliders, plus **Mappings, sound slots & diagnostics**. Inline **MIDI Learn** continues to work with physical or on-screen controls. The Browser/OS loopback route applies only to the on-screen controller. External inputs use the Python/ALSA bridge independently; see [setup](setup.md).
 
 ## Sounds
 
 Set `ELEVENLABS_API_KEY` in `.env` and restart Studio to enable generation. Keep the key on the server.
 
-**Sample library** is a drawer view beside Composition and Virtual MIDI: open it from the footer or by clicking a sound name in your code, and keep editing or playing while it is open. Each sound has **Insert** (or **Swap** when you opened it from a sound name), a preview button, and **Live**, which plays that sound from your MIDI controller or the test keys without recording anything. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Describe a sound, generate, preview, and **Insert into pattern**. Duration is optional; looping defaults off. Inserting does not start playback or apply a running draft. Existing sample-to-pad and sound-slot assignment is available under the selected sound's advanced controls.
+**Sample library** is a drawer view alongside Composition and MIDI devices: open it from the top bar or by clicking a sound name in your code, and keep editing or playing while it is open. Each sound has **Insert** (or **Swap** when you opened it from a sound name), a preview button, and **Live**, which plays that sound from your MIDI controller or the test keys without recording anything. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Describe a sound, generate, preview, and **Insert into pattern**. Duration is optional; looping defaults off. Inserting does not start playback or apply a running draft. Existing sample-to-pad and sound-slot assignment is available under the selected sound's advanced controls.
 
 Type inside `s("…")` or `sound("…")` to find sounds by name or label; use arrow keys and **Tab** to complete. **Ctrl+Space** opens suggestions and **Escape** dismisses them. Typing after a dot suggests effects such as reverb and filters. Saved sound labels can be renamed in the Sounds panel.
 
@@ -42,11 +44,11 @@ Generated sounds are stored in `samples/ai/`. The app never generates automatica
 
 Use **+ beside Sessions** to create a named session; Enter or Confirm creates it. Press **Ctrl+S** (Cmd+S on macOS) or the **Save** button beside the save status to save immediately. Sessions also autosave to `.studio/projects/` and retain their identity and dropdown selection after reload. Switching sessions saves pending edits first. A local browser draft protects edits during interrupted saves; **Project → Save project** retries a failed save. Recovery is also saved to `.studio/projects/recovery.json`. Projects include all tabs, clips, mappings, slots, and controller values. Sounds remain in the local sound library, so retain that folder when backing up projects.
 
-Older single-pattern and two-lane projects migrate to format v4 when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab asks before removing its code, clips, and mappings.
+Older single-pattern and two-lane projects migrate to format v5 when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab hides it from the editor strip; deleting a pattern removes its code, clips and mappings after confirmation.
 
 ## Audio export
 
-Open **Export** beside Virtual MIDI, choose **Full composition**, and click **Render & download WAV**. The offline renderer exports stereo 44.1 kHz, 16-bit audio with an adjustable effect tail (three seconds by default). You can also render a chosen number of cycles from the current tab. Rendering captures current code, slider values, sound slots, and track/clip mute settings without interrupting playback; progress and cancellation are available. Maximum export length is fifteen minutes.
+Open **Project → Export**, choose **Full composition**, and click **Render & download WAV**. The offline renderer exports stereo 44.1 kHz, 16-bit audio with an adjustable effect tail (three seconds by default). You can also render a chosen number of cycles from the current tab. Rendering captures current code, slider values, sound slots, and track/clip mute settings without interrupting playback; progress and cancellation are available. Maximum export length is fifteen minutes.
 
 ## Perform, review and keep a take
 

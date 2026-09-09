@@ -1,3 +1,4 @@
+import { openController } from './helpers/controller';
 import { test, expect } from '@playwright/test';
 import { newProject } from '../shared/model';
 
@@ -50,7 +51,7 @@ test('library search resets when reopened and counts show shown of total', async
 
 test('library overlays the previous view and restores interaction when closed', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   await expect(page.locator('#midi-content')).toBeVisible();
   await page.locator('.cm-content').getByText('"sawtooth"', { exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Sample library' })).toBeVisible();
@@ -72,7 +73,7 @@ test('capture waits for the first note instead of counting down immediately', as
   await expect(page.locator('[data-state]')).toContainText('play a note to start');
   await page.waitForTimeout(1200);
   await expect(page.locator('[data-state]')).toContainText('play a note to start');
-  await page.getByRole('button', { name: 'Virtual MIDI', exact: true }).click();
+  await openController(page);
   const key = page.getByRole('button', { name: 'E4', exact: true });
   await key.hover(); await page.mouse.down(); await page.waitForTimeout(150); await page.mouse.up();
   await expect(page.locator('[data-state]')).toContainText('1 note captured');

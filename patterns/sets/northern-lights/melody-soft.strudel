@@ -1,0 +1,7 @@
+// Northern Lights · Melody · distant · 174 BPM · E minor
+// Original eight-bar lead motif. Sample root C3 is corrected for Studio’s C2 default.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<[b4 ~ e5 ~ g5 f#5 e5 ~] [d5 e5 b4 ~ a4 b4 ~ ~] [g4 ~ c5 e5 ~ g5 e5 d5] [b4 c5 e5 ~ d5 c5 b4 ~] [a4 ~ c5 e5 ~ g5 a5 g5] [e5 d5 c5 ~ b4 a4 c5 ~] [a4 ~ d5 f#5 ~ a5 g5 f#5] [e5 d5 b4 ~ e5 ~ ~ ~]>").s(soundSlot("pluck")).transpose(-12).clip(1).attack(.008).release(.18).hpf(350).lpf(2000).gain(0.072).room(.2).delay(.2).delaytime(0.258621).delayfeedback(.28)
+$: note("<[b4 ~ e5 ~ g5 f#5 e5 ~] [d5 e5 b4 ~ a4 b4 ~ ~] [g4 ~ c5 e5 ~ g5 e5 d5] [b4 c5 e5 ~ d5 c5 b4 ~] [a4 ~ c5 e5 ~ g5 a5 g5] [e5 d5 c5 ~ b4 a4 c5 ~] [a4 ~ d5 f#5 ~ a5 g5 f#5] [e5 d5 b4 ~ e5 ~ ~ ~]>").s("sine").fm(.6).fmh(2).attack(.003).decay(.24).sustain(.08).release(.2).gain(0.024).pan(.4).room(.2)

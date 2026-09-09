@@ -1,0 +1,6 @@
+// First Light · Sub · answering rhythm · 174 BPM · F# minor
+// Second-drop bass answers the kick with a different rhythm.
+// One cycle = one 4/4 bar. Sample slots are installed with this session.
+setCpm(174 / 4)
+
+$: note("<f#1 f#1 d2 d2 a1 a1 e2 e2>").struct("1 0 1 0 0 1 0 1").s("sine").attack(.008).release(.09).gain(0.344).lpf(150)
