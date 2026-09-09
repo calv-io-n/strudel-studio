@@ -67,6 +67,7 @@ jobs:
       - name: Deploy verified build
         uses: cloudflare/wrangler-action@v3
         with:
+          wranglerVersion: '4.130.0'
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy studio/dist --project-name=strudel-studio --branch=main
