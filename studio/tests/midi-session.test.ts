@@ -30,7 +30,7 @@ test('accepting a subsection creates a variation and preserves phase on both sid
   assert.match(next.tabs[1].code, /late\(4\).*s\("triangle"\)/);
   assert.deepEqual(next.clips.map(c => [c.start, c.length, c.sourceOffset]), [[4, 2, 2], [6, 2, 4], [8, 4, 6], [20, 8, 2]]);
   assert.equal(next.clips[3].tabId, clip.tabId);
-  assert.equal(ProjectSchema.parse({ ...p, version: 4 }).version, 5);
+  assert.equal(ProjectSchema.parse({ ...p, version: 4 }).version, 6);
 });
 
 test('a held note or an empty loop never replaces the last transcription without a new press', () => {

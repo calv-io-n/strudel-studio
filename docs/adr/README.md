@@ -22,3 +22,5 @@ Architecture decision records document intentional changes from the [target desi
 | [0006](0006-default-midi-instrument-and-presets.md) | Proposed | Add a dedicated default MIDI effects instrument, reusable presets and preset-key mappings |
 
 | [0007](0007-browser-only-pages.md) | Accepted | Replace the local server with static hosting, browser storage, Web MIDI, and a small starter collection |
+
+| [0008](0008-browser-audio-pipeline.md) | Accepted | Opt-in catalogue, OPFS audio, track-routed input/takes, and precision-preserving snapshot rendering |

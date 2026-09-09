@@ -55,7 +55,7 @@ export function validateInstrumentInput(code: string) {
 }
 
 /** Persist only live slider edits into the working version, leaving draft text unapplied. */
-export function updateAppliedInstrumentSliders(instrument: NonNullable<Project['midiInstrument']>, values: Map<string, number>) {
+export function updateAppliedInstrumentSliders(instrument: Pick<NonNullable<Project['midiInstrument']>, 'code' | 'appliedCode' | 'anchors' | 'appliedAnchors'>, values: Map<string, number>) {
   if (!values.size) return;
   const previous = reconcileSliders(instrument.appliedCode, [], undefined, instrument.appliedAnchors ?? []);
   const edits = previous.filter(s => values.has(s.id)).map(s => ({ from: s.from, to: s.to, insert: String(values.get(s.id)) }));

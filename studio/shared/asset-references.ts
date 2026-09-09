@@ -1,6 +1,8 @@
 import type { Project } from './model';
 export function assetReferences(project: Project) {
   const ids = new Set(project.assetIds);
+  for (const tab of project.tabs) if (tab.audioAssetId) ids.add(tab.audioAssetId);
+  for (const clip of project.clips) if (clip.takeId) ids.add(clip.takeId);
   for (const slot of project.slots) { slot.assets.forEach(id => ids.add(id)); if (slot.active) ids.add(slot.active); }
   for (const binding of project.bindings) if (binding.target.kind === 'trigger' || binding.target.kind === 'swap') ids.add(binding.target.assetId);
   for (const tab of [...project.tabs, { code: project.midiInstrument?.code ?? '' }, { code: project.midiInstrument?.appliedCode ?? '' }]) {

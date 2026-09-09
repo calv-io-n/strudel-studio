@@ -616,3 +616,37 @@ body[data-expanded=composition] #drawer-resize, body[data-expanded=library] #dra
 @media (max-width: 760px) { .import-columns { grid-template-columns: 1fr; gap: 32px; } #sample-import-page > header { margin-bottom: 36px; } .import-nav { display: none; } }
 
 #sample-import-page h1:focus { outline: none; }
+
+.catalogue-pack { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.catalogue-pack p { margin: 8px 0; }
+.catalogue-pack button { margin-right: 8px; }
+#audio-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 20px; border-bottom: 1px solid var(--line); max-height: 180px; overflow-y: auto; }
+#audio-toolbar[hidden] { display: none; }
+#audio-toolbar label { display: flex; align-items: center; gap: 6px; }
+#audio-toolbar label select { margin-top: 0; max-width: 190px; }
+#audio-toolbar p { flex-basis: 100%; margin: 0; font-size: 12px; color: var(--muted); }
+@media (max-width: 700px) { #audio-toolbar { max-height: 145px; padding: 8px; } }
+
+.composition-recording { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.composition-recording label { display: flex; align-items: center; gap: 6px; margin: 0; }
+.composition-recording select { margin: 0; max-width: 160px; }
+.record-button { background: #b42332; color: white; border-color: #b42332; font-weight: 600; }
+.record-button::before { content: '●'; margin-right: 7px; }
+.record-button.recording::before { content: '■'; }
+.record-button:hover { background: #971e2a; color: white; }
+.record-button:disabled { opacity: .6; }
+#record-status { font-size: 12px; color: var(--muted); }
+#record-options { position: relative; }
+#record-options[open] { padding: 8px; border: 1px solid var(--line); background: var(--panel); }
+#record-options label { margin-top: 8px; }
+.recording-clip { background: #b4233220; border: 2px solid #b42332; color: var(--text); padding: 10px; overflow: hidden; white-space: nowrap; }
+#recorded-take-view { padding: 24px; overflow: auto; }
+#recorded-take-view[hidden] { display: none; }
+#recorded-take-view button { margin-right: 8px; }
+.test-recording { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; flex-basis: 100%; }
+.test-recording span { color: var(--muted); font-size: 12px; }
+.capturing-audio .range-handle, .capturing-audio #seek-handle, .capturing-audio .clip-resize { pointer-events: none; }
+.composition-toolbar { flex-wrap: wrap; }
+/* Keep effects code editable when the composition is open on a short screen. */
+.editor-panel:has(#audio-toolbar:not([hidden])) #editor { flex: 1 0 96px; }
+#audio-toolbar { flex-shrink: 1; min-height: 0; }

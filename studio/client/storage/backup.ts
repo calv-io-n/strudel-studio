@@ -1,11 +1,15 @@
-import { zip, unzip, strToU8, strFromU8 } from 'fflate';
+import { unpack } from '../archive';
+import { zip, strToU8, strFromU8 } from 'fflate';
 import { parseProject, AssetSchema, type Project } from '../../shared/model';
 import { assetReferences } from '../../shared/asset-references';
 import { asset, audioBlob } from './workspace';
 import { read, write, exclusive, type Write } from './database';
 export async function backupProject(value: Project) {
   const project = parseProject(value), files: Record<string, Uint8Array> = { 'project.json': strToU8(JSON.stringify(project)) }, missing: string[] = []; let total = files['project.json'].length;
-  for (const id of assetReferences(project)) {
+  const ids = new Set(assetReferences(project));
+  for (const id of ids) { const a = await asset(id).catch(() => undefined); if (a?.recording?.dryAssetId) ids.add(a.recording.dryAssetId); }
+  project.assetIds = [...ids]; files['project.json'] = strToU8(JSON.stringify(project));
+  for (const id of ids) {
     try {
       const a = await asset(id); files[`assets/${id}.json`] = strToU8(JSON.stringify(a)); total += files[`assets/${id}.json`].length;
       try { const blob = await audioBlob(id); total += blob.size; if (total > 256_000_000) throw new Error('limit'); files[`assets/${id}.${a.format}`] = new Uint8Array(await blob.arrayBuffer()); } catch (e) { if ((e as Error).message === 'limit') throw e; missing.push(`${id}.${a.format}`); }
@@ -19,18 +23,15 @@ export async function backupProject(value: Project) {
 }
 export async function restoreBackup(blob: Blob) {
   if (blob.size > 260_000_000) throw new Error('Backup exceeds 256 MB.');
-  let total = 0, count = 0;
-  const files = await new Promise<Record<string, Uint8Array<ArrayBuffer>>>((resolve, reject) => {
-    void blob.arrayBuffer().then(bytes => unzip(new Uint8Array(bytes), { filter: f => {
-      count++; total += f.originalSize;
-      if (count > 10000 || total > 256_000_000 || f.name.startsWith('/') || f.name.includes('\\') || f.name.split('/').includes('..')) { reject(new Error('Unsafe or oversized backup.')); return false; } return true;
-    } }, (err, data) => err ? reject(err) : resolve(data as Record<string, Uint8Array<ArrayBuffer>>))).catch(reject);
-  });
+  const files = await unpack(blob, { bytes: 256_000_000, fileBytes: 256_000_000, files: 10000 });
   if (!files['project.json']) throw new Error('Backup has no project.json.');
   const project = parseProject(JSON.parse(strFromU8(files['project.json'])));
   return exclusive(async () => {
     const entries: Write[] = [], missing: string[] = [];
-    for (const id of assetReferences(project)) {
+    const ids = new Set(assetReferences(project));
+  for (const id of ids) { const a = await asset(id).catch(() => undefined); if (a?.recording?.dryAssetId) ids.add(a.recording.dryAssetId); }
+  project.assetIds = [...ids]; files['project.json'] = strToU8(JSON.stringify(project));
+  for (const id of ids) {
       const metadata = files[`assets/${id}.json`]; if (!metadata) { missing.push(id); continue; }
       const a = AssetSchema.parse(JSON.parse(strFromU8(metadata))); if (a.id !== id) throw new Error('Backup asset identity mismatch.');
       const audio = files[`assets/${id}.${a.format}`]; if (!audio) { missing.push(id); continue; }
@@ -42,7 +43,7 @@ export async function restoreBackup(blob: Blob) {
     }
     const base = project.name.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^[-_]+|[-_]+$/g, '').slice(0, 65) || 'session'; let id = `${base}-restored`;
     for (let n = 2; await read('projects', id); n++) id = `${base}-restored-${n}`;
-    const next = { ...project, sessionId: id }; entries.push({ collection: 'projects', key: id, value: next, add: true }); await write(entries);
+    const next = { ...project, sessionId: id, revision: 1 }; entries.push({ collection: 'projects', key: id, value: next, add: true }); await write(entries);
     return { project: next, missing };
   });
 }

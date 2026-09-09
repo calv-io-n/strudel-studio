@@ -27,7 +27,7 @@ test('browser workspace transactions, portable backups, and failures', async () 
   await assert.rejects(restoreBackup(new Blob([collision])), /different audio/); assert.equal((await all('projects')).length, before);
   const unsafe = zipSync({ '../project.json': strToU8('{}') }); await assert.rejects(restoreBackup(new Blob([unsafe])), /Unsafe/);
   await assert.rejects(importSample(metadata, new ArrayBuffer(0), wav), /64 MB/);
-  await assert.rejects(importSample(metadata, wav, new ArrayBuffer(50)), /PCM/);
+  await assert.rejects(importSample(metadata, wav, new ArrayBuffer(50)), /WAV/);
   await assert.rejects(saveRecording({ label: 'Invalid', recording: { source: 'internal', bpm: 120, offsetCycles: 0, duration: 1, trimStart: 0, trimEnd: 1 } }, new Blob([wav])), /trim/);
   const recording = await saveRecording({ label: 'Recorded', recording: { source: 'internal', bpm: 120, offsetCycles: 0, duration: .1, trimStart: 0, trimEnd: .1 } }, new Blob([wav])); assert.equal(recording.provider, 'recording');
   await savePreset({ name: 'Warm', code: 'MIDI.s("triangle")' }); await assert.rejects(savePreset({ name: 'warm', code: 'MIDI.s("sine")' }), /already/); assert.equal((await presets()).length, 1);

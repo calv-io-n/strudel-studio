@@ -21,5 +21,5 @@ test('parseProject explains which field was rejected instead of a generic union 
   const broken = { ...newProject(), bpm: 'fast' };
   assert.throws(() => parseProject(broken), /bpm:/);
   assert.match(describeProjectIssues(broken), /^Project format rejected · bpm: /);
-  assert.equal(parseProject(newProject()).version, 5);
+  assert.equal(parseProject(newProject()).version, 6);
 });

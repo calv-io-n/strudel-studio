@@ -1,3 +1,5 @@
+> Historical local-server release record. Current browser release behavior and validation commands are in [setup](setup.md), [architecture](architecture/README.md), and [browser audio](browser-audio.md). Hardware GoXLR validation and production deployment are separate from automated checks.
+
 # Initial release preparation
 
 This is preparation for the first GitHub release, not a published release announcement. The package version remains `1.0.0`; `private: true` prevents accidental npm publication. GitHub is the intended source distribution channel.

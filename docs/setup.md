@@ -6,7 +6,7 @@ Studio is a static browser application. All project persistence, audio processin
 
 Use Node 24 and npm. Run `npm ci`, then `npm run dev`, and open http://localhost:5173. There is no separate sample server and no Python, Bun, ElevenLabs key, or backend service requirement. Use a Chromium-based desktop browser for the verified workflow. Browser codec and Web MIDI availability vary.
 
-`npm run studio:build` generates the small starter collection, checks TypeScript, and builds `studio/dist`. `npm run studio:preview` serves those exact production files locally. `npm run studio:starters` regenerates the six original CC0 WAVs and two starter projects.
+`npm run studio:build` generates catalogue metadata, checks TypeScript, and builds `studio/dist`. `npm run studio:preview` serves those exact production files locally. `npm run studio:starters` generates the pinned catalogue manifest and starter projects without downloading or bundling audio. The optional source generator is `scripts/generate-starter-audio.ts`.
 
 ## Cloudflare Pages
 
@@ -16,15 +16,15 @@ GitHub repository variable `CLOUDFLARE_ACCOUNT_ID` identifies the Cloudflare acc
 
 The custom domain points to `strudel-studio.pages.dev`; Cloudflare activates it and provisions HTTPS after nameserver and domain validation. Push the browser-only application changes together with the workflow before the first release.
 
-Publish only `studio/dist`, never the repository root or local data directories. The build contains the application, its isolated render page, headers, and the starter manifest/audio. Imported samples and saved projects are never part of a build.
+Publish only `studio/dist`, never the repository root or local data directories. The build contains the application, its isolated render page, headers, and the starter manifest. Imported samples and saved projects are never part of a build.
 
 The import route is `/#/samples/import`, so direct navigation works without a server-side router. `/render.html` must remain a separate HTML entry for isolated WAV rendering. `_headers` allows same-origin MIDI and microphone access, revalidates HTML and starter assets, and caches hashed application assets. Do not add a policy blocking blob audio/worklets or JavaScript evaluation: the Strudel live-coding engine requires them. HTTPS permits browser storage locks, Web MIDI, and microphone access; localhost is also a secure context for development.
 
-Before publishing, run the build, unit tests, and browser tests. In a fresh browser on the final URL, play both starter projects, save/reload an edit, import a GitHub sample, export a WAV, and download/restore a backup. Verify there are no `/api/`, localhost-service, or application WebSocket requests. Cloudflare Pages supports static hosting without paid backend services; platform limits still apply.
+Before publishing, run the build, unit tests, and browser tests. In a fresh browser on the final URL, play Neon Drive, explicitly install the CC0 pack and play Drum Basics, save/reload an edit, import a GitHub sample, export a WAV, and download/restore a backup. Verify there are no `/api/`, localhost-service, or application WebSocket requests. Cloudflare Pages supports static hosting without paid backend services; platform limits still apply.
 
 ## Data and backups
 
-IndexedDB database `strudel-studio` holds projects, assets, playback audio, originals, presets, and settings. Recovery drafts and pending recordings/import reviews also use browser-local storage. Projects keep the existing schema and stable sample IDs.
+IndexedDB database `strudel-studio` version 2 holds projects, asset metadata, presets, settings, and audio references. Immutable large audio and pending capture chunks use OPFS when available, with IndexedDB Blob fallback. Metadata commits publish staged files atomically; unreferenced staged files are collected on startup. Recovery drafts and pending recordings/import reviews also use browser-local storage. Project schema v6 migrates v1–v5 without replacing stable sample IDs. Save revisions detect stale edits from another tab.
 
 Storage belongs to the site's origin and browser profile. A Pages preview URL, localhost, a `pages.dev` domain, and a custom domain have separate data. Use ZIP project backups to move music between them. Clearing browsing/site data can remove it; private browsing may not retain it. The import page shows usage and can request persistent storage, which the browser may decline.
 
@@ -46,6 +46,12 @@ GitHub may rate-limit unauthenticated discovery. Choose a narrower folder, retry
 
 ## Verification
 
-Run `npm run studio:build`, `npm run studio:test`, and `npm run studio:e2e`. Install Chromium with `npm run setup:browser-tests`, or provide `STUDIO_CHROMIUM` for an existing executable. The browser suite serves `studio/dist` on port 5175; build first after changing application files.
+Run `npm run studio:build`, `npm run studio:test`, and `npm run studio:e2e`. Install Chromium with `npm run setup:browser-tests`, or provide `STUDIO_CHROMIUM` for an existing executable. The browser suite serves `studio/dist` on port 5185; build first after changing application files.
 
 The production Pages suite is `studio/tests/pages.spec.ts`. Earlier server-dependent browser specs remain as historical regression references, not a runnable server target. Pure domain tests and legacy project/backup compatibility tests still run in the unit suite. The retained filesystem helper modules support those compatibility checks; they are not included in the client or exposed as a server.
+
+## Optional legacy downloaded-cache cleanup
+
+The browser cannot delete old filesystem caches. `scripts/legacy-cache-cleanup.ts` is a separate local tool: first run it with explicit `--cache`, `--projects`, and `--personal-audio` paths to inspect a dry-run report. Only add `--apply` after reviewing that report. It requires provenance metadata, rejects ambiguous directories and symlinks, reports project references, and retains personal imports, recordings, generated audio, and project files. Missing provenance is a reason to keep a file. No cleanup runs during application startup or build.
+
+See [browser audio](browser-audio.md) for capture, precision, and render behavior.
