@@ -26,6 +26,7 @@ export const AnchorSchema = z.object({
 });
 export const TargetSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('slider'), sliderId: id, tabId: id.optional() }),
+  z.object({ kind: z.literal('midi-preset'), presetId: z.string().uuid() }),
   z.object({ kind: z.literal('trigger'), assetId: z.string().uuid() }),
   z.object({ kind: z.literal('swap'), slot: id, assetId: z.string().uuid() }),
 ]);
@@ -95,10 +96,10 @@ export const ProjectV3Schema = LegacyProjectSchema.omit({ code: true, anchors: t
     if (!tabs.has(c.tabId) || !tracks.has(c.trackId)) issue('Missing clip source or track');
     if (p.clips.some(o => o.id !== c.id && o.trackId === c.trackId && c.start < o.start + o.length && o.start < c.start + c.length)) issue('Clips cannot overlap in the same track');
   }
-  if (p.bindings.some(b => b.target.kind === 'slider' && !tabs.has(b.target.tabId!))) issue('Slider mapping references a missing pattern');
+  if (p.bindings.some(b => b.target.kind === 'slider' && b.target.tabId !== '@midi' && !tabs.has(b.target.tabId!))) issue('Slider mapping references a missing pattern');
 });
 export const ProjectV4Schema = z.object({ ...ProjectV3Schema.shape, version: z.literal(4), assetIds: z.array(z.string().uuid()).max(10000).default([]) }).superRefine((p, ctx) => { const result = ProjectV3Schema.safeParse({ ...p, version: 3 }); if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path }); });
-export const ProjectV5Schema = z.object({ ...ProjectV4Schema.shape, version: z.literal(5) }).superRefine((p, ctx) => { const result = ProjectV4Schema.safeParse({ ...p, version: 4 }); if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path }); });
+export const ProjectV5Schema = z.object({ ...ProjectV4Schema.shape, version: z.literal(5), midiSound: z.string().min(1).max(300).optional(), midiInstrument: z.object({ enabled: z.boolean().default(true), mode: z.enum(['script', 'midi']), code: z.string().max(200_000), appliedCode: z.string().max(200_000), appliedAnchors: z.array(AnchorSchema).max(500).optional(), anchors: z.array(AnchorSchema).max(500) }).optional() }).superRefine((p, ctx) => { const result = ProjectV4Schema.safeParse({ ...p, version: 4 }); if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path }); });
 export type Project = z.infer<typeof ProjectV5Schema>;
 const migrateV2 = (p: z.infer<typeof ProjectV2Schema>) => ({ ...p, version: 3 as const, tracks: defaultTracks(), snap: 1 as const,
   tabs: p.tabs.map((t, i) => ({ ...t, color: palette[i % palette.length] })),

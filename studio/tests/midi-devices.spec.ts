@@ -1,5 +1,6 @@
 import { test, expect, type WebSocketRoute } from '@playwright/test';
 import { newProject } from '../shared/model';
+import { installAudioCapture } from './audio-capture';
 import { openController } from './helpers/controller';
 
 const port = 'Fixture keyboard:MIDI';
@@ -23,9 +24,10 @@ test('external input survives song switches, browser close and reconnect; contro
       if (message.type === 'midi-connections') ws.send(JSON.stringify({ type: 'status', ready: true, message: '', ports: [port], connected: message.ports }));
     });
   });
+  await installAudioCapture(page);
   try {
     await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
-    await page.getByRole('button', { name: 'MIDI devices', exact: true }).click();
+    await page.getByRole('button', { name: 'MIDI', exact: true }).click();
     await expect(page.locator('#devices-content')).toBeVisible();
     await expect(page.locator('#controls')).toBeHidden();
     await expect(page.getByLabel('MIDI route')).toBeHidden();
@@ -34,12 +36,23 @@ test('external input survives song switches, browser close and reconnect; contro
     await expect(page.locator('.device-connection')).toContainText('Connected');
     await page.getByLabel('Sessions').selectOption(second.sessionId);
     await expect(page.getByLabel('Project name')).toHaveValue(second.name);
-    await page.getByRole('button', { name: 'MIDI devices', exact: true }).click();
+    await page.getByRole('button', { name: 'MIDI', exact: true }).click();
     await expect(page.locator('.device-connection')).toContainText('Connected');
+    await page.getByRole('button', { name: 'Sample library', exact: true }).click();
+    const assign = page.locator('[data-assign-midi="sine"]');
+    await assign.click(); await expect(assign).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('button', { name: 'Close library', exact: true }).click();
+    await expect(page.locator('#midi-assignment')).toContainText('Sine');
+    await page.reload(); await expect(page.locator('#connection')).toHaveText('Studio connected');
+    await expect(page.locator('#midi-assignment')).toContainText('Sine');
+    expect((await (await request.get(`/api/projects/${second.sessionId}`)).json()).midiSound).toBe('sine');
+    await page.getByRole('button', { name: 'MIDI', exact: true }).click();
+    await page.evaluate(() => window.neonCapture.start());
     // Hardware input still reaches a new song that had no device profile when saved.
     channel!.send(JSON.stringify({ type: 'midi', source: port, route: 'alsa', sequence: 501, receivedAt: Date.now(), bytes: [144, 64, 100] }));
     await expect(page.locator('#device-activity')).toContainText('Note 64');
     await expect.poll(async () => (await (await request.get('/api/feedback')).json()).snapshot?.diagnostics.notes).toBe(1);
+    await expect.poll(() => page.evaluate(() => Math.max(0, ...window.neonCapture.bins.map(b => b.peak)))).toBeGreaterThan(.01);
     channel!.send(JSON.stringify({ type: 'midi', source: port, route: 'alsa', sequence: 502, receivedAt: Date.now(), bytes: [128, 64, 0] }));
     await expect.poll(async () => (await (await request.get('/api/feedback')).json()).snapshot?.diagnostics.notes).toBe(0);
     channel!.send(JSON.stringify({ type: 'status', ready: true, message: '', ports: [], connected: [] }));
@@ -52,7 +65,10 @@ test('external input survives song switches, browser close and reconnect; contro
     await page.evaluate(async () => { const ws = new WebSocket(`ws://${location.host}/api/midi`); await new Promise<void>(resolve => { ws.onopen = () => { ws.send(JSON.stringify({ type: 'connect', ports: [] })); ws.close(); }; ws.onclose = () => resolve(); }); });
     expect((await (await request.get('/api/midi/connections')).json()).ports).toEqual([port]);
     await openController(page); await expect(page.getByRole('slider', { name: 'Knob 1', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'MIDI devices', exact: true }).click();
+    await page.getByRole('button', { name: 'MIDI', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit instrument', exact: true }).click();
+    await page.getByRole('button', { name: 'Clear sound assignment' }).click();
+    await expect(page.locator('#midi-assignment')).toContainText('No sound assigned');
     await page.getByRole('button', { name: `Disconnect ${port}`, exact: true }).click();
     await expect(page.locator('.device-connection')).toHaveCount(0);
     await page.reload(); expect((await (await request.get('/api/midi/connections')).json()).ports).toEqual([]);

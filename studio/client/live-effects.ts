@@ -8,7 +8,10 @@ export class LiveEffects {
   private installed = false;
   update(key: string, value: number) {
     const time = audio.getAudioContext().currentTime;
-    for (const param of this.params.get(key) ?? []) param.setTargetAtTime(value, time, .015);
+    for (const param of this.params.get(key) ?? []) {
+      param.cancelAndHoldAtTime(time);
+      param.setTargetAtTime(value, time, .015);
+    }
   }
   wrap(values: any, controls: Record<string, string>) {
     if (!this.installed) {

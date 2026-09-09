@@ -242,9 +242,9 @@ dialog input { width: 100%; }
   border: 1px solid var(--border) !important;
   border-radius: 6px;
   max-width: min(540px, 90vw);
-  overflow: hidden;
+  overflow: visible;
 }
-.cm-tooltip-autocomplete > ul { font-size: 13px; max-height: 260px; }
+.cm-tooltip-autocomplete > ul { font-size: 13px; max-height: 260px; border-radius: inherit; }
 .cm-tooltip-autocomplete > ul > li { padding: 5px 10px !important; }
 .cm-tooltip-autocomplete > ul > li[aria-selected="true"] { background: var(--selection) !important; color: var(--text) !important; }
 .cm-completionDetail { color: var(--muted); font-style: normal !important; margin-left: 16px !important; }
@@ -564,3 +564,33 @@ body[data-expanded=composition] #drawer-resize, body[data-expanded=library] #dra
 .sound-panel { inset: 0 0 0 auto; height: 100dvh; width: min(760px, 100vw); border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0; }
 .sound-repository { color: var(--accent); }
 @media (max-width: 600px) { .sound-panel { inset: 0; width: 100%; border-radius: 0; } }
+
+#instrument-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+#instrument-toolbar label { display: flex; align-items: center; gap: 8px; }
+#instrument-toolbar p { flex-basis: 100%; margin: 0; }
+#instrument-state { font-size: 12px; }
+#instrument-state.error { color: #b33a36; }
+
+#midi-output-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-basis: 100%; }
+#midi-output-controls select { max-width: min(360px, 65vw); }
+#midi-output-controls input { width: 180px; max-width: 60vw; }
+#midi-output-controls #midi-assignment { font-size: 12px; }
+
+.cm-completionInfo {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+  max-width: min(440px, 85vw);
+  max-height: 380px;
+  overflow: auto;
+  padding: 14px !important;
+}
+.studio-function-doc { font: 13px/1.5 system-ui, sans-serif; white-space: normal; }
+.studio-function-doc > code { font-weight: 600; overflow-wrap: anywhere; }
+.studio-function-doc p { margin: 10px 0; white-space: pre-line; }
+.studio-function-doc h4 { font-size: 12px; margin: 12px 0 6px; }
+.studio-function-doc dl { margin: 0; }
+.studio-function-doc dt { font-family: monospace; font-weight: 600; overflow-wrap: anywhere; }
+.studio-function-doc dd { margin: 2px 0 10px; }
+.studio-function-doc pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 8px; background: var(--selection); }
+.studio-function-doc small { opacity: 0.7; }

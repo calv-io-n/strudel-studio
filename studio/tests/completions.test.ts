@@ -26,3 +26,19 @@ test('catalog searches readable labels and inserts stable names', () => {
   const comment = '// .room';
   assert.equal(source(new CompletionContext(EditorState.create({ doc: comment }), comment.length, true)), null);
 });
+
+test('function suggestions include documentation, aliases and source signatures', async () => {
+  const { functionDoc, functionSignature } = await import('../client/function-docs');
+  assert.match(functionDoc('lpf').params[0].description, /20000/);
+  assert.deepEqual(functionDoc('cutoff').params, functionDoc('lpf').params);
+  assert.match(functionDoc('slow').description, /Slow down/);
+  assert.match(functionDoc('stack').params[0].description, /simultaneously/);
+  assert.equal(functionSignature(functionDoc('range')), 'range(min, max)');
+  assert.equal(functionDoc('slider').params.length, 4);
+  assert.match(functionDoc('MIDI').description, /pitch and velocity/);
+  assert.match(functionDoc('soundSlot').params[0].description, /Name/);
+  assert.ok(functionDoc('add').examples.some(example => example.includes('<')));
+  const source = studioCompletionSource(() => [], () => ['slow', 'slider', 'soundSlot', 'MIDI']);
+  const result = source(new CompletionContext(EditorState.create({ doc: '.' }), 1, true))!;
+  for (const option of result.options) assert.equal(typeof option.info, 'function', option.label);
+});

@@ -94,7 +94,7 @@ test('resizing snaps to quarter cycles and rejects overlap; dragging tabs create
   await page.mouse.move(clip.x + 12, clip.y + 20); await page.mouse.down(); await page.mouse.move(clip.x + 140, clip.y + 20, { steps: 4 });
   await expect(page.locator('.drag-ghost')).toHaveAttribute('data-invalid', 'true'); await page.mouse.up();
   await expect(page.locator('[data-clip=a]')).toHaveCSS('left', '0px');
-  const tab = (await page.getByRole('tab').boundingBox())!, lane = (await page.locator('[data-track-id=track-2]').boundingBox())!;
+  const tab = (await page.getByRole('tab', { name: 'Pattern 1', exact: true }).boundingBox())!, lane = (await page.locator('[data-track-id=track-2]').boundingBox())!;
   await page.mouse.move(tab.x + 20, tab.y + 10); await page.mouse.down(); await page.mouse.move(lane.x + 32, lane.y + 20, { steps: 10 }); await page.mouse.up();
   await expect(page.locator('[data-track-id=track-2] [data-clip]')).toHaveCount(1);
 });
@@ -177,12 +177,12 @@ test('solo gates scheduled pattern queries at the safe boundary without rewritin
 test('tab drag reveals Composition and identifies the source before reaching a track', async ({ page }) => {
   await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
   await page.getByRole('button', { name: 'Composition', exact: true }).click(); await expect(page.locator('#composition-content')).not.toBeVisible();
-  const tab = (await page.getByRole('tab').boundingBox())!;
+  const tab = (await page.getByRole('tab', { name: 'Pattern 1', exact: true }).boundingBox())!;
   await page.mouse.move(tab.x + 20, tab.y + 15); await page.mouse.down();
   await page.mouse.move(tab.x + 40, tab.y + 90, { steps: 5 });
   await expect(page.locator('#composition-content')).toBeVisible();
   await expect(page.locator('.composition-drag-badge')).toContainText('Pattern 1 · Drop on a track');
-  await expect(page.getByRole('tab')).toHaveClass(/drag-source/);
+  await expect(page.getByRole('tab', { name: 'Pattern 1', exact: true })).toHaveClass(/drag-source/);
   const lane = (await page.locator('[data-track-id=track-2]').boundingBox())!;
   await page.mouse.move(lane.x + 32, lane.y + 20, { steps: 5 });
   await expect(page.locator('[data-track-id=track-2]')).toHaveAttribute('data-drop-target', 'valid');
