@@ -1,3 +1,4 @@
+import { importSample } from './storage/workspace';
 import { writePending, readPending } from './recovery';
 import { unzip } from 'fflate';
 import { encodeWav } from '../shared/wav';
@@ -94,8 +95,7 @@ export class SampleImports {
           const wav = encodeWav(decoded.getChannelData(0), decoded.getChannelData(Math.min(1, decoded.numberOfChannels - 1)), decoded.sampleRate).buffer;
           const packName = this.el<HTMLInputElement>('pack').value.trim();
           const metadata = { recoverId: this.recoverId, name: entry.path, label: entry.path.split('/').pop()!.replace(/\.[^.]+$/, '').slice(0, 80) || 'Sample', originalBytes: original.byteLength, originalFormat: entry.path.split('.').pop()!.toLowerCase(), pack: packName ? { id: this.packId, name: packName, folder: entry.path.split('/').slice(0, -1).join('/') } : undefined, source: entry.source, provider: entry.provider || 'upload' };
-          const response = await fetch('/api/imports/sample', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Studio-Metadata': encodeURIComponent(JSON.stringify(metadata)) }, body: new Blob([original, wav]) });
-          const result = await response.json(); if (!response.ok) throw new Error(result.error);
+          const result = await importSample(metadata, original, wav as ArrayBuffer);
           entry.asset = result.asset; this.recoverId = undefined; entry.status = result.reused ? 'Already imported · reused existing sound' : 'Imported'; await this.saved(result.asset);
         } catch (error) { entry.error = (error as Error).message; }
         this.render();

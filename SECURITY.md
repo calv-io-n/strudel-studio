@@ -1,8 +1,8 @@
 # Security
 
-Strudel Studio is a local, single-user application. Run it bound to localhost. It is not designed to be exposed through a public reverse proxy or shared between untrusted users. Pattern code executes JavaScript in the browser: review code before running it. Optional watcher tools automate a browser; imported audio and external sample URLs have their own trust and licensing requirements.
+Strudel Studio is a static browser application. Projects and samples stay in browser storage; the application has no server API or credential configuration. Pattern code executes JavaScript in the page and can access that origin's data: review code before running it. Imported audio and external URLs retain their own trust and licensing requirements.
 
-Keep `.env`, `.studio/`, generated sounds, recordings, and local tool environments private. An API key belongs only in the server environment. Do not include credentials or personal session files in issues or diagnostic attachments.
+Publish only `studio/dist`. Never publish old `.env`, `.studio/`, samples, recordings, or diagnostic attachments containing personal data. Use a separate origin for Studio rather than sharing an origin with applications containing sensitive account data.
 
 ## Reporting a vulnerability
 

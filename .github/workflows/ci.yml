@@ -3,11 +3,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   verify:
     name: Linux / Node 24
@@ -26,6 +27,14 @@ jobs:
       - run: npm run studio:e2e
         env:
           STUDIO_E2E_ALSA: '0'
+      - name: Save verified Pages build
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pages-build
+          path: studio/dist/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -34,3 +43,31 @@ jobs:
             studio/test-results/
             studio/playwright-report/
           retention-days: 7
+  deploy:
+    name: Deploy production to Cloudflare Pages
+    needs: verify
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: write
+    environment:
+      name: production
+      url: https://strudelstudio.online
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: pages-build
+          path: studio/dist/
+      - name: Deploy verified build
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy studio/dist --project-name=strudel-studio --branch=main
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}

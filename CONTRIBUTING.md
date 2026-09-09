@@ -1,3 +1,5 @@
+> The current app is browser-only. Follow [setup](docs/setup.md) and run the production Pages suite; older server workflows are historical. No backend service or sample server is required.
+
 # Contributing to Strudel Studio
 
 Thanks for helping make a focused music workspace. This is an independent application built with Strudel; please report Studio-specific issues here and upstream language/audio issues to [Strudel](https://codeberg.org/uzu/strudel/issues).
@@ -15,7 +17,7 @@ npm run setup:browser-tests
 npm run studio:e2e
 ```
 
-On Linux, browser system libraries can be installed with `npm run setup:browser-tests -- --with-deps`. This may require administrator privileges. Browser tests use local fixture sounds and temporary session directories; the ALSA hardware test is skipped unless explicitly enabled. Use `STUDIO_CHROMIUM` only when intentionally testing another Chromium build.
+On Linux, browser system libraries can be installed with `npm run setup:browser-tests -- --with-deps`. This may require administrator privileges. The Pages browser tests use isolated browser contexts, fixture downloads, and simulated MIDI/audio inputs. Build first: the tests serve production static output. Use `STUDIO_CHROMIUM` only when intentionally testing another Chromium build.
 
 ## Choosing a change
 

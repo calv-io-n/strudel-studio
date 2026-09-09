@@ -1,3 +1,7 @@
+import * as workspace from './storage/workspace';
+import { backupProject, restoreBackup } from './storage/backup';
+import { seedStarters } from './storage/starters';
+import { browserMidi } from './browser-midi';
 import { MIDI_EDITOR, instrumentFor, replaceInstrumentSound, updateAppliedInstrumentSliders, instrumentSound } from '../shared/midi-instrument';
 import { MidiComposition } from './midi-composition';
 import { destinationFor } from '../shared/performance';
@@ -13,7 +17,7 @@ import { isClipMuted } from '../shared/mix';
 import { palette } from '../shared/model';
 import { installCompositionGestures } from './composition';
 import './style.css';
-import { newProject, ProjectSchema, type Asset, type Binding, type BridgeStatus, type Job, type MidiEvent, type Project, type Tab, type Clip, type Target } from '../shared/model';
+import { newProject, ProjectSchema, type Asset, type Binding, type BridgeStatus, type MidiEvent, type Project, type Tab, type Clip, type Target } from '../shared/model';
 import { parseMidi, Pickup, scaleCC } from '../shared/midi';
 import { StudioEditor } from './editor';
 import { Engine } from './engine';
@@ -25,20 +29,14 @@ import { canPlace, duplicatePlacement } from '../shared/clips';
 type UIElement = HTMLElement & { value: string; checked: boolean; disabled: boolean; files?: FileList | null; showModal(): void; returnValue: string };
 const $ = <T extends HTMLElement = UIElement>(selector: string) => document.querySelector<T>(selector)!;
 const escape = (value: unknown) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-async function api<T>(path: string, method = 'GET', value?: unknown): Promise<T> {
-  const res = await fetch(`/api/${path}`, { method, headers: value === undefined ? {} : { 'Content-Type': 'application/json' }, body: value === undefined ? undefined : JSON.stringify(value) });
-  const data = await res.json(); if (!res.ok) throw new Error(data.error || 'Request failed'); return data;
-}
 try { document.documentElement.dataset.appearance = localStorage.getItem('studio.appearance') === 'dark' ? 'dark' : 'light'; } catch { document.documentElement.dataset.appearance = 'light'; }
 const app = $('#app');
 app.innerHTML = `
-<header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Local project</span></div><button id="save-now" title="Save session (Ctrl+S)">Save</button><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sample library</button><label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label></header>
+<header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Browser project</span></div><button id="save-now" title="Save session (Ctrl+S)">Save</button><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sample library</button><label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label></header>
 <details class="project-menu"><summary>Project</summary><nav class="sessionbar" aria-label="Project tools"><span class="section-label">Workspace</span><button id="save">Save project</button><button id="import">Import .strudel</button><button id="export">Export code</button><input type="file" id="import-file" accept=".strudel,.str,.js" hidden><span id="connection">Connecting…</span><button id="backup-project">Download project backup</button><button id="restore-backup">Restore project backup</button><input id="backup-file" type="file" accept=".zip" hidden><button id="new-project">New project</button><a class="source-link" href="https://github.com/calv-io-n/strudel" target="_blank" rel="noopener noreferrer">Source code &amp; license ↗</a><a class="source-link" href="https://github.com/calv-io-n/strudel/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">AGPL-3.0-or-later ↗</a></nav></details>
 <main class="workspace">
   <aside id="sounds-panel" class="sound-panel panel" hidden aria-label="Sample library"><div class="panel-heading"><h1>Sample library <small id="asset-count">0 sounds</small></h1><button id="sounds-close" class="quiet">Close library</button></div>
-    <div class="form-row" role="tablist" aria-label="Sound sources"><button id="sound-import-tab" role="tab" aria-selected="true">Import</button><button id="sound-generate-tab" role="tab" aria-selected="false">Generate</button></div>
-    <section id="sound-import" role="tabpanel" aria-label="Import sounds"><p class="hint">Bring samples and recorded takes into your local library.</p></section>
-    <form id="generate-form" class="generate-form"><label for="prompt">Describe your next sound</label><textarea id="prompt" maxlength="450" required placeholder="A warm, dusty bass one-shot. Short attack, soft analog saturation."></textarea><details class="generation-options"><summary>Options</summary><div class="form-row"><label>Duration <input id="duration" type="number" min="0.5" max="30" step="0.5" placeholder="Auto"></label><label class="check"><input id="loop" type="checkbox"> Loop</label></div></details><button id="generate" class="primary" type="submit">Generate sound</button><p id="generation-status" class="hint" role="status">Checking ElevenLabs connection…</p></form>
+    <section id="sound-import" role="tabpanel" aria-label="Import sounds"><p class="hint">Bring samples and recorded takes into this browser’s library.</p></section>
     <div class="library-heading"><h2>All sounds</h2><button id="refresh-assets" class="quiet">Refresh</button></div><label>Search sounds <input id="sound-search" type="search" placeholder="Name, tag, description, or pack"></label><div id="assets" class="asset-list"></div>
     <section id="assignment" class="assignment" hidden><button id="insert-sound" class="primary">Insert into pattern</button><details><summary>Assign to a control or slot</summary><h2>Assign selected sound</h2><label for="assign-target">Destination</label><select id="assign-target"></select><button id="assign">Assign sound</button><button id="learn-trigger">Learn a trigger key</button><p class="hint">Pads play one-shots. Slots swap sounds on the next cycle.</p></details></section>
   </aside>
@@ -47,7 +45,7 @@ app.innerHTML = `
     <section class="slots-section"><div class="library-heading"><h2>Sound slots</h2><button id="add-slot" class="quiet">Add</button></div><div id="slots"></div></section>
     <details class="devices" open><summary>MIDI devices</summary><p id="bridge-status" class="hint"></p><button id="reconnect">Reconnect MIDI</button><div id="profiles"></div><div class="form-row"><select id="available-ports" aria-label="Available MIDI inputs"></select><button id="add-profile">Connect</button></div></details>
   </aside>
-  <section class="controller-panel panel"><div class="panel-heading"><div><h2>Virtual MIDI</h2><span class="hint">Channel <input id="controller-channel" type="number" min="1" max="16" value="1" aria-label="Virtual controller channel"></span></div><div class="controller-options"><select id="route" aria-label="MIDI route"><option value="simulation">Browser</option><option value="alsa">OS MIDI loopback</option></select><button id="edit-layout">Edit layout</button></div></div><p id="route-status" class="route-status"></p><div id="drawer-learning" hidden><span>Learning… move a control.</span><button id="drawer-cancel-learn">Cancel</button></div><div id="controls" class="controls"></div><div id="layout-editor" hidden></div></section>
+  <section class="controller-panel panel"><div class="panel-heading"><div><h2>Virtual MIDI</h2><span class="hint">Channel <input id="controller-channel" type="number" min="1" max="16" value="1" aria-label="Virtual controller channel"></span></div><div class="controller-options"><select id="route" aria-label="MIDI route"><option value="simulation">Browser</option></select><button id="edit-layout">Edit layout</button></div></div><p id="route-status" class="route-status"></p><div id="drawer-learning" hidden><span>Learning… move a control.</span><button id="drawer-cancel-learn">Cancel</button></div><div id="controls" class="controls"></div><div id="layout-editor" hidden></div></section>
   <section class="monitor-panel panel"><div class="panel-heading"><h2>MIDI feedback</h2><button id="clear-events" class="quiet">Clear</button></div><div id="last-receipt" class="receipt">Move a control to inspect its route and binding.</div><div id="events" class="event-list" aria-label="MIDI event monitor"></div></section>
 </main>
 <footer class="drawer-bar"><button data-drawer="composition" aria-expanded="false" aria-controls="composition-content">Composition</button><button data-drawer="midi" aria-expanded="false" aria-controls="midi-content">Virtual MIDI</button><button data-drawer="export" aria-expanded="false" aria-controls="export-content">Export</button><span class="footer-hint">Select a slider to map a control</span></footer>
@@ -82,8 +80,8 @@ $('#sounds-panel').setAttribute('role', 'dialog');
 $('#sounds-panel').setAttribute('aria-modal', 'true');
 $('#sounds-panel').setAttribute('aria-label', 'Sample library');
 const addSounds = document.createElement('details'); addSounds.id = 'add-sounds'; addSounds.innerHTML = '<summary>Add sounds</summary>';
-addSounds.append($('#sound-import-tab').parentElement!, $('#sound-import'), $('#generate-form')); $('#sounds-panel > .panel-heading').after(addSounds);
-$('#sound-search').parentElement!.insertAdjacentHTML('afterend', '<select id="library-source" aria-label="Filter sound source"><option value="all">All sources</option><option value="builtin">Built-in</option><option value="upload">Imported</option><option value="recording">Recorded</option><option value="elevenlabs">Generated</option></select><p id="library-destination" class="hint"></p><div id="builtin-sounds" class="asset-list"></div>');
+addSounds.append($('#sound-import')); $('#sounds-panel > .panel-heading').after(addSounds);
+$('#sound-search').parentElement!.insertAdjacentHTML('afterend', '<select id="library-source" aria-label="Filter sound source"><option value="all">All sources</option><option value="builtin">Built-in</option><option value="upload">Imported</option><option value="recording">Recorded</option></select><p id="library-destination" class="hint"></p><div id="builtin-sounds" class="asset-list"></div>');
 $('#library-destination').insertAdjacentHTML('afterend', '<div class="library-test"><span id="library-midi-status" role="status">Choose Live on a sound to play it from your controller</span><div id="library-keys" hidden aria-label="Test keyboard">' + ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'].map((n, i) => `<button data-library-note="${60 + i}" aria-label="Test ${n}4" class="${n.includes('♯') ? 'black' : ''}">${n}</button>`).join('') + '</div></div>');
 const libraryHeader = document.createElement('div'); libraryHeader.className = 'library-header';
 const libraryFilters = document.createElement('div'); libraryFilters.className = 'library-filters';
@@ -111,7 +109,7 @@ deviceButton.setAttribute('aria-expanded', 'false'); deviceButton.setAttribute('
 $('[data-drawer="midi"]').before(deviceButton);
 $('[data-drawer="midi"]').textContent = 'On-screen controller'; $('.sessionbar').append($('[data-drawer="midi"]'));
 $('.controller-panel h2').textContent = 'On-screen controller';
-$('#reconnect').textContent = 'Refresh devices';
+$('#reconnect').textContent = 'Enable MIDI';
 $('#midi-content').append($('.controller-panel'));
 const advanced = document.createElement('details'); advanced.className = 'midi-advanced';
 advanced.innerHTML = '<summary>Mappings, sound slots & diagnostics</summary>';
@@ -247,13 +245,10 @@ function editorsHas(owner: StudioEditor) { return [...editors.values()].includes
 let selectedSlider: string | undefined;
 let learning: Target | undefined;
 let bridge: BridgeStatus = { ready: false, message: 'Connecting…', ports: [], connected: [] };
-let socket: WebSocket | undefined;
-let generationBusy = false;
 let saveTimer: ReturnType<typeof setTimeout>;
 let noticeTimer: ReturnType<typeof setTimeout>;
 let eventRows: string[] = [];
 let booted = false;
-let frame = 0;
 const pickup = new Pickup();
 
 function notice(message: string, error = false) {
@@ -322,7 +317,7 @@ $('#instrument-stop').onclick = () => { engine.stopInstrument(); paintMidiAssign
 type MidiPreset = { id: string; name: string; code: string };
 let midiPresets: MidiPreset[] = [];
 async function refreshMidiPresets(selected = $('#midi-preset').value) {
-  midiPresets = await api<MidiPreset[]>('midi/presets');
+  midiPresets = await workspace.presets();
   $('#midi-preset').innerHTML = '<option value="">Choose preset…</option>' + midiPresets.map(p => `<option value="${p.id}">${escape(p.name)}</option>`).join('');
   $('#midi-preset').value = selected;
   renderBindings();
@@ -332,7 +327,7 @@ $('#save-midi-preset').onclick = guard(async () => {
   if (getEditor(MIDI_EDITOR).code !== config.appliedCode) throw new Error('Apply your MIDI effects before saving a preset.');
   const name = await askEdit('Save MIDI preset', '', 'This effects chain will be available in every session.');
   if (!name) return;
-  const preset = await api<MidiPreset>('midi/presets', 'POST', { name, code: config.appliedCode });
+  const preset = await workspace.savePreset({ name, code: config.appliedCode });
   await refreshMidiPresets(preset.id); notice(`Saved preset · ${preset.name}`);
 });
 async function loadMidiPreset(preset: MidiPreset, fromMidi = false) {
@@ -390,8 +385,26 @@ const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare
 performancePanel.pendingAudio = () => recordingPanel.pending;
 $('#sound-import').append(recordingPanel.root);
 const sampleImports = new SampleImports(async asset => { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
-$('#sound-import').append(sampleImports.root);
-$('#sound-import').append(new GitHubImports(sampleImports, message => notice(message, true)).root);
+const importPage = document.createElement('section'); importPage.id = 'sample-import-page'; importPage.hidden = true;
+importPage.innerHTML = `<header><a href="#/">← Back to Studio</a><span>YOUR SOUND LIBRARY</span></header><h1>Bring your own sounds.</h1><p>Import from a public GitHub repository, or choose files from your device. Selected sounds stay in this browser.</p><div class="import-columns"><div id="github-import-column"></div><div id="file-import-column"></div></div><section class="browser-storage"><h2>Saved on this device</h2><p id="storage-usage" role="status"></p><p>Browser data can be cleared. Download project backups to keep your music or move it to another device.</p><button id="persist-storage">Keep browser storage</button><button id="import-backup">Download current project backup</button></section>`;
+document.body.append(importPage);
+$('#file-import-column').append(sampleImports.root);
+$('#github-import-column').append(new GitHubImports(sampleImports, message => notice(message, true)).root);
+$('#sound-import').insertAdjacentHTML('afterbegin', '<a class="import-page-link" href="#/samples/import">Import samples from GitHub or files ↗</a>');
+$('.topbar').insertAdjacentHTML('beforeend', '<a class="import-nav" href="#/samples/import">Import samples</a>');
+async function updateStorageUsage() {
+  const estimate = await navigator.storage?.estimate();
+  $('#storage-usage').textContent = estimate ? `${((estimate.usage ?? 0) / 1e6).toFixed(1)} MB used · ${((estimate.quota ?? 0) / 1e6).toFixed(0)} MB available quota` : 'Storage usage is unavailable in this browser.';
+}
+function routePage() {
+  const importing = location.hash === '#/samples/import';
+  if (importing) setSounds(false);
+  importPage.hidden = !importing; app.hidden = importing;
+  if (importing) { void updateStorageUsage().catch(() => {}); importPage.querySelector('h1')!.setAttribute('tabindex', '-1'); importPage.querySelector('h1')!.focus(); }
+}
+window.addEventListener('hashchange', routePage);
+$('#persist-storage').onclick = guard(async () => { const kept = await navigator.storage?.persist?.(); notice(kept ? 'Persistent storage granted. Keep project backups too.' : 'The browser did not grant persistent storage. Project backups are still available.'); await updateStorageUsage(); });
+$('#import-backup').onclick = () => $('#backup-project').click();
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
 recordButton.onclick = guard(async () => { await persistSession(); await recordingPanel.open('external'); }); $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
@@ -463,16 +476,16 @@ function persistSession() {
     // Session transitions await this queue, so a new session acquires its identity only once.
     const sessionId = state.sessionId || selectedProjectName;
     const saved = sessionId
-      ? await api<Project>(`projects/${sessionId}`, 'PUT', { ...state, sessionId })
-      : await api<Project>('projects', 'POST', state);
+      ? await workspace.saveProject(sessionId, { ...state, sessionId })
+      : await workspace.createProject(state);
     selectedProjectName = saved.sessionId!;
     project.sessionId = selectedProjectName;
     saveWorkspace(); cacheDraft();
-    await api('recovery', 'PUT', saved);
+    await workspace.write([{ collection: 'settings', key: 'recovery', value: saved }]);
     await refreshProjects();
     if (revision === saveRevision) {
       try { localStorage.removeItem(draftKey); } catch { /* unavailable storage */ }
-      $('#saved-state').textContent = 'Session saved'; $('#saved-state').title = ''; lastSaveError = '';
+      $('#saved-state').textContent = 'Saved in this browser'; $('#saved-state').title = ''; lastSaveError = '';
     }
   }).catch(error => {
     const message = error instanceof Error ? error.message : 'Request failed';
@@ -511,7 +524,7 @@ async function transitionSession(action: () => Promise<void>) {
 function assetById(id: string) { const asset = assets.find((a) => a.id === id); if (!asset) throw new Error('Sample is missing from the local library.'); return asset; }
 function assetLabel(id: string) { const asset = assets.find((a) => a.id === id); return asset ? soundLabel(asset) : 'Missing sample'; }
 function targetLabel(target: Target) { return target.kind === 'slider' ? getEditor(target.tabId).sliders.find((s) => s.id === target.sliderId)?.label ?? 'Missing slider • rebind' : target.kind === 'swap' ? `${target.slot} ← ${assetLabel(target.assetId)}` : target.kind === 'midi-preset' ? `MIDI preset · ${midiPresets.find(p => p.id === target.presetId)?.name ?? 'Missing preset'}` : `Trigger ${assetLabel(target.assetId)}`; }
-function send(value: object) { if (socket?.readyState !== WebSocket.OPEN) throw new Error('Studio connection is offline.'); socket.send(JSON.stringify(value)); }
+function send(value: object) { browserMidi.send(value as { type: string; bytes?: number[]; simulate?: boolean }); }
 function ensureDeviceProfiles() {
   for (const port of devicePorts) if (project.profiles.length < 50 && !project.profiles.some(profile => profile.port === port)) {
     project.profiles.push({ id: crypto.randomUUID(), name: port, port, enabled: true });
@@ -561,7 +574,7 @@ function renderProfiles() {
   $('#bridge-status').textContent = bridge.ready ? 'Choose an input below. Unplugged devices reconnect automatically when available.' : bridge.message;
   $('#profiles').innerHTML = devicePorts.map(port => {
     const connected = bridge.connected.includes(port);
-    const status = connected ? 'Connected' : !bridge.ready ? 'Bridge unavailable' : bridge.ports.includes(port) ? 'Connecting…' : 'Waiting for device';
+    const status = connected ? 'Connected' : !bridge.ready ? 'MIDI unavailable' : bridge.ports.includes(port) ? 'Connecting…' : 'Waiting for device';
     return `<div class="device-connection"><div><strong>${escape(port)}</strong><span>${status}</span></div><button data-disconnect-port="${escape(port)}" aria-label="Disconnect ${escape(port)}">Disconnect</button></div>`;
   }).join('') || '<p class="hint">No external devices connected. Plug in your controller, then choose its MIDI input.</p>';
   $('#available-ports').innerHTML = '<option value="">Choose MIDI input…</option>' + bridge.ports.filter(port => !devicePorts.includes(port)).map(port => `<option>${escape(port)}</option>`).join('');
@@ -573,7 +586,7 @@ function renderProfiles() {
 }
 function renderRoute() {
   const simulation = $('#route').value === 'simulation';
-  $('#route-status').textContent = simulation ? 'Browser controls are ready. No MIDI hardware needed.' : bridge.ready ? 'OS MIDI connected.' : 'OS MIDI unavailable. Use Browser controls or reconnect your device.';
+  $('#route-status').textContent = simulation ? 'Browser controls are ready. No MIDI hardware needed.' : bridge.ready ? 'Web MIDI connected.' : 'Web MIDI unavailable. Use Browser controls or reconnect your device.';
   $('#route-status').classList.toggle('simulation', simulation);
 }
 function soundRepository(asset: Asset) {
@@ -611,24 +624,19 @@ async function editMetadata(id: string) {
   dialog.querySelector<HTMLTextAreaElement>('[name=description]')!.value = a.description ?? a.prompt;
   dialog.querySelector<HTMLInputElement>('[name=tags]')!.value = (a.tags ?? []).join(', ');
   dialog.querySelector('form')!.onsubmit = async event => { if ((event.submitter as HTMLButtonElement)?.value !== 'save') return; event.preventDefault(); try {
-    const updated = await api<Asset>(`samples/${id}`, 'PATCH', { description: dialog.querySelector<HTMLTextAreaElement>('[name=description]')!.value, tags: dialog.querySelector<HTMLInputElement>('[name=tags]')!.value.split(',').map(t => t.trim()).filter(Boolean) });
+    const updated = await workspace.updateAsset(id, { description: dialog.querySelector<HTMLTextAreaElement>('[name=description]')!.value, tags: dialog.querySelector<HTMLInputElement>('[name=tags]')!.value.split(',').map(t => t.trim()).filter(Boolean) });
     assets = assets.map(a => a.id === id ? updated : a); renderAssets(); dialog.close();
   } catch (error) { dialog.querySelector('[role=status]')!.textContent = (error as Error).message; } };
   dialog.onclose = () => dialog.remove(); document.body.append(dialog); dialog.showModal();
 }
 
-function soundSource(source: 'import' | 'generate') {
-  $('#sound-import').hidden = source !== 'import'; $('#generate-form').hidden = source !== 'generate';
-  $('#sound-import-tab').setAttribute('aria-selected', String(source === 'import')); $('#sound-generate-tab').setAttribute('aria-selected', String(source === 'generate'));
-  try { localStorage.setItem('studio.sound-source', source); } catch { /* optional preference */ }
-}
-$('#sound-import-tab').onclick = () => soundSource('import');
-$('#sound-generate-tab').onclick = () => soundSource('generate');
+function soundSource(_source: 'import' | 'generate') { $('#sound-import').hidden = false; }
+
 try { soundSource(localStorage.getItem('studio.sound-source') === 'generate' ? 'generate' : 'import'); } catch { soundSource('import'); }
 function renderSlots() {
   $('#slots').innerHTML = project.slots.map((slot) => {
     const pending = engine.timeline.pending(slot.name);
-    return `<div class="slot"><div class="slot-heading"><code>${escape(slot.name)}</code><span>${pending ? 'Queued · cycle ' + pending.cycle : slot.active ? 'Ready' : 'Empty'}</span></div>${slot.assets.length ? slot.assets.map((id, i) => `<div class="variation"><button data-slot="${escape(slot.name)}" data-variation="${id}" class="${slot.active === id ? 'active' : ''}">${i + 1}. ${escape(assetLabel(id))}</button><button data-learn-slot="${escape(slot.name)}" data-asset="${id}" title="Map a MIDI key to this variation">Learn</button></div>`).join('') : '<p class="hint">Assign a generated sound to this slot.</p>'}<code class="slot-code">.s(soundSlot('${escape(slot.name)}'))</code></div>`;
+    return `<div class="slot"><div class="slot-heading"><code>${escape(slot.name)}</code><span>${pending ? 'Queued · cycle ' + pending.cycle : slot.active ? 'Ready' : 'Empty'}</span></div>${slot.assets.length ? slot.assets.map((id, i) => `<div class="variation"><button data-slot="${escape(slot.name)}" data-variation="${id}" class="${slot.active === id ? 'active' : ''}">${i + 1}. ${escape(assetLabel(id))}</button><button data-learn-slot="${escape(slot.name)}" data-asset="${id}" title="Map a MIDI key to this variation">Learn</button></div>`).join('') : '<p class="hint">Assign a sound to this slot.</p>'}<code class="slot-code">.s(soundSlot('${escape(slot.name)}'))</code></div>`;
   }).join('');
 }
 function renderControls() {
@@ -651,7 +659,7 @@ function bind(target: Target, profileId: string, channel: number, kind: 'cc' | '
   pickup.reset(); renderBindings(); dirty();
 }
 function receipt(event: MidiEvent, binding: Binding, status: string, value?: number) {
-  $('#last-receipt').textContent = `${event.route === 'alsa' ? 'ALSA' : 'SIM'} · ${targetLabel(binding.target)} · ${status}${value === undefined ? '' : ' ' + value}`;
+  $('#last-receipt').textContent = `${event.route === 'web-midi' ? 'MIDI' : event.route === 'alsa' ? 'ALSA' : 'SIM'} · ${targetLabel(binding.target)} · ${status}${value === undefined ? '' : ' ' + value}`;
   send({ type: 'receipt', sequence: event.sequence, bindingId: binding.id, target: binding.target, status, value, at: Date.now() });
 }
 async function selectVariation(slotName: string, assetId: string) {
@@ -687,7 +695,7 @@ function queueMidiSlider(owner: StudioEditor, id: string, value: number) {
 }
 async function receive(event: MidiEvent) {
   const midi = parseMidi(event.bytes); if (!midi) return;
-  eventRows.unshift(`<div><span>${new Date(event.receivedAt).toLocaleTimeString()}</span><b>${event.route === 'alsa' ? 'ALSA' : 'SIM'}</b><span>CH ${midi.channel} ${midi.kind.toUpperCase()} ${midi.number}</span><strong>${midi.value}</strong></div>`);
+  eventRows.unshift(`<div><span>${new Date(event.receivedAt).toLocaleTimeString()}</span><b>${event.route === 'web-midi' ? 'MIDI' : event.route === 'alsa' ? 'ALSA' : 'SIM'}</b><span>CH ${midi.channel} ${midi.kind.toUpperCase()} ${midi.number}</span><strong>${midi.value}</strong></div>`);
   eventRows = eventRows.slice(0, 30); scheduleMidiFeedback();
   if (!event.source.startsWith('studio:') && !devicePorts.includes(event.source)) return;
   ensureDeviceProfiles();
@@ -724,19 +732,15 @@ async function receive(event: MidiEvent) {
     } catch (error) { receipt(event, binding, error instanceof Error ? error.message : 'Failed'); notice('MIDI action failed. See MIDI feedback.', true); }
   }
 }
-function openSocket() {
-  socket = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/midi`);
-  socket.onopen = () => { $('#connection').textContent = 'Studio connected'; };
-  socket.onmessage = ({ data }) => {
-    const message = JSON.parse(data);
+function connectMidiEvents() {
+  browserMidi.subscribe(message => {
     if (message.type === 'status') { if (bridge.connected.some(port => !message.connected.includes(port))) { engine.releaseInputNotes(); stopLibraryNotes(); midiComposition.finish(); performancePanel.globalStop(); void recordingPanel.stop(true); } bridge = message; pickup.reset(); renderProfiles(); }
     if (message.type === 'midi-connections') { devicePorts = message.ports; ensureDeviceProfiles(); renderProfiles(); renderBindings(); }
     if (message.type === 'midi') void receive(message).catch((err) => notice(err.message, true));
-    if (message.type === 'error') notice(message.message, true);
-    if (message.type === 'library') void guard(async () => { assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); renderAssets(); renderSlots(); notice(`Library pack ready: ${message.pack} (${message.added} sounds)`); })();
-  };
-  socket.onclose = () => { engine.releaseInputNotes(); stopLibraryNotes(); midiComposition.finish(); performancePanel.stop(); $('#connection').textContent = 'Reconnecting…'; pickup.reset(); setTimeout(openSocket, 1500); };
+  });
+  $('#connection').textContent = 'Saved in this browser';
 }
+
 function virtualSend(id: string, value: number, off = false) {
   const control = project.controls.find((c) => c.id === id)!;
   const kind = ['knob', 'fader'].includes(control.kind) ? 0xb0 : off ? 0x80 : 0x90;
@@ -756,39 +760,39 @@ $('#manual-map').onsubmit = (e) => { e.preventDefault(); void guard(() => {
   bind({ kind: 'slider', sliderId: selectedSlider, tabId: activeEditorId() }, $('#manual-profile').value, Number($('#manual-channel').value), 'cc', Number($('#manual-number').value));
 })(); };
 $('#route').onchange = renderRoute;
-$('#reconnect').onclick = guard(() => api('midi/reconnect', 'POST', {}));
+$('#reconnect').onclick = guard(() => browserMidi.enable());
 $('#available-ports').onchange = () => { $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value; };
 $('#add-profile').onclick = guard(async () => {
   const port = $('#available-ports').value; if (!port) throw new Error('Select a MIDI input port.');
-  const result = await api<{ ports: string[] }>('midi/connections', 'POST', { port, connected: true });
+  const result = await browserMidi.connect({ port, connected: true });
   devicePorts = result.ports; ensureDeviceProfiles(); renderProfiles(); renderBindings(); dirty();
 });
 $('#profiles').onclick = e => {
   const port = (e.target as HTMLElement).closest<HTMLElement>('[data-disconnect-port]')?.dataset.disconnectPort;
   if (!port) return;
   void guard(async () => {
-    const result = await api<{ ports: string[] }>('midi/connections', 'POST', { port, connected: false });
+    const result = await browserMidi.connect({ port, connected: false });
     devicePorts = result.ports; engine.releaseInputNotes(); releaseNotes(); renderProfiles(); pickup.reset();
     $('#device-activity').textContent = 'Device disconnected.';
   })();
 };
 const removeBinding = (e: MouseEvent) => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-remove-binding]')?.dataset.removeBinding; if (id) { project.bindings = project.bindings.filter((b) => b.id !== id); renderBindings(); dirty(); } };
 $('#bindings').onclick = removeBinding; $('#selected-bindings').onclick = removeBinding;
-$('#refresh-assets').onclick = guard(async () => { assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); renderAssets(); renderSlots(); });
+$('#refresh-assets').onclick = guard(async () => { assets = await workspace.assets(); await engine.registerAssets(assets); renderAssets(); renderSlots(); });
 async function renameSound(id: string) {
   const asset = assetById(id);
   const label = await askEdit('Name sound', soundLabel(asset));
   if (!label) return;
-  const updated = await api<Asset>(`samples/${asset.id}`, 'PATCH', { label });
+  const updated = await workspace.updateAsset(asset.id, { label });
   assets = assets.map(item => item.id === updated.id ? updated : item);
   await engine.registerAssets(assets); renderAssets(); renderSlots(); renderBindings();
 }
 $('#assets').onclick = (e) => { const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
-  if (button.dataset.recover) { setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; sampleImports.recover(button.dataset.recover); }
+  if (button.dataset.recover) { setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; location.hash = '#/samples/import'; sampleImports.recover(button.dataset.recover); }
   if (button.dataset.insertExisting) void guard(() => insertSound(button.dataset.insertExisting!))();
   if (button.dataset.assignMidi) void guard(() => assignMidiSound(button.dataset.assignMidi!))();
   if (button.dataset.liveSound) void guard(() => toggleLive(button.dataset.liveSound!))();
-  if (button.dataset.renamePack) void guard(async () => { const name = await askEdit('Rename pack', assets.find(a => a.pack?.id === button.dataset.renamePack)?.pack?.name); if (name) { assets = await api<Asset[]>(`packs/${button.dataset.renamePack}`, 'PATCH', { name }); renderAssets(); } })();
+  if (button.dataset.renamePack) void guard(async () => { const name = await askEdit('Rename pack', assets.find(a => a.pack?.id === button.dataset.renamePack)?.pack?.name); if (name) { assets = await workspace.labelPack(button.dataset.renamePack!, name); renderAssets(); } })();
   if (button.dataset.renameAsset) void guard(() => renameSound(button.dataset.renameAsset!))();
   if (button.dataset.selectAsset) { selectLibrarySound(soundKey(assetById(button.dataset.selectAsset))); }
   if (button.dataset.preview) void guard(() => previewSound(soundKey(assetById(button.dataset.preview!))))();
@@ -819,20 +823,6 @@ $('#slot-dialog').addEventListener('close', () => {
   if (project.slots.some((s) => s.name === name)) return notice('That slot already exists.', true);
   project.slots.push({ name, assets: [], active: null }); renderSlots(); renderAssets(); dirty();
 });
-$('#generate-form').onsubmit = (e) => { e.preventDefault(); if (generationBusy) return;
-  void guard(async () => {
-    generationBusy = true; $('#generate').disabled = true; $('#generate').textContent = 'Generating…';
-    $('#generation-status').textContent = 'Creating your sound. You can keep playing.';
-    try {
-      let job = await api<Job>('generations', 'POST', { prompt: $('#prompt').value, duration: $('#duration').value ? Number($('#duration').value) : null, loop: $('#loop').checked });
-      while (job.state === 'running') { await new Promise((resolve) => setTimeout(resolve, 1000)); job = await api<Job>(`generations/${job.id}`); }
-      if (job.state === 'failed') throw new Error(job.error);
-      assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); selectedAsset = job.asset!.id; if (!project.assetIds.includes(selectedAsset)) project.assetIds.push(selectedAsset); renderAssets(); dirty();
-      $('#generation-status').textContent = 'Ready to preview and insert.';
-    } catch (error) { $('#generation-status').textContent = error instanceof Error ? error.message : 'Generation failed.'; throw error; }
-    finally { generationBusy = false; $('#generate').disabled = false; $('#generate').textContent = 'Generate sound'; }
-  })();
-};
 $('#controls').oninput = (e) => { const input = e.target as HTMLInputElement; const control = project.controls.find((c) => c.id === input.dataset.control); if (!control) return;
   control.value = Number(input.value); $(`[data-value="${control.id}"]`).textContent = input.value;
   document.querySelector<HTMLElement>(`[data-dial="${control.id}"]`)?.style.setProperty('--turn', `${-135 + control.value / 127 * 270}deg`);
@@ -864,7 +854,7 @@ let selectedProjectName = '';
 let refreshingProjects: Promise<void> | undefined;
 function refreshProjects() {
   refreshingProjects ??= (async () => {
-    const names = (await api<string[]>('projects')).filter(name => name !== 'recovery' && name !== '_recovery').sort();
+    const names = (await workspace.projects()).filter(name => name !== 'recovery' && name !== '_recovery').sort();
     const select = $('#saved-projects') as unknown as HTMLSelectElement;
     const current = select.value || selectedProjectName;
     if (JSON.stringify(Array.from(select.options).slice(1).map(option => option.value)) !== JSON.stringify(names)) {
@@ -877,7 +867,7 @@ function refreshProjects() {
 $('#saved-projects').onfocus = guard(refreshProjects);
 $('#saved-projects').onpointerdown = guard(refreshProjects);
 
-$('#backup-project').onclick = guard(async () => { const state = snapshot(); state.assetIds = assetReferences(state); const response = await fetch('/api/backups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(state) }); if (!response.ok) throw new Error((await response.json()).error); const url = URL.createObjectURL(await response.blob()), link = document.createElement('a'); link.href = url; link.download = `${state.name.replace(/[^a-zA-Z0-9_-]/g, '-')}.studio.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); notice('Backup downloaded. Its manifest lists any missing or external files.'); });
+$('#backup-project').onclick = guard(async () => { const state = snapshot(); state.assetIds = assetReferences(state); const blob = await backupProject(state); const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `${state.name.replace(/[^a-zA-Z0-9_-]/g, '-')}.studio.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); notice('Backup downloaded. Its manifest lists any missing or external files.'); });
 $('#restore-backup').onclick = () => $('#backup-file').click();
 $('#backup-file').onchange = guard(async () => {
   const file = $('#backup-file').files?.[0]; if (!file) return;
@@ -885,9 +875,8 @@ $('#backup-file').onchange = guard(async () => {
   if (midiComposition.pending || recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Resolve pending takes before restoring a backup.');
   await transitionSession(async () => {
     await persistSession();
-    const response = await fetch('/api/backups/restore', { method: 'POST', body: file });
-    const result = await response.json(); if (!response.ok) throw new Error(result.error);
-    assets = await api<Asset[]>('samples'); await engine.registerAssets(assets); await loadProject(result.project); await persistSession();
+    const result = await restoreBackup(file);
+    assets = await workspace.assets(); await engine.registerAssets(assets); await loadProject(result.project); await persistSession();
     notice(result.missing.length ? `Restored with ${result.missing.length} missing assets; use Recover sound in Sounds.` : 'Project and audio restored.');
     $('#backup-file').value = '';
   });
@@ -914,7 +903,7 @@ async function loadProject(next: Project) {
 $('#saved-projects').onchange = guard(async () => {
   const name = $('#saved-projects').value; if (!name || name === selectedProjectName) return;
   await transitionSession(async () => {
-    const next = await api<Project>(`projects/${name}`);
+    const next = await workspace.loadProject(name);
     await persistSession();
     await loadProject({ ...next, sessionId: name });
     await persistSession();
@@ -1044,7 +1033,7 @@ async function addSession() {
   if (!name) return;
   await transitionSession(async () => {
     await persistSession();
-    const next = await api<Project>('projects', 'POST', { ...newProject(), name });
+    const next = await workspace.createProject({ ...newProject(), name });
     await loadProject(next);
     await persistSession();
     notice(`Created ${name}.`);
@@ -1293,25 +1282,20 @@ document.addEventListener('keydown', event => {
 
 async function boot() {
   await engine.setup(project);
-  const [status, library, recovery] = await Promise.all([
-    api<{ bridge: BridgeStatus; midiConnections?: string[]; generation: { configured: boolean; fixture: boolean }; format?: number }>('status'), api<Asset[]>('samples'), api<Project | null>('recovery'),
-  ]);
-  bridge = status.bridge; devicePorts = status.midiConnections || []; assets = library; await engine.registerAssets(assets);
-  if (status.format !== newProject().version) notice(`The Studio server is running older code (project format ${status.format ?? 'unknown'}; this page expects ${newProject().version}). Restart npm run dev, then reload.`, true);
-  $('#generation-status').textContent = status.generation.fixture ? 'Test fixture mode. No ElevenLabs credits are used.' : status.generation.configured ? 'ElevenLabs connected · generated locally into your library' : 'Add ELEVENLABS_API_KEY to .env, then restart to generate.';
-  $('#generate').disabled = !status.generation.configured && !status.generation.fixture;
-  let restored = recovery;
+  await seedStarters(); await browserMidi.init();
+  const [library, recovery] = await Promise.all([workspace.assets(), workspace.read<Project>('settings', 'recovery')]);
+  bridge = browserMidi.status; devicePorts = (await browserMidi.connections()).ports; assets = library; await engine.registerAssets(assets);
+  let restored = recovery ?? await workspace.loadProject('Drum-Basics');
   let hasDraft = false;
   try { const cached = localStorage.getItem(draftKey); if (cached) { restored = ProjectSchema.parse(JSON.parse(cached)); hasDraft = true; } } catch { /* Ignore invalid local drafts. */ }
-  if (restored) { try { await loadProject(restored); $('#saved-state').textContent = 'Recovery restored'; } catch (error) { notice(`Recovery could not load: ${(error as Error).message}`, true); } }
-  restoreWorkspace(); renderAll(); await refreshProjects(); await refreshMidiPresets(); openSocket(); booted = true;
+  if (restored) { try { await loadProject(restored); $('#saved-state').textContent = recovery || hasDraft ? 'Recovery restored' : 'Saved in this browser'; } catch (error) { notice(`Recovery could not load: ${(error as Error).message}`, true); } }
+  restoreWorkspace(); renderAll(); await refreshProjects(); await refreshMidiPresets(); connectMidiEvents(); booted = true; routePage();
   try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); await recordingPanel.restore(); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
   renderComposition();
   if (hasDraft) dirty();
   setInterval(() => {
     engine.tick(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = false; $('#playhead').style.left = `${180 + engine.timelinePosition * 64}px`; const head = document.querySelector<HTMLElement>('#seek-handle'); if (head && !timelineDragging) { head.style.left = `${180 + engine.timelinePosition * 64}px`; head.setAttribute('aria-valuenow', String(engine.timelinePosition)); }
     if (!instrumentOpen && engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }
-    if (++frame % 10 === 0 && socket?.readyState === WebSocket.OPEN) send({ type: 'snapshot', diagnostics: engine.diagnostics, sliders: editor.sliders.map((s) => ({ id: s.id, label: s.label, value: s.value })), slots: project.slots });
   }, 100);
 }
 void boot().catch((error) => notice(`Studio could not start: ${error.message}`, true));

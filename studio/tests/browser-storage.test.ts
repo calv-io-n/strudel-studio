@@ -1,0 +1,40 @@
+import 'fake-indexeddb/auto';
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { all, database, read, write } from '../client/storage/database';
+import { createProject, saveProject, assets, importSample, saveRecording, presets, savePreset } from '../client/storage/workspace';
+import { backupProject, restoreBackup } from '../client/storage/backup';
+import { newProject } from '../shared/model';
+import { encodeWav } from '../shared/wav';
+import { zipSync, strToU8 } from 'fflate';
+const wav = encodeWav(new Float32Array(4410).fill(.2), new Float32Array(4410).fill(.1), 44100).buffer;
+const metadata = { name: 'tone.wav', label: 'Tone', originalFormat: 'wav', provider: 'upload' };
+
+test('browser workspace transactions, portable backups, and failures', async () => {
+  const first = await createProject(newProject());
+  const concurrent = await Promise.all([createProject(newProject()), createProject(newProject())]);
+  assert.equal(new Set([first.sessionId, ...concurrent.map(p => p.sessionId)]).size, 3);
+  await assert.rejects(saveProject(first.sessionId, { ...first, bpm: -1 }), /Project format/);
+  assert.equal((await read<any>('projects', first.sessionId))!.bpm, 120);
+  const [a, duplicate] = await Promise.all([importSample(metadata, wav, wav), importSample(metadata, wav, wav)]);
+  assert.equal(a.asset.id, duplicate.asset.id); assert.deepEqual([a.reused, duplicate.reused].sort(), [false, true]); assert.equal((await assets()).length, 1);
+  first.assetIds = [a.asset.id];
+  const backup = await backupProject(first), result = await restoreBackup(backup);
+  assert.notEqual(result.project.sessionId, first.sessionId); assert.equal(result.missing.length, 0); assert.equal((await assets()).length, 1);
+  const before = (await all('projects')).length;
+  const wrong = new Uint8Array(wav.slice(0)); wrong[50] ^= 1;
+  const collision = zipSync({ 'project.json': strToU8(JSON.stringify(first)), [`assets/${a.asset.id}.json`]: strToU8(JSON.stringify(a.asset)), [`assets/${a.asset.id}.wav`]: wrong });
+  await assert.rejects(restoreBackup(new Blob([collision])), /different audio/); assert.equal((await all('projects')).length, before);
+  const unsafe = zipSync({ '../project.json': strToU8('{}') }); await assert.rejects(restoreBackup(new Blob([unsafe])), /Unsafe/);
+  await assert.rejects(importSample(metadata, new ArrayBuffer(0), wav), /64 MB/);
+  await assert.rejects(importSample(metadata, wav, new ArrayBuffer(50)), /PCM/);
+  await assert.rejects(saveRecording({ label: 'Invalid', recording: { source: 'internal', bpm: 120, offsetCycles: 0, duration: 1, trimStart: 0, trimEnd: 1 } }, new Blob([wav])), /trim/);
+  const recording = await saveRecording({ label: 'Recorded', recording: { source: 'internal', bpm: 120, offsetCycles: 0, duration: .1, trimStart: 0, trimEnd: .1 } }, new Blob([wav])); assert.equal(recording.provider, 'recording');
+  await savePreset({ name: 'Warm', code: 'MIDI.s("triangle")' }); await assert.rejects(savePreset({ name: 'warm', code: 'MIDI.s("sine")' }), /already/); assert.equal((await presets()).length, 1);
+  // A failed final write must roll back audio and metadata written earlier in the transaction.
+  await assert.rejects(write([{ collection: 'audio', key: 'rollback', value: new Blob([wav]) }, { collection: 'settings', key: 'abort-key', value: 1, add: true }, { collection: 'settings', key: 'abort-key', value: 2, add: true }]));
+  assert.equal(await read('audio', 'rollback'), undefined); assert.equal(await read('settings', 'abort-key'), undefined);
+  await assert.rejects(write([{ collection: 'audio', key: 'sync-rollback', value: new Blob([wav]) }, { collection: 'settings', key: 'bad-clone', value: () => {} }]));
+  assert.equal(await read('audio', 'sync-rollback'), undefined);
+  const db = await database(), tx = db.transaction('settings', 'readwrite'); tx.objectStore('settings').put('ok', 'after-failure'); await new Promise<void>((resolve, reject) => { tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); assert.equal(await read('settings', 'after-failure'), 'ok');
+});

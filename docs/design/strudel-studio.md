@@ -4,7 +4,17 @@
 
 Design target for the project. This describes intended behavior, not a claim that every feature is implemented.
 
-A focused Strudel workspace: write patterns in tabs, play MIDI notes into selected code sections, record instruments and vocals as reusable sounds, and arrange patterns into a composition. Generate sounds with ElevenLabs when you need them.
+A focused Strudel workspace: write patterns in tabs, play MIDI notes into selected code sections, record instruments and vocals as reusable sounds, and arrange patterns into a composition. Import sounds directly from public GitHub repositories or your own files.
+
+## Browser deployment target
+
+The accepted runtime is a single browser-only application served as static files, including on Cloudflare Pages. This section supersedes older references below to local-server storage, AI generation, sample servers, and ALSA transport; see [ADR 0007](../adr/0007-browser-only-pages.md).
+
+- Store projects, samples, originals, presets, and settings in IndexedDB. Save transactionally and preserve drafts on failure. Keep existing project and ZIP backup compatibility.
+- Offer a dedicated `/#/samples/import` page for public GitHub discovery, selective download, and file/folder/ZIP review. Keep the editor mounted so navigation preserves drafts. No automatic external pack downloads.
+- Ship only Drum Basics, Neon Drive, and six original CC0 drum samples under 1 MB. Seed once without overwriting edits.
+- Run synthesis, recording, and WAV export in the browser. Use Web MIDI with explicit permission and remembered connections; retain on-screen controls without hardware access.
+- Explain browser-local storage, usage, persistence requests, and downloadable backups. No accounts, cross-device sync, backend APIs, AI generation, or OS loopback in this target.
 
 ## Design principle
 

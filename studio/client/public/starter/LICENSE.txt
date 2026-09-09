@@ -1,0 +1,3 @@
+Studio Starter samples and scripts/build-starters.ts: CC0-1.0.
+Original procedural synthesis; no third-party recordings.
+https://creativecommons.org/publicdomain/zero/1.0/legalcode

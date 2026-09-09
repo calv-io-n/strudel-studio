@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseGitHubLink, discoverGitHub, downloadGitHub } from '../server/github';
+import { parseGitHubLink, discoverGitHub, downloadGitHub } from '../client/github';
 const sha = 'a'.repeat(40), tree = 'b'.repeat(40);
 test('GitHub discovery resolves slash-containing refs and pins sample downloads to a commit', async () => {
   const calls: string[] = [];
@@ -23,12 +23,9 @@ test('GitHub import rejects arbitrary hosts, traversal and oversized downloads',
   await assert.rejects(downloadGitHub({ owner: 'a', repo: 'b', revision: sha, path: '../test.wav' }), /Invalid sample/);
   await assert.rejects(downloadGitHub({ owner: 'a', repo: 'b', revision: sha, path: 'test.wav' }, (async () => new Response('x', { headers: { 'content-length': '64000001' } })) as typeof fetch), /size limit/);
 });
-test('GitHub discovery sends STUDIO_GITHUB_TOKEN only when configured', async () => {
+test('browser GitHub discovery sends no credentials or server-only headers', async () => {
   const headers: Record<string, string>[] = [];
   const request = (async (_input: string | URL | Request, init?: RequestInit) => { headers.push(init?.headers as Record<string, string>); return Response.json({ default_branch: 'main', sha, commit: { tree: { sha: tree } }, truncated: false, tree: [{ type: 'blob', mode: '100644', path: 'kick.wav', size: 1 }] }); }) as typeof fetch;
-  delete process.env.STUDIO_GITHUB_TOKEN; await discoverGitHub({ url: 'https://github.com/owner/pack' }, request);
-  assert.ok(headers.every(h => !('Authorization' in h)));
-  process.env.STUDIO_GITHUB_TOKEN = 'ghp_test'; headers.length = 0;
-  try { await discoverGitHub({ url: 'https://github.com/owner/pack' }, request); assert.ok(headers.length && headers.every(h => h.Authorization === 'Bearer ghp_test')); }
-  finally { delete process.env.STUDIO_GITHUB_TOKEN; }
+  await discoverGitHub({ url: 'https://github.com/owner/pack' }, request);
+  assert.ok(headers.length && headers.every(h => !('Authorization' in h) && !('User-Agent' in h)));
 });

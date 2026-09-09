@@ -125,12 +125,12 @@ export function parseProject(value: unknown): Project {
   if (result.success) return result.data;
   throw new Error(describeProjectIssues(value));
 }
-export type MidiEvent = { source: string; bytes: number[]; receivedAt: number; sequence: number; route: 'alsa' | 'simulation' };
+export type MidiEvent = { source: string; bytes: number[]; receivedAt: number; sequence: number; route: 'alsa' | 'web-midi' | 'simulation' };
 export type BridgeStatus = { ready: boolean; message: string; ports: string[]; connected: string[] };
 export type Receipt = { sequence: number; bindingId: string; target: Target; status: string; value?: number; at: number };
 export type Job = { id: string; state: 'running' | 'complete' | 'failed'; asset?: Asset; error?: string };
 
-export const defaultCode = `// Select an inline slider, then choose MIDI Learn.\nsetCpm(120/4)\n\n$beat: note("c2*4").s("triangle")\n  .decay(0.12).sustain(0)\n  .gain(slider(0.45, 0, 1, 0.01))\n\n$bass: note("<a2 f2 c3 g2>")\n  .s("sawtooth")\n  .lpf(slider(900, 100, 6000, 10))\n  .gain(0.18)\n\n// Open Sounds to generate and insert a sample.\n`;
+export const defaultCode = `// Select an inline slider, then choose MIDI Learn.\nsetCpm(120/4)\n\n$beat: note("c2*4").s("triangle")\n  .decay(0.12).sustain(0)\n  .gain(slider(0.45, 0, 1, 0.01))\n\n$bass: note("<a2 f2 c3 g2>")\n  .s("sawtooth")\n  .lpf(slider(900, 100, 6000, 10))\n  .gain(0.18)\n\n// Open Sample library to import and insert a sample.\n`;
 export function newProject(): Project {
   return { version: 5, assetIds: [], tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
     profiles: [ { id: 'virtual', name: 'Virtual controller', port: 'studio:virtual', enabled: true },

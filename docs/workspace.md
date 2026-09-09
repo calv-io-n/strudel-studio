@@ -1,5 +1,7 @@
 # Workspace guide
 
+Studio saves projects and sounds in this browser. See [setup and migration](setup.md) for hosting and moving existing projects.
+
 ## Workspace
 
 - Write in named pattern tabs. Use **+** to add a pattern. Right-click a tab for Color, Rename, Duplicate, Add to composition, or Close; **•••** also offers these actions.
@@ -26,25 +28,25 @@ Structural edits require stopped playback. Each clip starts its source pattern f
 
 Select an inline slider, choose **MIDI Learn**, then move a virtual or physical knob. Browser controls work without MIDI hardware. Unassigned keyboard notes play a simple synth.
 
-**MIDI devices** is for connecting external keyboards and controllers. Select an input and choose **Connect**; each saved input shows Connected, Connecting, or Waiting for device, with an explicit **Disconnect** action. Input activity confirms arriving notes and CC messages. Connections are installation-wide: opening a new song or browser cannot clear them. Replugging a selected device reconnects it automatically. **Refresh devices** restarts the bridge while retaining the selection.
+**MIDI devices** connects external keyboards and controllers through Web MIDI. Choose **Enable MIDI**, grant browser access, select an input, and choose **Connect**. Remembered inputs show Connected or Waiting for device, with an explicit Disconnect action. Input activity confirms arriving notes and CC messages. Selection stays independent of the current project. Selected devices reconnect when replugged; reload resumes them when browser permission is already granted. Unsupported browsers can still use the on-screen controller.
 
-**Project → On-screen controller** contains the browser keyboard, knobs and sliders, plus **Mappings, sound slots & diagnostics**. Inline **MIDI Learn** continues to work with physical or on-screen controls. The Browser/OS loopback route applies only to the on-screen controller. External inputs use the Python/ALSA bridge independently; see [setup](setup.md).
+**Project → On-screen controller** contains browser keys, knobs, sliders, mappings, sound slots, and event feedback. MIDI Learn works with physical or on-screen controls. There is no Python bridge or OS loopback route.
 
 ## Sounds
 
-Set `ELEVENLABS_API_KEY` in `.env` and restart Studio to enable generation. Keep the key on the server.
+The bundled collection contains six original CC0 drum sounds. Add more through **Import samples**, using public GitHub links or file uploads.
 
-**Sample library** is a drawer view alongside Composition and MIDI devices: open it from the top bar or by clicking a sound name in your code, and keep editing or playing while it is open. Each sound has **Insert** (or **Swap** when you opened it from a sound name), a preview button, and **Live**, which plays that sound from your MIDI controller or the test keys without recording anything. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Describe a sound, generate, preview, and **Insert into pattern**. Duration is optional; looping defaults off. Inserting does not start playback or apply a running draft. Existing sample-to-pad and sound-slot assignment is available under the selected sound's advanced controls.
+**Sample library** is a drawer view alongside Composition and MIDI devices: open it from the top bar or by clicking a sound name in your code, and keep editing or playing while it is open. Each sound has **Insert** (or **Swap** when you opened it from a sound name), a preview button, and **Live**, which plays that sound from your MIDI controller or the test keys without recording anything. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Import a sound, preview it, then choose **Insert into pattern**. Inserting does not start playback or apply a running draft. Existing sample-to-pad and sound-slot assignment is available under the selected sound's advanced controls.
 
 Type inside `s("…")` or `sound("…")` to find sounds by name or label; use arrow keys and **Tab** to complete. **Ctrl+Space** opens suggestions and **Escape** dismisses them. Typing after a dot suggests effects such as reverb and filters. Saved sound labels can be renamed in the Sounds panel.
 
-Generated sounds are stored in `samples/ai/`. The app never generates automatically; every request starts with the Generate sound button.
+Imported and recorded sounds are stored as browser-local audio blobs. AI generation is not part of this version.
 
 ## Projects
 
-Use **+ beside Sessions** to create a named session; Enter or Confirm creates it. Press **Ctrl+S** (Cmd+S on macOS) or the **Save** button beside the save status to save immediately. Sessions also autosave to `.studio/projects/` and retain their identity and dropdown selection after reload. Switching sessions saves pending edits first. A local browser draft protects edits during interrupted saves; **Project → Save project** retries a failed save. Recovery is also saved to `.studio/projects/recovery.json`. Projects include all tabs, clips, mappings, slots, and controller values. Sounds remain in the local sound library, so retain that folder when backing up projects.
+Use **+ beside Sessions** to create a named session. Press **Ctrl+S** (Cmd+S on macOS) or **Save** to save immediately. Wait for **Saved in this browser** before closing the page. Sessions autosave in IndexedDB and retain their identity after reload. Switching sessions saves pending edits first. Recovery drafts protect interrupted saves; Save retries a failure. Projects include all tabs, clips, mappings, slots, and controller values. Download a ZIP project backup to retain both the project and referenced sound files independently of browser storage.
 
-Older single-pattern and two-lane projects migrate to format v5 when opened. Their code and MIDI mappings are preserved; files are only rewritten when saved. Closing a tab hides it from the editor strip; deleting a pattern removes its code, clips and mappings after confirmation.
+Older single-pattern and two-lane projects migrate to format v5 when opened. Their code and MIDI mappings are preserved; stored records are updated when saved. Closing a tab hides it from the editor strip; deleting a pattern removes its code, clips and mappings after confirmation.
 
 ## Audio export
 
@@ -56,14 +58,14 @@ Highlight a note expression and choose **Play into selection**. **Audition** pla
 
 **Jam with composition** repeats the displayed range while temporarily excluding the destination tab. Stopping a take keeps the jam running. Global Stop ends both. Original-phrase suppression and jam exclusions never change saved mutes or Solo.
 
-**Record highlighted sound** captures the actual played audio and effects. For an interface or microphone, open **Sounds → Import → Record audio**, select the source, and set it up. Check levels before recording; monitoring starts off. Stop, finish the tail, preview/trim, name and save the take. Insert it from the library as a separate sample phrase; the original effects are not added again.
+**Record highlighted sound** captures the actual played audio and effects. For an interface or microphone, open **Sample library → Add sounds → Record audio**, select the source, and set it up. Check levels before recording; monitoring starts off. Stop, finish the tail, preview/trim, name and save the take. Insert it from the library as a separate sample phrase; the original effects are not added again.
 
 MIDI proposals, import reviews and audio-take chunks have browser recovery. Recovered work stays stopped and requires explicit review. Keep important audio with **Save sound**; browser storage limits can prevent recovery and are reported.
 
 ## Import samples and back up projects
 
-Sounds has **Generate** and **Import** tabs above one searchable library. Upload audio files, a folder or a ZIP pack, review the selections, then choose **Import selected**. Public GitHub links have a discovery and download-review step before importing. Packs listed in `STUDIO_LIBRARIES` are cached automatically when the server starts and show up here as imported packs. Identical files reuse existing sound identities; pack and sound renames preserve patterns.
+Open **Import samples** in the header, or follow the import link under **Sample library → Add sounds**. On the dedicated page, paste a public GitHub repository/folder/audio-file link, find samples, select downloads, and import them after review. Alternatively upload audio files, a folder, or ZIP pack. Downloading is explicit; no pack is fetched automatically. Identical files reuse sound identities, and pack/sound renames preserve references. Back to Studio returns to your draft.
 
 Imports support WAV, MP3, OGG and FLAC where the browser decoder supports them, up to 64 MB per source file, 256 MB unpacked and 500 files per review. Originals are retained alongside playback WAVs. Individual failures remain visible; valid imports survive cancellation.
 
-**Project → Download project backup** bundles referenced audio and available originals with the session. The manifest lists missing files and external URLs. **Restore project backup** creates a new session, preserving existing sessions. Backups are limited to 256 MB; larger projects can be copied using their JSON and referenced files from local storage. Missing library audio offers **Recover sound** for reimporting the original file.
+**Project → Download project backup** bundles referenced audio and available originals with the session. The manifest lists missing files and external URLs. **Restore project backup** creates a new session, preserving existing sessions. Backups are limited to 256 MB; export smaller project selections if a backup exceeds that limit. Missing library audio offers **Recover sound** for reimporting the original file.

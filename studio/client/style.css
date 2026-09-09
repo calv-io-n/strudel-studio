@@ -594,3 +594,25 @@ body[data-expanded=composition] #drawer-resize, body[data-expanded=library] #dra
 .studio-function-doc dd { margin: 2px 0 10px; }
 .studio-function-doc pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; padding: 8px; background: var(--selection); }
 .studio-function-doc small { opacity: 0.7; }
+
+/* The import route keeps the editor mounted, preserving live drafts and playback. */
+#app[hidden], #sample-import-page[hidden] { display: none !important; }
+#sample-import-page { position: fixed; inset: 0; overflow: auto; background: var(--surface-soft); color: var(--text, #242830); padding: clamp(24px, 5vw, 72px); z-index: 40; }
+#sample-import-page > header { display: flex; justify-content: space-between; gap: 24px; max-width: 1200px; margin: 0 auto 64px; }
+#sample-import-page > header span { font-size: 11px; letter-spacing: .14em; opacity: .65; }
+#sample-import-page > h1, #sample-import-page > p, #sample-import-page > .import-columns, #sample-import-page > .browser-storage { max-width: 1200px; margin-left: auto; margin-right: auto; }
+#sample-import-page h1 { font-size: clamp(32px, 5vw, 64px); line-height: 1.08; letter-spacing: -.04em; margin-bottom: 20px; }
+#sample-import-page > p { margin-bottom: 48px; opacity: .75; }
+.import-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; }
+.import-columns > div { min-width: 0; border-top: 1px solid var(--border, #ccc); padding-top: 20px; }
+.import-columns label { display: grid; gap: 8px; margin: 16px 0; }
+.import-columns input:not([type=checkbox]) { width: 100%; min-width: 0; }
+.import-columns button { margin: 4px 4px 4px 0; }
+.import-columns .import-review { max-height: 360px; overflow: auto; }
+.import-columns .import-review label { display: flex; overflow-wrap: anywhere; align-items: start; }
+.browser-storage { border-top: 1px solid var(--border, #ccc); margin-top: 56px; padding-top: 24px; }
+.import-page-link { display: inline-block; margin: 12px 0; }
+.import-nav { white-space: nowrap; font-size: 12px; }
+@media (max-width: 760px) { .import-columns { grid-template-columns: 1fr; gap: 32px; } #sample-import-page > header { margin-bottom: 36px; } .import-nav { display: none; } }
+
+#sample-import-page h1:focus { outline: none; }

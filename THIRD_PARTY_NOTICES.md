@@ -30,3 +30,7 @@ The complete application source, build instructions, lockfile and dependency pat
 ## Embedded Strudel function documentation
 
 `studio/client/strudel-docs.json` is generated from the documentation bundled with installed `@strudel/codemirror` 1.3.0 and signatures in the installed Strudel packages. Copyright remains with the Strudel contributors under AGPL-3.0-or-later. Studio converts documentation markup to text and supplements Studio-specific helpers in `function-docs.ts`. Regenerate with `npm run studio:docs`; no upstream package files are modified. Acorn (MIT) parses the installed bundle and sources during generation.
+
+## Original Studio Starter kit
+
+The six WAV files in `studio/client/public/starter/` and `scripts/build-starters.ts` are original procedural synthesis dedicated to CC0-1.0, an explicit exception to the application code license. No third-party recordings were used. The build includes the kit license. Other imported or historical example-pack audio retains its own license and is not bundled.

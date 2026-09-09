@@ -1,101 +1,51 @@
-# Setup and troubleshooting
+# Setup, hosting, and migration
 
-## Supported environment
+Studio is a static browser application. All project persistence, audio processing, recording, and WAV export run on the visitor's device. The only required hosting is static file delivery over HTTPS.
 
-The initial release targets Linux with Node 24, npm, and a Chromium-based browser. Use `.nvmrc` if you manage Node with nvm. macOS and Windows are unverified; hardware MIDI currently uses Linux/ALSA only.
+## Local development
 
-```bash
-git clone https://github.com/calv-io-n/strudel.git
-cd strudel
-npm ci
-npm run studio:demo
-npm run dev
-```
+Use Node 24 and npm. Run `npm ci`, then `npm run dev`, and open http://localhost:5173. There is no separate sample server and no Python, Bun, ElevenLabs key, or backend service requirement. Use a Chromium-based desktop browser for the verified workflow. Browser codec and Web MIDI availability vary.
 
-Open http://localhost:5173, choose **Sessions → Neon Drive**, open **Composition**, and press **Play composition**. The sampler uses port 5555. Normal installation does not download a browser or run optional-tool checks. An existing browser is sufficient for Studio; Playwright Chromium is only needed by automated tests and the legacy watcher.
+`npm run studio:build` generates the small starter collection, checks TypeScript, and builds `studio/dist`. `npm run studio:preview` serves those exact production files locally. `npm run studio:starters` regenerates the six original CC0 WAVs and two starter projects.
 
-## Optional integrations
+## Cloudflare Pages
 
-| Capability | Additional setup |
-| --- | --- |
-| Browser tests | `npm run setup:browser-tests`; on Linux add `-- --with-deps` for browser system libraries |
-| Legacy VS Code/file watcher | Install Bun 1.2+, then `npm run setup:watcher`; start with `npm run dev:watcher` |
-| Physical MIDI / OS loopback | Python 3, a virtual environment, `python-rtmidi`, and an available ALSA sequencer |
-| ElevenLabs sounds | Copy `.env.example` to `.env`, supply your own `ELEVENLABS_API_KEY`, restart Studio |
-| Recording and sample-processing scripts | FFmpeg; the download helper also needs yt-dlp |
+Production uses the Cloudflare Pages Direct Upload project `strudel-studio`, with production branch `main` and custom domain `strudelstudio.online`. GitHub Actions in `.github/workflows/ci.yml` builds on Node 24, runs unit and browser tests, then deploys the verified `studio/dist` artifact after a successful push to `main`. Pull requests only run checks. The CI workflow can also be run manually on `main` to redeploy.
 
-The API key is optional. Sound generation sends the requested prompt to ElevenLabs and may incur provider charges. Studio generates only after an explicit action. Use sounds only according to their applicable rights and provider terms.
+GitHub repository variable `CLOUDFLARE_ACCOUNT_ID` identifies the Cloudflare account. Repository secret `CLOUDFLARE_API_TOKEN` must contain a token with **Account → Cloudflare Pages → Edit**, scoped to that account. These credentials are used only by the deployment job, not by the browser application. No Pages Functions or runtime secrets are needed. See [Cloudflare's Direct Upload CI guide](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/).
 
-### Hardware MIDI controllers
+The custom domain points to `strudel-studio.pages.dev`; Cloudflare activates it and provisions HTTPS after nameserver and domain validation. Push the browser-only application changes together with the workflow before the first release.
 
-Studio's hardware bridge is a small Python process (`studio/midi/bridge.py`) that talks to the ALSA sequencer through `python-rtmidi`. Any class-compliant USB controller works without a vendor driver. Install the bridge once:
+Publish only `studio/dist`, never the repository root or local data directories. The build contains the application, its isolated render page, headers, and the starter manifest/audio. Imported samples and saved projects are never part of a build.
 
-```bash
-python3 -m venv .venv-midi
-.venv-midi/bin/pip install -r studio/midi/requirements.txt
-```
+The import route is `/#/samples/import`, so direct navigation works without a server-side router. `/render.html` must remain a separate HTML entry for isolated WAV rendering. `_headers` allows same-origin MIDI and microphone access, revalidates HTML and starter assets, and caches hashed application assets. Do not add a policy blocking blob audio/worklets or JavaScript evaluation: the Strudel live-coding engine requires them. HTTPS permits browser storage locks, Web MIDI, and microphone access; localhost is also a secure context for development.
 
-Restart Studio. Then connect the controller inside the app, which is the step most people miss: **plugging the device in is not enough. Studio only listens to ports you have selected.**
-
-1. Plug the controller in and confirm Linux sees it: `aconnect -l` lists it as a client with one or more ports.
-2. Open **MIDI devices** in the footer. This menu is only for external inputs; browser keys and knobs are under **Project → On-screen controller**.
-3. Pick the controller's port from the dropdown and click **Connect**. Controllers that expose several ports (for example, a "MIDI" port and a DAW auto-map port such as "HyperControl" or "DIN") normally want the plain MIDI one.
-4. Press a key. Unmapped notes play the built-in synth, and the input activity line shows its channel, note and velocity.
-
-Connections are saved for this Studio installation, independently of projects and open browser windows. They survive song switches and restarts. An unplugged controller stays listed as **Waiting for device** and reconnects automatically when it returns. **Refresh devices** restarts discovery without clearing your choices; **Disconnect** explicitly removes a connection. On first upgrade, Studio imports enabled hardware profiles from existing saved sessions once. Verified controllers: M-Audio Axiom AIR Mini 32.
-
-As a one-off alternative, route the device into Studio's always-enabled **External MIDI input** port from a terminal while Studio is running:
-
-```bash
-aconnect 'Axiom A.I.R. Mini32':0 'Strudel Studio':0
-```
-
-That route lasts only until the bridge restarts, so prefer **Connect** in the app for anything you want to keep.
-
-Your host must provide `/dev/snd/seq`; containers and remote hosts often do not. Missing hardware or Python does not prevent browser controls, synth playback or WAV export. `studio/midi/install.py` additionally installs separate MIDI MCP tooling and is not necessary for ordinary hardware MIDI.
-
-## Configuration
-
-All configuration is optional. `.env` is loaded by the server; never commit it.
-
-| Variable | Default / purpose |
-| --- | --- |
-| `ELEVENLABS_API_KEY` | Unset; sound generation disabled |
-| `STUDIO_PORT` | `5173`; localhost Studio port |
-| `STUDIO_DATA_DIR` | `.studio/projects`; saved sessions and recovery |
-| `STUDIO_SAMPLE_DIR` | `samples/ai`; generated, imported and recorded sounds |
-| `STUDIO_LIBRARY_DIR` | `samples/libraries`; boot-time GitHub packs, read alongside `STUDIO_SAMPLE_DIR` |
-| `STUDIO_GITHUB_TOKEN` | Unset; optional GitHub token sent only to `api.github.com` to raise the 60-per-hour discovery limit for imports and boot libraries |
-| `STUDIO_LIBRARIES` | Unset; comma-separated public GitHub repo or folder links cached into the sample library at boot (see below) |
-| `STUDIO_PYTHON` | `.venv-midi/bin/python` if present, otherwise `python3` |
-| `STUDIO_DISABLE_MIDI` | Set `1` to disable the physical bridge; virtual controls remain usable |
-| `STUDIO_CHROMIUM` | Optional Chromium executable override for browser tests |
-| `STUDIO_E2E_ALSA` | Set `1` only for hardware browser tests on a compatible host |
-| `STUDIO_FIXTURE_GENERATION` | Test-only local fixture generator; not real AI generation |
-
-### Boot-time sample libraries
-
-`STUDIO_LIBRARIES` lists public GitHub repositories or folders whose WAV files are downloaded once into `STUDIO_LIBRARY_DIR` when the server starts, then appear in the Sample library as an imported pack named after the repository or folder. The sync runs after the port is open and never blocks startup; each boot only fetches files that are not cached yet, and files that failed are retried. Only WAV files are cached at boot (MP3, OGG and FLAC need the browser importer). `.env.example` ships two openly licensed packs: `tidalcycles/sounds-tr808-fischer` (TR-808 one-shots, CC0, ~12 MB) and `switchangel/breaks` (breakbeat loops, public domain, ~2.5 MB). Unauthenticated GitHub API access allows 60 requests per hour; each library costs two to four requests per boot, so keep the list short or set `STUDIO_GITHUB_TOKEN`.
-
-Both directories are gitignored, so deleting `samples/libraries/` and restarting re-downloads the packs. Changing `STUDIO_SAMPLE_DIR` changes the generated library, not the legacy sampler's `samples/` root. Keep source checkouts and data paths consistent when moving an installation.
-
-## Troubleshooting
-
-- **Wrong Node version:** use Node 24, then reinstall with `npm ci`.
-- **Port already in use:** stop the other Studio instance or set `STUDIO_PORT`. The sampler still uses 5555; `npm run studio:app` starts only the app when the legacy sample server is unnecessary.
-- **No sound:** click Play to unlock browser audio, check output volume, and try Neon Drive. External sample patterns require their referenced sources to be available.
-- **Python/MIDI error:** use browser controls, or follow the MIDI setup above. Hardware support is optional.
-- **Controller keys do nothing:** the device is probably not connected in Studio. Open **MIDI devices**, select its input and click **Connect**. Check that the input activity line shows notes or CC events; if it stays empty, run `aseqdump -p <client>` from `aconnect -l` to confirm the hardware is sending at all. The route selector under On-screen controller affects only the generated browser controls; it does not gate external MIDI input.
-- **Missing browser in tests:** run `npm run setup:browser-tests`; use `-- --with-deps` for missing Linux libraries. The watcher may need its own pinned browser version, installed by `setup:watcher`.
-- **Save failure:** keep the tab open, check data-directory permissions and connection status, then use Project → Save project. Export code before clearing browser storage or removing any recovery data.
-- **Hosted access returns 403:** expected. This release is localhost-only, not a production web service. Do not remove the host/origin checks to expose it publicly.
+Before publishing, run the build, unit tests, and browser tests. In a fresh browser on the final URL, play both starter projects, save/reload an edit, import a GitHub sample, export a WAV, and download/restore a backup. Verify there are no `/api/`, localhost-service, or application WebSocket requests. Cloudflare Pages supports static hosting without paid backend services; platform limits still apply.
 
 ## Data and backups
 
-External device subscriptions live in `STUDIO_DATA_DIR/.settings/midi-connections.json` (normally `.studio/projects/.settings/`). They are machine settings and are not included in portable song backups. Project MIDI mappings keep their existing profile identities.
+IndexedDB database `strudel-studio` holds projects, assets, playback audio, originals, presets, and settings. Recovery drafts and pending recordings/import reviews also use browser-local storage. Projects keep the existing schema and stable sample IDs.
 
-Stop Studio and back up `.studio/projects/` together with `samples/ai/` (or their configured equivalents). Keep any manually added `samples/` files that patterns reference. Session JSON contains sound IDs, not copies of audio. Restoring only JSON can leave missing sounds.
+Storage belongs to the site's origin and browser profile. A Pages preview URL, localhost, a `pages.dev` domain, and a custom domain have separate data. Use ZIP project backups to move music between them. Clearing browsing/site data can remove it; private browsing may not retain it. The import page shows usage and can request persistent storage, which the browser may decline.
 
-The browser also stores a recovery draft and UI preferences. It is a fallback, not a portable backup. Code export/import moves one pattern; WAV export creates audio and does not preserve editable sessions. Older single-pattern projects migrate when opened, so retain backups before upgrading.
+**Project → Download project backup** includes the project, referenced audio and available originals. Its manifest lists missing audio and external URLs. **Restore project backup** creates a separately named session, preserves existing data, and rejects conflicting sample IDs with different audio. The backup limit remains 256 MB unpacked; use smaller project selections if necessary. WAV export preserves the sound, not an editable arrangement.
 
-See the [legacy workflow guide](human/guides/watcher-workflow.md) for optional recording and sample tools.
+## Move from the previous local-server version
+
+Before updating an old installation, open it and download a project ZIP backup for each session you want to keep. Then open the hosted/browser version and restore each backup using Project. The new version accepts the existing ZIP format and project schema migrations.
+
+The website cannot automatically read `.studio/projects/` or `samples/` from your computer. Those existing folders are left untouched. If you already updated without exporting, run the preceding Git revision in a separate checkout with copies of your old project and sample directories, export backups there, then restore them here. Keep the original directories until you have verified the restored music.
+
+Old session mappings remain readable, but Linux/ALSA port names do not identify browser MIDI ports. Enable and reconnect each hardware device in the browser, then remap any controls tied to old port profiles. AI generation and OS loopback are no longer application features; already saved generated audio still imports through project backups.
+
+## GitHub imports
+
+Only public HTTPS GitHub repositories, folders, and supported audio-file links are accepted. Discovery resolves the selected revision to a commit, lists matching audio, and downloads selected raw files directly. Imported audio stays available in browser storage after download; there is no streaming dependency on GitHub for that imported sound.
+
+GitHub may rate-limit unauthenticated discovery. Choose a narrower folder, retry later, or download a ZIP/file yourself and use Upload. No GitHub token is requested or embedded in the app. Audio rights remain those of the source repository; inclusion on GitHub does not establish permission to redistribute a pack.
+
+## Verification
+
+Run `npm run studio:build`, `npm run studio:test`, and `npm run studio:e2e`. Install Chromium with `npm run setup:browser-tests`, or provide `STUDIO_CHROMIUM` for an existing executable. The browser suite serves `studio/dist` on port 5175; build first after changing application files.
+
+The production Pages suite is `studio/tests/pages.spec.ts`. Earlier server-dependent browser specs remain as historical regression references, not a runnable server target. Pure domain tests and legacy project/backup compatibility tests still run in the unit suite. The retained filesystem helper modules support those compatibility checks; they are not included in the client or exposed as a server.

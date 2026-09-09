@@ -1,0 +1,836 @@
+{
+  "assets": [
+    {
+      "description": "Original synthesized starter sound · CC0-1.0",
+      "tags": [
+        "starter",
+        "CC0"
+      ],
+      "prompt": "",
+      "duration": 0.4,
+      "loop": false,
+      "label": "kick",
+      "id": "00000000-0000-4000-8000-000000000001",
+      "createdAt": "2026-09-09T00:00:00.000Z",
+      "format": "wav",
+      "provider": "upload",
+      "pack": {
+        "id": "00000000-0000-4000-8000-000000000100",
+        "name": "Studio Starter · CC0",
+        "folder": ""
+      },
+      "source": {
+        "name": "kick.wav"
+      }
+    },
+    {
+      "description": "Original synthesized starter sound · CC0-1.0",
+      "tags": [
+        "starter",
+        "CC0"
+      ],
+      "prompt": "",
+      "duration": 0.24,
+      "loop": false,
+      "label": "snare",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "createdAt": "2026-09-09T00:00:00.000Z",
+      "format": "wav",
+      "provider": "upload",
+      "pack": {
+        "id": "00000000-0000-4000-8000-000000000100",
+        "name": "Studio Starter · CC0",
+        "folder": ""
+      },
+      "source": {
+        "name": "snare.wav"
+      }
+    },
+    {
+      "description": "Original synthesized starter sound · CC0-1.0",
+      "tags": [
+        "starter",
+        "CC0"
+      ],
+      "prompt": "",
+      "duration": 0.09,
+      "loop": false,
+      "label": "closed-hat",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "createdAt": "2026-09-09T00:00:00.000Z",
+      "format": "wav",
+      "provider": "upload",
+      "pack": {
+        "id": "00000000-0000-4000-8000-000000000100",
+        "name": "Studio Starter · CC0",
+        "folder": ""
+      },
+      "source": {
+        "name": "closed-hat.wav"
+      }
+    },
+    {
+      "description": "Original synthesized starter sound · CC0-1.0",
+      "tags": [
+        "starter",
+        "CC0"
+      ],
+      "prompt": "",
+      "duration": 0.4,
+      "loop": false,
+      "label": "open-hat",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "createdAt": "2026-09-09T00:00:00.000Z",
+      "format": "wav",
+      "provider": "upload",
+      "pack": {
+        "id": "00000000-0000-4000-8000-000000000100",
+        "name": "Studio Starter · CC0",
+        "folder": ""
+      },
+      "source": {
+        "name": "open-hat.wav"
+      }
+    },
+    {
+      "description": "Original synthesized starter sound · CC0-1.0",
+      "tags": [
+        "starter",
+        "CC0"
+      ],
+      "prompt": "",
+      "duration": 0.25,
+      "loop": false,
+      "label": "clap",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "createdAt": "2026-09-09T00:00:00.000Z",
+      "format": "wav",
+      "provider": "upload",
+      "pack": {
+        "id": "00000000-0000-4000-8000-000000000100",
+        "name": "Studio Starter · CC0",
+        "folder": ""
+      },
+      "source": {
+        "name": "clap.wav"
+      }
+    },
+    {
+      "description": "Original synthesized starter sound · CC0-1.0",
+      "tags": [
+        "starter",
+        "CC0"
+      ],
+      "prompt": "",
+      "duration": 0.4,
+      "loop": false,
+      "label": "tom",
+      "id": "00000000-0000-4000-8000-000000000006",
+      "createdAt": "2026-09-09T00:00:00.000Z",
+      "format": "wav",
+      "provider": "upload",
+      "pack": {
+        "id": "00000000-0000-4000-8000-000000000100",
+        "name": "Studio Starter · CC0",
+        "folder": ""
+      },
+      "source": {
+        "name": "tom.wav"
+      }
+    }
+  ],
+  "projects": [
+    {
+      "name": "Drum Basics",
+      "bindings": [],
+      "profiles": [
+        {
+          "id": "virtual",
+          "name": "Virtual controller",
+          "port": "studio:virtual",
+          "enabled": true
+        },
+        {
+          "id": "external",
+          "name": "External MIDI input",
+          "port": "studio:input",
+          "enabled": true
+        }
+      ],
+      "slots": [
+        {
+          "name": "kick",
+          "assets": [
+            "00000000-0000-4000-8000-000000000001"
+          ],
+          "active": "00000000-0000-4000-8000-000000000001"
+        },
+        {
+          "name": "snare",
+          "assets": [
+            "00000000-0000-4000-8000-000000000002"
+          ],
+          "active": "00000000-0000-4000-8000-000000000002"
+        },
+        {
+          "name": "hat",
+          "assets": [
+            "00000000-0000-4000-8000-000000000003"
+          ],
+          "active": "00000000-0000-4000-8000-000000000003"
+        }
+      ],
+      "controls": [
+        {
+          "id": "knob-0",
+          "kind": "knob",
+          "label": "Knob 1",
+          "channel": 1,
+          "number": 20,
+          "value": 0
+        },
+        {
+          "id": "knob-1",
+          "kind": "knob",
+          "label": "Knob 2",
+          "channel": 1,
+          "number": 21,
+          "value": 0
+        },
+        {
+          "id": "knob-2",
+          "kind": "knob",
+          "label": "Knob 3",
+          "channel": 1,
+          "number": 22,
+          "value": 0
+        },
+        {
+          "id": "knob-3",
+          "kind": "knob",
+          "label": "Knob 4",
+          "channel": 1,
+          "number": 23,
+          "value": 0
+        },
+        {
+          "id": "fader-0",
+          "kind": "fader",
+          "label": "Fader 1",
+          "channel": 1,
+          "number": 24,
+          "value": 0
+        },
+        {
+          "id": "fader-1",
+          "kind": "fader",
+          "label": "Fader 2",
+          "channel": 1,
+          "number": 25,
+          "value": 0
+        },
+        {
+          "id": "fader-2",
+          "kind": "fader",
+          "label": "Fader 3",
+          "channel": 1,
+          "number": 26,
+          "value": 0
+        },
+        {
+          "id": "fader-3",
+          "kind": "fader",
+          "label": "Fader 4",
+          "channel": 1,
+          "number": 27,
+          "value": 0
+        },
+        {
+          "id": "pad-0",
+          "kind": "pad",
+          "label": "Pad 1",
+          "channel": 1,
+          "number": 36,
+          "value": 100
+        },
+        {
+          "id": "pad-1",
+          "kind": "pad",
+          "label": "Pad 2",
+          "channel": 1,
+          "number": 37,
+          "value": 100
+        },
+        {
+          "id": "pad-2",
+          "kind": "pad",
+          "label": "Pad 3",
+          "channel": 1,
+          "number": 38,
+          "value": 100
+        },
+        {
+          "id": "pad-3",
+          "kind": "pad",
+          "label": "Pad 4",
+          "channel": 1,
+          "number": 39,
+          "value": 100
+        },
+        {
+          "id": "pad-4",
+          "kind": "pad",
+          "label": "Pad 5",
+          "channel": 1,
+          "number": 40,
+          "value": 100
+        },
+        {
+          "id": "pad-5",
+          "kind": "pad",
+          "label": "Pad 6",
+          "channel": 1,
+          "number": 41,
+          "value": 100
+        },
+        {
+          "id": "pad-6",
+          "kind": "pad",
+          "label": "Pad 7",
+          "channel": 1,
+          "number": 42,
+          "value": 100
+        },
+        {
+          "id": "pad-7",
+          "kind": "pad",
+          "label": "Pad 8",
+          "channel": 1,
+          "number": 43,
+          "value": 100
+        },
+        {
+          "id": "key-0",
+          "kind": "key",
+          "label": "C4",
+          "channel": 1,
+          "number": 60,
+          "value": 100
+        },
+        {
+          "id": "key-1",
+          "kind": "key",
+          "label": "C♯4",
+          "channel": 1,
+          "number": 61,
+          "value": 100
+        },
+        {
+          "id": "key-2",
+          "kind": "key",
+          "label": "D4",
+          "channel": 1,
+          "number": 62,
+          "value": 100
+        },
+        {
+          "id": "key-3",
+          "kind": "key",
+          "label": "D♯4",
+          "channel": 1,
+          "number": 63,
+          "value": 100
+        },
+        {
+          "id": "key-4",
+          "kind": "key",
+          "label": "E4",
+          "channel": 1,
+          "number": 64,
+          "value": 100
+        },
+        {
+          "id": "key-5",
+          "kind": "key",
+          "label": "F4",
+          "channel": 1,
+          "number": 65,
+          "value": 100
+        },
+        {
+          "id": "key-6",
+          "kind": "key",
+          "label": "F♯4",
+          "channel": 1,
+          "number": 66,
+          "value": 100
+        },
+        {
+          "id": "key-7",
+          "kind": "key",
+          "label": "G4",
+          "channel": 1,
+          "number": 67,
+          "value": 100
+        },
+        {
+          "id": "key-8",
+          "kind": "key",
+          "label": "G♯4",
+          "channel": 1,
+          "number": 68,
+          "value": 100
+        },
+        {
+          "id": "key-9",
+          "kind": "key",
+          "label": "A4",
+          "channel": 1,
+          "number": 69,
+          "value": 100
+        },
+        {
+          "id": "key-10",
+          "kind": "key",
+          "label": "A♯4",
+          "channel": 1,
+          "number": 70,
+          "value": 100
+        },
+        {
+          "id": "key-11",
+          "kind": "key",
+          "label": "B4",
+          "channel": 1,
+          "number": 71,
+          "value": 100
+        }
+      ],
+      "sessionId": "Drum-Basics",
+      "version": 5,
+      "tabs": [
+        {
+          "id": "pattern-1",
+          "name": "Drums",
+          "code": "// Six original CC0 sounds. Import more from Sample library.\nsetCpm(120/4)\nstack(\n  s(soundSlot(\"kick\")).struct(\"x ~ x ~\"),\n  s(soundSlot(\"snare\")).struct(\"~ x ~ x\"),\n  s(soundSlot(\"hat\")).struct(\"x*8\").gain(0.4)\n).gain(0.7)",
+          "anchors": [],
+          "color": "blue"
+        }
+      ],
+      "activeTabId": "pattern-1",
+      "tracks": [
+        {
+          "id": "track-1",
+          "name": "Track 1",
+          "muted": false
+        },
+        {
+          "id": "track-2",
+          "name": "Track 2",
+          "muted": false
+        }
+      ],
+      "snap": 1,
+      "clips": [
+        {
+          "id": "drum-loop",
+          "tabId": "pattern-1",
+          "trackId": "track-1",
+          "start": 0,
+          "length": 8,
+          "muted": false
+        }
+      ],
+      "bpm": 120,
+      "assetIds": [
+        "00000000-0000-4000-8000-000000000001",
+        "00000000-0000-4000-8000-000000000002",
+        "00000000-0000-4000-8000-000000000003"
+      ]
+    },
+    {
+      "name": "Neon Drive",
+      "bindings": [
+        {
+          "id": "neon-lead-mapping",
+          "profileId": "virtual",
+          "channel": 1,
+          "kind": "cc",
+          "number": 20,
+          "target": {
+            "kind": "slider",
+            "sliderId": "neon-lead-slider-0",
+            "tabId": "neon-lead"
+          },
+          "pickup": false,
+          "enabled": true
+        },
+        {
+          "id": "neon-rhythm-mapping",
+          "profileId": "virtual",
+          "channel": 1,
+          "kind": "cc",
+          "number": 21,
+          "target": {
+            "kind": "slider",
+            "sliderId": "neon-rhythm-slider-0",
+            "tabId": "neon-rhythm"
+          },
+          "pickup": false,
+          "enabled": true
+        }
+      ],
+      "profiles": [
+        {
+          "id": "virtual",
+          "name": "Virtual controller",
+          "port": "studio:virtual",
+          "enabled": true
+        },
+        {
+          "id": "external",
+          "name": "External MIDI input",
+          "port": "studio:input",
+          "enabled": true
+        }
+      ],
+      "slots": [],
+      "controls": [
+        {
+          "id": "knob-0",
+          "kind": "knob",
+          "label": "Lead brightness",
+          "channel": 1,
+          "number": 20,
+          "value": 45
+        },
+        {
+          "id": "knob-1",
+          "kind": "knob",
+          "label": "Bass cutoff",
+          "channel": 1,
+          "number": 21,
+          "value": 40
+        },
+        {
+          "id": "knob-2",
+          "kind": "knob",
+          "label": "Knob 3",
+          "channel": 1,
+          "number": 22,
+          "value": 0
+        },
+        {
+          "id": "knob-3",
+          "kind": "knob",
+          "label": "Knob 4",
+          "channel": 1,
+          "number": 23,
+          "value": 0
+        },
+        {
+          "id": "fader-0",
+          "kind": "fader",
+          "label": "Fader 1",
+          "channel": 1,
+          "number": 24,
+          "value": 0
+        },
+        {
+          "id": "fader-1",
+          "kind": "fader",
+          "label": "Fader 2",
+          "channel": 1,
+          "number": 25,
+          "value": 0
+        },
+        {
+          "id": "fader-2",
+          "kind": "fader",
+          "label": "Fader 3",
+          "channel": 1,
+          "number": 26,
+          "value": 0
+        },
+        {
+          "id": "fader-3",
+          "kind": "fader",
+          "label": "Fader 4",
+          "channel": 1,
+          "number": 27,
+          "value": 0
+        },
+        {
+          "id": "pad-0",
+          "kind": "pad",
+          "label": "Pad 1",
+          "channel": 1,
+          "number": 36,
+          "value": 100
+        },
+        {
+          "id": "pad-1",
+          "kind": "pad",
+          "label": "Pad 2",
+          "channel": 1,
+          "number": 37,
+          "value": 100
+        },
+        {
+          "id": "pad-2",
+          "kind": "pad",
+          "label": "Pad 3",
+          "channel": 1,
+          "number": 38,
+          "value": 100
+        },
+        {
+          "id": "pad-3",
+          "kind": "pad",
+          "label": "Pad 4",
+          "channel": 1,
+          "number": 39,
+          "value": 100
+        },
+        {
+          "id": "pad-4",
+          "kind": "pad",
+          "label": "Pad 5",
+          "channel": 1,
+          "number": 40,
+          "value": 100
+        },
+        {
+          "id": "pad-5",
+          "kind": "pad",
+          "label": "Pad 6",
+          "channel": 1,
+          "number": 41,
+          "value": 100
+        },
+        {
+          "id": "pad-6",
+          "kind": "pad",
+          "label": "Pad 7",
+          "channel": 1,
+          "number": 42,
+          "value": 100
+        },
+        {
+          "id": "pad-7",
+          "kind": "pad",
+          "label": "Pad 8",
+          "channel": 1,
+          "number": 43,
+          "value": 100
+        },
+        {
+          "id": "key-0",
+          "kind": "key",
+          "label": "C4",
+          "channel": 1,
+          "number": 60,
+          "value": 100
+        },
+        {
+          "id": "key-1",
+          "kind": "key",
+          "label": "C♯4",
+          "channel": 1,
+          "number": 61,
+          "value": 100
+        },
+        {
+          "id": "key-2",
+          "kind": "key",
+          "label": "D4",
+          "channel": 1,
+          "number": 62,
+          "value": 100
+        },
+        {
+          "id": "key-3",
+          "kind": "key",
+          "label": "D♯4",
+          "channel": 1,
+          "number": 63,
+          "value": 100
+        },
+        {
+          "id": "key-4",
+          "kind": "key",
+          "label": "E4",
+          "channel": 1,
+          "number": 64,
+          "value": 100
+        },
+        {
+          "id": "key-5",
+          "kind": "key",
+          "label": "F4",
+          "channel": 1,
+          "number": 65,
+          "value": 100
+        },
+        {
+          "id": "key-6",
+          "kind": "key",
+          "label": "F♯4",
+          "channel": 1,
+          "number": 66,
+          "value": 100
+        },
+        {
+          "id": "key-7",
+          "kind": "key",
+          "label": "G4",
+          "channel": 1,
+          "number": 67,
+          "value": 100
+        },
+        {
+          "id": "key-8",
+          "kind": "key",
+          "label": "G♯4",
+          "channel": 1,
+          "number": 68,
+          "value": 100
+        },
+        {
+          "id": "key-9",
+          "kind": "key",
+          "label": "A4",
+          "channel": 1,
+          "number": 69,
+          "value": 100
+        },
+        {
+          "id": "key-10",
+          "kind": "key",
+          "label": "A♯4",
+          "channel": 1,
+          "number": 70,
+          "value": 100
+        },
+        {
+          "id": "key-11",
+          "kind": "key",
+          "label": "B4",
+          "channel": 1,
+          "number": 71,
+          "value": 100
+        }
+      ],
+      "version": 5,
+      "tabs": [
+        {
+          "id": "neon-rhythm",
+          "name": "Rhythm",
+          "code": "// Neon Drive — Rhythm. Original synth-pop demo, 168 BPM / 4 beats per cycle.\n// Knob 2 controls the bass cutoff, even while another tab is selected.\nsetCpm(168 / 4)\n\n$kick: s(\"sbd*4\")\n  .decay(0.16).gain(0.62)\n\n// Noise snare, with a sixteenth-note pickup at the end of every fourth bar.\n$snare: s(\"< [~ white ~ white] [~ white ~ white] [~ white ~ white] [~ white ~ [white ~ white white]] >\")\n  .hpf(1300).lpf(8500)\n  .attack(0.001).decay(0.12).sustain(0).release(0.02)\n  .gain(0.42).room(0.12)\n\n$hat: s(\"white*8\")\n  .hpf(7500).lpf(12000)\n  .attack(0.001).decay(0.025).sustain(0).release(0.01)\n  .gain(\"0.11 0.18 0.11 0.18 0.11 0.18 0.11 0.21\")\n\n$bass: note(\"< [a1 a2 a1 a2 a1 a2 a1 e2] [f1 f2 f1 f2 f1 f2 f1 c2] [c2 c3 c2 c3 c2 c3 c2 g2] [g1 g2 g1 g2 g1 g2 d2 g2] >\")\n  .s(\"sawtooth\")\n  .lpf(slider(900, 200, 2400, 25))\n  .attack(0.004).decay(0.11).sustain(0.1).release(0.03)\n  .gain(\"0.32 0.46 0.32 0.46 0.32 0.46 0.32 0.46\")\n",
+          "anchors": [
+            {
+              "id": "neon-rhythm-slider-0",
+              "from": 801,
+              "fingerprint": "slider(200,2400,25)"
+            }
+          ],
+          "color": "blue"
+        },
+        {
+          "id": "neon-chords",
+          "name": "Chords",
+          "code": "// Neon Drive — Chords. The four-cycle opening: Am / F / C / G.\n// Play this tab alone to hear the harmony before the rhythm arrives.\nsetCpm(168 / 4)\n\n$chords: note(\"< [a3,c4,e4] [f3,a3,c4] [c3,e3,g3] [g3,b3,d4] >\")\n  .s(\"sawtooth\").lpf(1500)\n  .attack(0.09).decay(0.2).sustain(0.65).release(0.15)\n  .gain(0.23).room(0.22)\n\n$spark: note(\"<e5 c5 g4 d5>\")\n  .s(\"triangle\")\n  .attack(0.005).decay(0.3).sustain(0).release(0.1)\n  .gain(0.25).delay(0.18).delaytime(0.267857).delayfeedback(0.2)\n",
+          "anchors": [],
+          "color": "cyan"
+        },
+        {
+          "id": "neon-lead",
+          "name": "Lead",
+          "code": "// Neon Drive — Lead. An original four-bar phrase over Am / F / C / G.\n// Knob 1 opens the lead's filter. Typed edits wait for Apply changes.\nsetCpm(168 / 4)\n\n$lead: note(\"< [e5 ~ g5 a5 ~ e5 d5 c5] [c5 a4 c5 f5 ~ e5 c5 a4] [g4 c5 e5 ~ g5 e5 d5 ~] [b4 ~ d5 g5 f5 d5 b4 ~] >\")\n  .s(\"sawtooth\")\n  .lpf(slider(2400, 400, 6000, 50))\n  .attack(0.008).decay(0.14).sustain(0.35).release(0.07)\n  .gain(0.34).room(0.16)\n  .delay(0.2).delaytime(0.267857).delayfeedback(0.22)\n\n$chords: note(\"< [a3,c4,e4] [f3,a3,c4] [c3,e3,g3] [g3,b3,d4] >\")\n  .s(\"sawtooth\").lpf(1200)\n  .attack(0.04).decay(0.15).sustain(0.6).release(0.12)\n  .gain(0.15).room(0.2)\n",
+          "anchors": [
+            {
+              "id": "neon-lead-slider-0",
+              "from": 306,
+              "fingerprint": "slider(400,6000,50)"
+            }
+          ],
+          "color": "teal"
+        },
+        {
+          "id": "neon-breakdown",
+          "name": "Breakdown",
+          "code": "// Neon Drive — Breakdown. Four quiet cycles before the final groove.\nsetCpm(168 / 4)\n\n$pad: note(\"< [a3,c4,e4] [f3,a3,c4] [c3,e3,g3] [g3,b3,d4] >\")\n  .s(\"triangle\").lpf(950)\n  .attack(0.12).decay(0.2).sustain(0.55).release(0.2)\n  .gain(0.23).room(0.3)\n\n$arp: note(\"< [a4 ~ e5 ~] [f4 ~ c5 ~] [c4 ~ g4 ~] [g4 ~ d5 ~] >\")\n  .s(\"triangle\").lpf(1800)\n  .attack(0.005).decay(0.16).sustain(0).release(0.06)\n  .gain(0.3).delay(0.23).delaytime(0.267857).delayfeedback(0.25)\n",
+          "anchors": [],
+          "color": "green"
+        }
+      ],
+      "activeTabId": "neon-lead",
+      "tracks": [
+        {
+          "id": "track-1",
+          "name": "Track 1",
+          "muted": false
+        },
+        {
+          "id": "track-2",
+          "name": "Track 2",
+          "muted": false
+        }
+      ],
+      "snap": 1,
+      "clips": [
+        {
+          "id": "intro",
+          "tabId": "neon-chords",
+          "trackId": "track-2",
+          "start": 0,
+          "length": 4,
+          "muted": false
+        },
+        {
+          "id": "groove-rhythm",
+          "tabId": "neon-rhythm",
+          "trackId": "track-1",
+          "start": 4,
+          "length": 12,
+          "muted": false
+        },
+        {
+          "id": "groove-lead",
+          "tabId": "neon-lead",
+          "trackId": "track-2",
+          "start": 4,
+          "length": 12,
+          "muted": false
+        },
+        {
+          "id": "breakdown",
+          "tabId": "neon-breakdown",
+          "trackId": "track-2",
+          "start": 16,
+          "length": 4,
+          "muted": false
+        },
+        {
+          "id": "final-rhythm",
+          "tabId": "neon-rhythm",
+          "trackId": "track-1",
+          "start": 20,
+          "length": 12,
+          "muted": false
+        },
+        {
+          "id": "final-lead",
+          "tabId": "neon-lead",
+          "trackId": "track-2",
+          "start": 20,
+          "length": 12,
+          "muted": false
+        }
+      ],
+      "bpm": 168,
+      "assetIds": [],
+      "sessionId": "Neon-Drive"
+    }
+  ]
+}

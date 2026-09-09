@@ -1,3 +1,4 @@
+import { sampleUrl, releaseSampleUrls } from './storage/workspace';
 import { isClipMuted } from '../shared/mix';
 import * as core from '@strudel/core';
 import * as mini from '@strudel/mini';
@@ -35,7 +36,7 @@ window.addEventListener('message', async event => {
       },
     });
     const assets: Asset[] = event.data.assets;
-    await audio.samples(Object.fromEntries(assets.map(asset => [`studio_${asset.id.replaceAll('-', '')}`, [new URL(`/api/samples/${asset.id}/audio`, location.origin).href]])));
+    await audio.samples(Object.fromEntries(await Promise.all(assets.filter(a => !a.missing).map(async asset => [`studio_${asset.id.replaceAll('-', '')}`, [await sampleUrl(asset.id)]]))));
     const compiler = core.repl({ transpiler, getTime: () => 0, beforeEval: async () => {
       if (target === 'composition') await core.evalScope({ setCpm: () => core.silence, setcpm: () => core.silence, setCps: () => core.silence, setcps: () => core.silence });
     } });

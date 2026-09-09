@@ -1,3 +1,4 @@
+import { sampleUrl, releaseSampleUrls } from './storage/workspace';
 import { instrumentFor, validateInstrumentInput, MIDI_EDITOR } from '../shared/midi-instrument';
 import { reconcileSliders, type Slider } from '../shared/sliders';
 import { LiveEffects } from './live-effects';
@@ -222,7 +223,8 @@ export class Engine {
   }
   async registerAssets(assets: Asset[]) {
     this.library = assets;
-    await audio.samples(Object.fromEntries(assets.map(asset => [soundKey(asset), [new URL(`/api/samples/${asset.id}/audio`, location.origin).href]])));
+    releaseSampleUrls(assets.map(a => a.id));
+    await audio.samples(Object.fromEntries(await Promise.all(assets.filter(a => !a.missing).map(async asset => [soundKey(asset), [await sampleUrl(asset.id)]]))));
   }
   repl!: Repl;
   timeline = new SlotTimeline();
@@ -474,7 +476,7 @@ export class Engine {
     if (this.buffers.has(asset.id)) return;
     if (!this.loading.has(asset.id)) {
       const task = (async () => {
-        const url = new URL(`/api/samples/${asset.id}/audio`, location.origin).href;
+        const url = await sampleUrl(asset.id);
         const key = `studio_${asset.id.replaceAll('-', '')}`;
         const buffer = await audio.loadBuffer(url, audio.getAudioContext(), key);
         await audio.samples({ [key]: [url] });
@@ -522,7 +524,7 @@ export class Engine {
     this.changed();
   }
   panic() { this.stop(); }
-  restore(project: Project) { this.panic(); this.instrumentPattern = undefined; this.instrumentInput = undefined; this.instrumentPreparation = undefined; this.instrumentError = ''; this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
+  restore(project: Project) { this.panic(); this.applied.clear(); this.appliedCodes.clear(); this.instrumentPattern = undefined; this.instrumentInput = undefined; this.instrumentPreparation = undefined; this.instrumentError = ''; this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
   get started() { return this.repl?.scheduler.started ?? false; }
   get cycle() { return this.started ? Math.max(0, this.repl.scheduler.now()) : 0; }
   get voicesPlaying() { return this.voices.size; }

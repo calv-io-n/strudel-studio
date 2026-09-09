@@ -1,3 +1,4 @@
+import { saveRecording } from './storage/workspace';
 import { writePending, readPending, readPendingPrefix, removePending } from './recovery';
 import { AudioTakeCapture } from './audio-take';
 import type { Asset } from '../shared/model';
@@ -98,8 +99,7 @@ export class RecordingPanel {
     this.preview();
     const start = Number(this.el<HTMLInputElement>('trim-start').value), end = Math.min(Number(this.el<HTMLInputElement>('trim-end').value), this.capture!.duration);
     const metadata = { label: this.el<HTMLInputElement>('name').value, recording: { source: this.source, bpm: this.bpm, offsetCycles: this.offset + start * this.bpm / 240, duration: this.capture!.duration, trimStart: start, trimEnd: end, incomplete: this.incomplete } };
-    const res = await fetch('/api/recordings', { method: 'POST', headers: { 'Content-Type': 'audio/wav', 'X-Studio-Metadata': encodeURIComponent(JSON.stringify(metadata)) }, body: this.capture!.wav(start, end) });
-    const result = await res.json(); if (!res.ok) throw new Error(result.error);
+    const result = await saveRecording(metadata, new Blob([this.capture!.wav(start, end)], { type: 'audio/wav' }));
     await this.saved(result); this.discard(); this.status('Saved to the sound library');
   }
   async restore() {
