@@ -47,3 +47,9 @@ When drafts differ from applied code, select which version to render. The job fr
 Limits are fifteen minutes, 100,000 scheduled events, and an estimated 512 MiB job budget, with at most 170 MB source audio. These bounds are intentionally conservative; browser/device limits can still be lower. Cancel releases the render frame and buffers. Large jobs should be reduced before retrying.
 
 The input reverb has a deterministic three-second impulse; this is not convolution-IR import. Rendering isolates engine globals but does not make user-written JavaScript a security sandbox. Only run pattern code you trust. Third-party synthesis may not be bit-identical between browser versions.
+
+## Saving in multiple tabs
+
+Save compares session content with the version that tab last accepted. Saving unchanged content does not increment its revision. An unchanged tab can load a newer saved session; if both tabs have different edits, Studio automatically saves the local work as a clearly named conflict copy and keeps both versions. Each browser tab remembers its selected session independently.
+
+Only unsaved work enters draft recovery, together with its saved base. Duplicated tabs use separate draft keys. On reload, recovery checks the current saved record before restoring a draft; older drafts without a base are preserved as copies when they conflict. Recording commits use the same policy and save their audio and placement atomically. Storage-full and validation failures still retain the draft and report a retryable save error.

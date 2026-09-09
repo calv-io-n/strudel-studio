@@ -313,3 +313,64 @@ test('cancelled input permission does not create a take or stop the next recordi
   await expect(page.locator('#record-status')).toContainText('Recording'); await page.locator('#audio-record').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
 });
+
+test('two tabs can save unchanged content and a stale unchanged tab loads the newer session', async ({ page, context }) => {
+  await start(page); await page.locator('#save-now').click();
+  const second = await context.newPage(); await start(second);
+  await second.locator('#save-now').click(); await page.locator('#save-now').click();
+  await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
+  await expect(page.locator('#notice')).not.toContainText('changed in another tab');
+  await second.locator('#project-name').fill('Edited in second tab'); await second.locator('#save-now').click();
+  await expect.poll(async () => (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').name).toBe('Edited in second tab');
+  await page.locator('#save-now').click(); await expect(page.locator('#project-name')).toHaveValue('Edited in second tab');
+  const revision = (await records(page, 'projects'))[0].revision;
+  await page.locator('#save-now').click(); await second.locator('#save-now').click(); await page.waitForTimeout(200);
+  expect((await records(page, 'projects'))[0].revision).toBe(revision);
+  await second.close();
+});
+
+test('different edits in two tabs keep both versions and each tab reloads its own session', async ({ page, context }) => {
+  await start(page); await page.locator('#save-now').click(); const second = await context.newPage(); await start(second);
+  await page.locator('#project-name').fill('First version'); await page.locator('#save-now').click();
+  await expect.poll(async () => (await records(page, 'projects'))[0].name).toBe('First version');
+  await second.locator('#project-name').fill('Second version'); await second.locator('#save-now').click();
+  await expect(second.locator('#saved-state')).toHaveText('Saved as conflict copy');
+  await expect.poll(async () => (await records(page, 'projects')).length).toBe(2);
+  const saved = await records(page, 'projects'); expect(saved.map(p => p.name).sort()).toEqual(['First version', 'Second version (conflict copy)']);
+  const copiedId = await second.locator('#saved-projects').inputValue(); expect(copiedId).not.toBe('Neon-Drive');
+  await second.locator('#save-now').click(); await second.reload(); await expect(second.locator('#saved-projects')).toHaveValue(copiedId);
+  await page.reload(); await expect(page.locator('#project-name')).toHaveValue('First version'); expect(await records(page, 'projects')).toHaveLength(2);
+  await second.close();
+});
+
+test('a duplicated browser tab owns a separate draft key', async ({ page }) => {
+  await start(page); await page.locator('#save-now').click();
+  const id = await page.evaluate(() => sessionStorage.getItem('studio.tab'));
+  const opened = page.waitForEvent('popup'); await page.evaluate(() => window.open(location.href)); const duplicate = await opened;
+  await expect(duplicate.locator('#saved-projects')).toHaveValue('Neon-Drive');
+  expect(await duplicate.evaluate(() => sessionStorage.getItem('studio.tab'))).not.toBe(id);
+  await duplicate.close();
+});
+
+test('queued saves preserve an edit made while a storage lock delays saving', async ({ page }) => {
+  await start(page); await page.locator('#save-now').click();
+  await page.evaluate(() => new Promise<void>(resolve => { void navigator.locks.request('strudel-workspace-write', () => new Promise<void>(release => { (window as any).releaseSaveLock = release; resolve(); })); }));
+  await page.locator('#project-name').fill('First pending edit'); await page.locator('#save-now').click();
+  await page.locator('#project-name').fill('Latest pending edit'); await page.locator('#save-now').click();
+  await page.evaluate(() => (window as any).releaseSaveLock());
+  await expect.poll(async () => (await records(page, 'projects'))[0].name).toBe('Latest pending edit');
+  await page.reload(); await expect(page.locator('#project-name')).toHaveValue('Latest pending edit'); expect(await records(page, 'projects')).toHaveLength(1);
+});
+
+test('a legacy stale draft is recovered as one copy without overwriting newer saved work', async ({ page, context }) => {
+  await start(page); await page.locator('#project-name').fill('Original draft'); await page.locator('#save-now').click();
+  await expect.poll(async () => (await records(page, 'projects'))[0].name).toBe('Original draft');
+  const stale = (await records(page, 'projects'))[0];
+  const second = await context.newPage(); await start(second); await second.locator('#project-name').fill('Newer saved work'); await second.locator('#save-now').click();
+  await expect.poll(async () => (await records(page, 'projects'))[0].name).toBe('Newer saved work');
+  await page.evaluate(stale => localStorage.setItem('studio.pending-session', JSON.stringify(stale)), stale);
+  await page.reload(); await expect(page.locator('#project-name')).toHaveValue('Original draft (conflict copy)');
+  expect((await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').name).toBe('Newer saved work');
+  await page.reload(); await expect(page.locator('#project-name')).toHaveValue('Original draft (conflict copy)'); expect(await records(page, 'projects')).toHaveLength(2);
+  await second.close();
+});
