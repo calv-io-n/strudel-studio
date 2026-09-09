@@ -47,7 +47,7 @@ export class StudioEditor {
     if (!code.trim()) throw new Error('An empty take cannot replace code.');
     this.view.dispatch({ changes: { from: destination.from, to: destination.to, insert: code }, effects: this.destinationEffect.of(null), userEvent: 'input.performance', annotations: isolateHistory.of('full') });
   }
-  constructor(root: HTMLElement, project: Tab, callbacks: { change: () => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
+  constructor(root: HTMLElement, project: Tab, callbacks: { change: (live: boolean) => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
     const owner = this;
     class SliderWidget extends WidgetType {
       constructor(readonly slider: Slider) { super(); }
@@ -61,8 +61,14 @@ export class StudioEditor {
         input.title = 'Select this slider, then MIDI Learn';
         input.addEventListener('pointerdown', () => owner.select(this.slider.id));
         input.addEventListener('focus', () => owner.select(this.slider.id));
-        input.addEventListener('input', () => owner.setValue(this.slider.id, Number(input.value)));
+        input.addEventListener('input', () => owner.setValue(input.dataset.sliderId!, Number(input.value)));
         return input;
+      }
+      updateDOM(dom: HTMLElement) {
+        const input = dom as HTMLInputElement;
+        if (input.dataset.sliderId !== this.slider.id) return false;
+        Object.assign(input, { min: String(this.slider.min), max: String(this.slider.max), step: String(this.slider.step), value: String(this.slider.value) });
+        return true;
       }
       ignoreEvent() { return true; }
     }
@@ -86,7 +92,8 @@ export class StudioEditor {
         this.sliders = reconcileSliders(update.state.doc.toString(), this.sliders, update.changes);
         this.sliders.forEach((s) => { if (this.liveWrite || !this.values.has(s.id)) this.values.set(s.id, s.value); });
         // Never dispatch recursively inside a CodeMirror update listener.
-        queueMicrotask(() => { this.refresh(); callbacks.change(); });
+        const live = this.liveWrite;
+        queueMicrotask(() => { this.refresh(); callbacks.change(live); });
       },
     });
     this.view.dispatch({ effects: [compartments.isAutoCompletionEnabled.reconfigure(studioCompletions(callbacks.sounds, callbacks.functions)), StateEffect.appendConfig.of([field, EditorView.theme({
@@ -118,6 +125,7 @@ export class StudioEditor {
     const slider = this.sliders.find((s) => s.id === id);
     if (!slider) return false;
     const next = Math.min(slider.max, Math.max(slider.min, value));
+    if (next === slider.value) return true;
     this.values.set(id, next);
     this.liveVersions.set(id, (this.liveVersions.get(id) ?? 0) + 1);
     this.liveWrite = true;

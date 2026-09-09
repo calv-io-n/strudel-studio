@@ -1,3 +1,4 @@
+import { MIDI_EDITOR, instrumentFor, replaceInstrumentSound, updateAppliedInstrumentSliders, instrumentSound } from '../shared/midi-instrument';
 import { MidiComposition } from './midi-composition';
 import { destinationFor } from '../shared/performance';
 import { isolateHistory } from '@codemirror/commands';
@@ -101,10 +102,11 @@ mappingClose.onclick = () => { $('#mapping-context').hidden = true; }; $('#mappi
 const devices = document.createElement('section'); devices.id = 'devices-content'; devices.hidden = true;
 devices.setAttribute('aria-label', 'MIDI devices');
 devices.innerHTML = '<h2>MIDI devices</h2><p class="hint">Connect an external keyboard or controller. Connections stay active when you switch sessions.</p><p id="device-activity" role="status">Play a key or move a control to check input.</p>';
+devices.insertAdjacentHTML('beforeend', '<div class="form-row"><span id="midi-assignment" role="status"></span><button id="edit-midi-instrument">Edit instrument</button><button id="clear-midi-sound" hidden>Clear sound assignment</button></div>');
 const deviceControls = $('.devices');
 for (const child of [...deviceControls.children]) if (child.tagName !== 'SUMMARY') devices.append(child);
 deviceControls.remove(); $('#drawer').append(devices);
-const deviceButton = document.createElement('button'); deviceButton.dataset.drawer = 'devices'; deviceButton.textContent = 'MIDI devices';
+const deviceButton = document.createElement('button'); deviceButton.dataset.drawer = 'devices'; deviceButton.textContent = 'MIDI';
 deviceButton.setAttribute('aria-expanded', 'false'); deviceButton.setAttribute('aria-controls', 'devices-content');
 $('[data-drawer="midi"]').before(deviceButton);
 $('[data-drawer="midi"]').textContent = 'On-screen controller'; $('.sessionbar').append($('[data-drawer="midi"]'));
@@ -127,7 +129,58 @@ let libraryMidi = false;
 const libraryNotes = new Set<string>();
 function stopLibraryNotes() { for (const key of libraryNotes) engine.performanceAudio.release(key); libraryNotes.clear(); }
 function selectLibrarySound(name: string) { stopLibraryNotes(); previewEpoch++; if (previewKey) engine.performanceAudio.release(previewKey); selectedSound = name; selectedAsset = assets.find(a => soundKey(a) === name)?.id; paintLibrarySelection(); }
+function paintMidiAssignment() {
+  const config = instrumentFor(project);
+  const name = instrumentSound(config.appliedCode);
+  if ($('#instrument-toolbar')) {
+    $('#instrument-state').textContent = engine.instrumentError || (!config.enabled ? 'Instrument muted · Apply or assign a sound to enable' : config.code !== config.appliedCode ? 'Unapplied changes · last applied version is active' : 'Ready for MIDI');
+    $('#instrument-state').classList.toggle('error', !!engine.instrumentError);
+  }
+  const label = assets.find(a => soundKey(a) === name);
+  $('#midi-assignment').textContent = !config.enabled ? 'No sound assigned · MIDI instrument muted' : name ? `Assigned sound · ${label ? soundLabel(label) : engine.soundEntries.find(s => s.name === name)?.label ?? name}` : 'Custom MIDI sound · edit the effects chain below';
+  $('#clear-midi-sound').hidden = !config.enabled;
+  if ($('#midi-output-sound')) $('#midi-output-sound').value = config.enabled ? name ?? '' : '';
+  document.querySelectorAll<HTMLElement>('[data-assign-midi]').forEach(button => {
+    const assigned = config.enabled && button.dataset.assignMidi === name;
+    button.setAttribute('aria-pressed', String(assigned)); button.textContent = assigned ? 'Assigned to MIDI' : 'Assign to MIDI';
+  });
+}
+async function applyMidiInstrument(saveImmediately = true) {
+  const owner = getEditor(MIDI_EDITOR), config = instrumentFor(project);
+  config.code = owner.code; config.anchors = owner.anchors;
+  try {
+    await engine.applyInstrument(owner.code);
+    config.enabled = true; config.appliedCode = owner.code; config.appliedAnchors = owner.anchors; project.midiSound = instrumentSound(owner.code);
+    dirty(); if (saveImmediately) await persistSession();
+  } finally { renderMidiOutputs(); }
+}
+async function assignMidiSound(name?: string) {
+  const owner = getEditor(MIDI_EDITOR), config = instrumentFor(project);
+  if (!name) {
+    config.enabled = false; project.midiSound = undefined; libraryMidi = false; stopLibraryNotes(); engine.stopInstrument();
+    renderMidiOutputs(); paintLibrarySelection(); dirty(); await persistSession(); return;
+  }
+  let code: string;
+  try { code = replaceInstrumentSound(owner.code, name ?? 'triangle'); }
+  catch (error) { openMidiInstrument(); throw error; }
+  const asset = assets.find(a => soundKey(a) === name);
+  if (asset?.missing) throw new Error('Recover this sound before assigning it to MIDI.');
+  await engine.unlock();
+  if (asset && !project.assetIds.includes(asset.id)) project.assetIds.push(asset.id);
+  engine.releaseInputNotes(); stopLibraryNotes(); libraryMidi = false;
+  const pending = owner.code !== config.appliedCode;
+  const before = owner.code; let from = 0, end = before.length, nextEnd = code.length;
+  while (from < end && from < nextEnd && before[from] === code[from]) from++;
+  while (end > from && nextEnd > from && before[end - 1] === code[nextEnd - 1]) { end--; nextEnd--; }
+  owner.view.dispatch({ changes: { from, to: end, insert: code.slice(from, nextEnd) } });
+  config.code = code; config.anchors = owner.anchors; project.midiSound = name;
+  if (!pending) await applyMidiInstrument();
+  else { openMidiInstrument(); notice('Sound updated in your MIDI instrument draft. Apply to hear it.'); }
+  paintLibrarySelection(); dirty(); await persistSession();
+}
+$('#clear-midi-sound').onclick = guard(() => assignMidiSound());
 function paintLibrarySelection() {
+  paintMidiAssignment();
   document.querySelectorAll<HTMLElement>('.asset-select').forEach(button => {
     const selected = button.dataset.selectSound === selectedSound || (!!selectedAsset && button.dataset.selectAsset === selectedAsset);
     button.setAttribute('aria-pressed', String(selected)); button.closest('.asset')?.classList.toggle('selected', selected);
@@ -150,7 +203,7 @@ async function toggleLive(name: string) {
   if (midiComposition.running || performancePanel.take?.state === 'capturing' || recordingPanel.pending) throw new Error('Finish the current recording before testing another sound.');
   const on = !(libraryMidi && selectedSound === name);
   stopLibraryNotes(); libraryMidi = on;
-  if (on) { releaseNotes(); await engine.unlock(); if (!libraryMidi || $('#sounds-panel').hidden) return; selectLibrarySound(name); } else paintLibrarySelection();
+  if (on) { engine.releaseInputNotes(); releaseNotes(); await engine.unlock(); if (!libraryMidi || $('#sounds-panel').hidden) return; selectLibrarySound(name); } else paintLibrarySelection();
   paintLibraryLive();
 }
 function paintLibraryLive() {
@@ -183,7 +236,7 @@ async function useSound(name: string, asset?: Asset) {
   const original = owner.code;
   if (asset) await engine.preload(asset);
   if (!editorsHas(owner) || owner.code !== original || (target && owner.code !== target.code)) throw new Error('The destination changed. Close the library and select the sound again.');
-  if (!target && !openTabs.has(project.activeTabId)) throw new Error('Open a pattern before inserting a sound.');
+  if (!target && (instrumentOpen || !openTabs.has(project.activeTabId))) throw new Error('Open a pattern before inserting a sound.');
   const change = target ? { from: target.from, to: target.to, insert: name } : asset ? sampleInsertion(owner.code, owner.view.state.selection.main.head, asset, project.bpm) : { from: statementEnd(owner.code, owner.view.state.selection.main.head), insert: `\n$: s("${name}")\n` };
   owner.view.dispatch({ changes: change, userEvent: 'input.sample', annotations: isolateHistory.of('full') });
   if (asset && !project.assetIds.includes(asset.id)) project.assetIds.push(asset.id);
@@ -210,18 +263,29 @@ function notice(message: string, error = false) {
 function guard(fn: () => unknown | Promise<unknown>) { return async () => { try { await fn(); } catch (error) { notice(error instanceof Error ? error.message : 'Something went wrong', true); } }; }
 const editors = new Map<string, StudioEditor>();
 let editor: StudioEditor;
+let instrumentOpen = false;
+const activeEditorId = () => instrumentOpen ? MIDI_EDITOR : project.activeTabId;
+function openMidiInstrument() {
+  if (!$('#sounds-panel').hidden) setSounds(false);
+  instrumentOpen = true; editor = getEditor(MIDI_EDITOR); selectedSlider = undefined;
+  $('#mapping-context').hidden = true; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
+  renderTabs(); renderSliders(); renderBindings(); saveWorkspace(); editor.view.requestMeasure(); editor.view.focus();
+}
+
 function getEditor(id = project.activeTabId) {
   let instance = editors.get(id);
   if (!instance) {
-    const tab = project.tabs.find(t => t.id === id);
+    const config = instrumentFor(project);
+    const tab = id === MIDI_EDITOR ? { id, name: 'MIDI instrument', color: 'blue' as const, code: config.code, anchors: config.anchors } : project.tabs.find(t => t.id === id);
     if (!tab) throw new Error('Pattern no longer exists.');
     const root = document.createElement('div'); root.className = 'tab-editor'; root.dataset.tabEditor = id; root.hidden = id !== project.activeTabId;
     $('#editor').append(root);
+    const liveVersions = new Map<string, number>();
     instance = new StudioEditor(root, tab, {
-      sounds: () => engine.soundEntries, functions: () => engine.functionNames,
-      change: () => { for (const slider of instance?.sliders ?? []) engine.liveEffects.update(slider.id, instance!.values.get(slider.id) ?? slider.value); if (id === project.activeTabId) renderSliders(); renderBindings(); renderTransport(); dirty(); },
+      sounds: () => engine.soundEntries, functions: () => id === MIDI_EDITOR ? [...engine.functionNames, 'MIDI'] : engine.functionNames,
+      change: (live) => { for (const slider of instance?.sliders ?? []) engine.liveEffects.update(slider.id, instance!.values.get(slider.id) ?? slider.value); if (id === MIDI_EDITOR) { const config = instrumentFor(project); config.code = instance!.code; config.anchors = instance!.anchors; const updates = new Map<string, number>(); for (const [key, version] of instance!.liveVersions) if (version !== liveVersions.get(key)) { liveVersions.set(key, version); updates.set(key, instance!.values.get(key)!); } updateAppliedInstrumentSliders(config, updates); if (!live) paintMidiAssignment(); } if (!live) { if (id === activeEditorId()) renderSliders(); renderBindings(); renderTransport(); } dirty(live); },
       select: (sliderId) => { selectedSlider = sliderId; $('#slider-target').value = sliderId; $('#mapping-context').hidden = false; $('#slider-hint').textContent = effectBehavior(instance!.sliders.find(s => s.id === sliderId)?.label ?? ''); renderBindings(); },
-      evaluate: () => void guard(() => engine.started ? engine.apply() : startPlayback())(), stop: () => stopPlayback(),
+      evaluate: () => void guard(() => id === MIDI_EDITOR ? applyMidiInstrument() : engine.started ? engine.apply() : startPlayback())(), stop: () => stopPlayback(),
     });
     editors.set(id, instance);
   }
@@ -229,6 +293,97 @@ function getEditor(id = project.activeTabId) {
 }
 editor = getEditor();
 const engine = new Engine(getEditor, () => snapshot(), () => renderTransport(), (message) => notice(message, true));
+$('#editor').insertAdjacentHTML('beforebegin', '<div id="instrument-toolbar" hidden><strong>MIDI effects</strong><button id="instrument-apply" class="primary">Apply instrument</button><label>Preset <select id="midi-preset" aria-label="MIDI preset"><option value="">Choose preset…</option></select></label><button id="save-midi-preset">Save preset…</button><button id="learn-midi-preset">Map preset to MIDI key</button><button id="cancel-preset-learn" hidden>Cancel preset mapping</button><span id="preset-learn-status" role="status"></span><button id="instrument-stop">Stop instrument</button><span id="instrument-state" role="status"></span><p class="hint">MIDI is your keyboard input. Add a sound and effects, then Apply. Save preset keeps the applied chain for any session.</p></div>');
+const midiOutputControls = document.createElement('div'); midiOutputControls.id = 'midi-output-controls';
+midiOutputControls.innerHTML = '<label>Find sound <input id="midi-output-search" type="search" aria-label="Find MIDI output sound" placeholder="Search all sounds"></label><label>Output sound <select id="midi-output-sound" aria-label="MIDI output sound"></select></label>';
+midiOutputControls.append($('#midi-assignment'), $('#clear-midi-sound'));
+$('#instrument-toolbar').prepend(midiOutputControls);
+function renderMidiOutputs() {
+  const config = instrumentFor(project), current = instrumentSound(config.appliedCode);
+  const query = $('#midi-output-search').value.trim().toLowerCase();
+  const missing = new Set(assets.filter(a => a.missing).map(soundKey));
+  const library = new Set(assets.map(soundKey));
+  const entries = engine.soundEntries.filter(s => s.name === current || `${s.name} ${s.label}`.toLowerCase().includes(query));
+  const options = (isLibrary: boolean) => entries.filter(s => library.has(s.name) === isLibrary).map(s => `<option value="${escape(s.name)}" ${missing.has(s.name) ? 'disabled' : ''}>${escape(s.label)}${missing.has(s.name) ? ' · audio missing' : ''}</option>`).join('');
+  $('#midi-output-sound').innerHTML = `<option value="">${config.enabled ? 'Custom MIDI sound' : 'Muted'}</option><optgroup label="Built-in sounds">${options(false)}</optgroup><optgroup label="Library sounds">${options(true)}</optgroup>`;
+  paintMidiAssignment();
+}
+$('#midi-output-search').oninput = renderMidiOutputs;
+$('#midi-output-sound').onchange = guard(async () => {
+  const name = $('#midi-output-sound').value;
+  if (!name) { paintMidiAssignment(); return; }
+  $('#midi-output-sound').disabled = true;
+  try { await assignMidiSound(name); }
+  finally { $('#midi-output-sound').disabled = false; renderMidiOutputs(); }
+});
+$('#edit-midi-instrument').onclick = openMidiInstrument;
+$('#instrument-apply').onclick = guard(() => applyMidiInstrument());
+$('#instrument-stop').onclick = () => { engine.stopInstrument(); paintMidiAssignment(); };
+type MidiPreset = { id: string; name: string; code: string };
+let midiPresets: MidiPreset[] = [];
+async function refreshMidiPresets(selected = $('#midi-preset').value) {
+  midiPresets = await api<MidiPreset[]>('midi/presets');
+  $('#midi-preset').innerHTML = '<option value="">Choose preset…</option>' + midiPresets.map(p => `<option value="${p.id}">${escape(p.name)}</option>`).join('');
+  $('#midi-preset').value = selected;
+  renderBindings();
+}
+$('#save-midi-preset').onclick = guard(async () => {
+  const config = instrumentFor(project);
+  if (getEditor(MIDI_EDITOR).code !== config.appliedCode) throw new Error('Apply your MIDI effects before saving a preset.');
+  const name = await askEdit('Save MIDI preset', '', 'This effects chain will be available in every session.');
+  if (!name) return;
+  const preset = await api<MidiPreset>('midi/presets', 'POST', { name, code: config.appliedCode });
+  await refreshMidiPresets(preset.id); notice(`Saved preset · ${preset.name}`);
+});
+async function loadMidiPreset(preset: MidiPreset, fromMidi = false) {
+  const owner = getEditor(MIDI_EDITOR), config = instrumentFor(project);
+  $('#midi-preset').disabled = true;
+  try {
+    if (!fromMidi && owner.code !== config.appliedCode && !await askEdit('Replace MIDI draft?', undefined, 'Loading this preset replaces your unapplied MIDI edits.')) {
+      $('#midi-preset').value = midiPresets.find(p => p.code === config.appliedCode)?.id ?? ''; return;
+    }
+    pendingMidiSliders.clear();
+    engine.stopInstrument();
+    owner.view.dispatch({ changes: { from: 0, to: owner.code.length, insert: preset.code } });
+    await applyMidiInstrument(!fromMidi);
+    $('#midi-preset').value = preset.id;
+    notice(`Loaded preset · ${preset.name}`);
+  } catch (error) {
+    $('#midi-preset').value = midiPresets.find(p => p.code === config.appliedCode)?.id ?? '';
+    throw error;
+  } finally { $('#midi-preset').disabled = false; }
+}
+$('#midi-preset').onchange = guard(async () => {
+  const preset = midiPresets.find(p => p.id === $('#midi-preset').value);
+  if (preset) await loadMidiPreset(preset);
+});
+$('#learn-midi-preset').onclick = guard(async () => {
+  const preset = midiPresets.find(p => p.id === $('#midi-preset').value);
+  if (!preset) throw new Error('Save or choose a MIDI preset first.');
+  beginLearn({ kind: 'midi-preset', presetId: preset.id });
+  $('#cancel-preset-learn').hidden = false;
+  $('#preset-learn-status').textContent = `Press a key to recall ${preset.name}. Recall replaces the current MIDI effects.`;
+});
+$('#cancel-preset-learn').onclick = () => {
+  learning = undefined; $('#cancel-preset-learn').hidden = true;
+  $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
+  $('#preset-learn-status').textContent = 'Mapping cancelled.';
+};
+let pendingMidiPreset: MidiPreset | undefined;
+let recallingMidiPreset = false;
+async function recallMidiPreset(id: string) {
+  const preset = midiPresets.find(p => p.id === id);
+  if (!preset) throw new Error('Mapped MIDI preset is missing. Choose a preset and map it again.');
+  pendingMidiPreset = preset;
+  if (recallingMidiPreset) return;
+  recallingMidiPreset = true;
+  try {
+    while (pendingMidiPreset) {
+      const next = pendingMidiPreset; pendingMidiPreset = undefined;
+      await loadMidiPreset(next, true);
+    }
+  } finally { recallingMidiPreset = false; pendingMidiPreset = undefined; }
+}
 const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine, () => selectedProjectName || project.name, () => persistSession());
 $('#editor').after(performancePanel.root);
 const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { project.assetIds.push(asset.id); assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => performancePanel.stop());
@@ -272,6 +427,7 @@ async function playMidi() {
   midiComposition.close(); performancePanel.arm(); await performancePanel.prepare();
 }
 function expressionActions(pos: number, x: number, y: number) {
+  if (instrumentOpen) return false;
   const token = soundToken(editor.code, pos);
   if (token) {
     libraryTarget = { owner: editor, code: editor.code, from: token.from, to: token.to }; selectedSound = editor.code.slice(token.from, token.to); selectedAsset = assets.find(a => soundKey(a) === selectedSound)?.id; $('#sound-search').value = ''; $('#library-source').value = 'all'; setSounds(true); return true;
@@ -327,10 +483,13 @@ function persistSession() {
   saveChain = task;
   return task;
 }
-function dirty() {
+let draftTimer: ReturnType<typeof setTimeout>;
+window.addEventListener('pagehide', cacheDraft);
+function dirty(live = false) {
   if (!booted) return;
   ++saveRevision;
-  cacheDraft();
+  clearTimeout(draftTimer);
+  if (live) draftTimer = setTimeout(cacheDraft, 150); else cacheDraft();
   $('#saved-state').textContent = 'Saving…'; clearTimeout(saveTimer);
   saveTimer = setTimeout(() => { void persistSession().catch(() => {}); }, 600);
 }
@@ -351,7 +510,7 @@ async function transitionSession(action: () => Promise<void>) {
 
 function assetById(id: string) { const asset = assets.find((a) => a.id === id); if (!asset) throw new Error('Sample is missing from the local library.'); return asset; }
 function assetLabel(id: string) { const asset = assets.find((a) => a.id === id); return asset ? soundLabel(asset) : 'Missing sample'; }
-function targetLabel(target: Target) { return target.kind === 'slider' ? getEditor(target.tabId).sliders.find((s) => s.id === target.sliderId)?.label ?? 'Missing slider • rebind' : target.kind === 'swap' ? `${target.slot} ← ${assetLabel(target.assetId)}` : `Trigger ${assetLabel(target.assetId)}`; }
+function targetLabel(target: Target) { return target.kind === 'slider' ? getEditor(target.tabId).sliders.find((s) => s.id === target.sliderId)?.label ?? 'Missing slider • rebind' : target.kind === 'swap' ? `${target.slot} ← ${assetLabel(target.assetId)}` : target.kind === 'midi-preset' ? `MIDI preset · ${midiPresets.find(p => p.id === target.presetId)?.name ?? 'Missing preset'}` : `Trigger ${assetLabel(target.assetId)}`; }
 function send(value: object) { if (socket?.readyState !== WebSocket.OPEN) throw new Error('Studio connection is offline.'); socket.send(JSON.stringify(value)); }
 function ensureDeviceProfiles() {
   for (const port of devicePorts) if (project.profiles.length < 50 && !project.profiles.some(profile => profile.port === port)) {
@@ -359,6 +518,7 @@ function ensureDeviceProfiles() {
   }
 }
 function renderTransport() {
+  paintMidiAssignment();
   const playing = engine.started;
   $('#composition-play').disabled = playing || engine.busy || !project.clips.length;
   $('#composition-play').textContent = engine.busy ? 'Preparing…' : 'Play composition';
@@ -369,10 +529,10 @@ function renderTransport() {
   const name = engine.target === 'composition' ? 'Composition' : project.tabs.find(t => t.id === engine.target)?.name ?? '';
   $('#transport-state').textContent = playing ? `Playing · ${name}${engine.pendingCycle !== undefined ? ' · changes queued' : ''}` : 'Stopped';
   $('#transport-state').classList.toggle('playing', playing);
-  $('#play').disabled = !openTabs.has(project.activeTabId) || playing || engine.busy;
+  $('#play').disabled = instrumentOpen || !openTabs.has(project.activeTabId) || playing || engine.busy;
   $('#play').textContent = engine.busy ? 'Preparing…' : 'Play';
   $('#play-target').disabled = playing || engine.busy;
-  $('#evaluate').hidden = !engine.hasChanges;
+  $('#evaluate').hidden = instrumentOpen || !engine.hasChanges;
   $('#evaluate').disabled = engine.busy;
   $('#bpm').disabled = playing || engine.busy;
   $('#add-track').disabled = playing || engine.busy || project.tracks.length >= 16;
@@ -391,7 +551,7 @@ function renderBindings() {
     const missing = b.target.kind === 'slider' && !getEditor(b.target.tabId).sliders.some((s) => s.id === (b.target as { sliderId: string }).sliderId);
     return `<div data-binding="${escape(b.id)}" class="binding ${missing ? 'missing' : ''}"><div><strong>${escape(targetLabel(b.target))}</strong><span>${escape(project.profiles.find((p) => p.id === b.profileId)?.name ?? 'Missing device')} · CH ${b.channel} · ${b.kind.toUpperCase()} ${b.number}${b.pickup ? ' · pickup' : ''}${b.target.kind === 'slider' ? ' · ' + escape(effectBehavior(getEditor(b.target.tabId).sliders.find(s => s.id === (b.target as { sliderId: string }).sliderId)?.label ?? '')) : ''}</span></div><button data-remove-binding="${b.id}" aria-label="Remove binding">×</button></div>`;
   }).join('') : '<p class="empty small">No mappings yet.<br>Select an inline slider to get started.</p>';
-  const selected = project.bindings.filter(b => b.target.kind === 'slider' && b.target.tabId === project.activeTabId && b.target.sliderId === selectedSlider);
+  const selected = project.bindings.filter(b => b.target.kind === 'slider' && b.target.tabId === activeEditorId() && b.target.sliderId === selectedSlider);
   $('#selected-bindings').replaceChildren(...selected.map(b => $('#bindings').querySelector(`[data-binding="${CSS.escape(b.id)}"]`)!.cloneNode(true)));
 
 }
@@ -425,6 +585,7 @@ function soundRepository(asset: Asset) {
   } catch { return ''; }
 }
 function renderAssets() {
+  renderMidiOutputs();
   $('.library-test').append($('#library-keys'));
   const query = $('#sound-search').value.trim().toLowerCase(), source = $('#library-source').value;
   const matches = (values: unknown[]) => query.split(/\s+/).every(term => values.join(' ').toLowerCase().includes(term));
@@ -434,15 +595,15 @@ function renderAssets() {
   $('#asset-count').textContent = shown === total ? `${total} sound${total === 1 ? '' : 's'}` : `${shown} of ${total} sounds`;
   $('#library-destination').textContent = libraryTarget ? `Replace “${libraryTarget.code.slice(libraryTarget.from, libraryTarget.to)}” · preview, then choose Swap` : 'Preview a sound, then insert it into your pattern.';
   const use = libraryTarget ? 'Swap' : 'Insert';
-  $('#builtin-sounds').innerHTML = builtin.map(e => `<article class="asset ${selectedSound === e.name ? 'selected' : ''}"><button class="asset-select" data-select-sound="${escape(e.name)}"><span><strong>${escape(e.label)}</strong><small>Built-in · ${escape(e.name)}</small></span></button><button data-use-sound="${escape(e.name)}">${use}</button><button data-preview-sound="${escape(e.name)}" aria-label="Preview ${escape(e.label)}">▶</button><button data-live-sound="${escape(e.name)}" aria-pressed="${libraryMidi && selectedSound === e.name}" aria-label="Live ${escape(e.label)}" title="Play this sound from your MIDI controller or the test keys">Live</button></article>`).join('');
-  $('#assets').innerHTML = visibleAssets.map(a => `<article data-asset="${a.id}" class="asset ${selectedSound === soundKey(a) || a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span><strong>${escape(soundLabel(a))}</strong>${soundRepository(a) ? `<small class="sound-repository">GitHub · ${escape(soundRepository(a))}</small>` : ''}<small>${[escape(a.description || a.prompt), a.tags?.length ? escape(a.tags.join(', ')) : '', a.pack ? escape(a.pack.name) : '', a.missing ? 'Audio missing' : ''].filter(Boolean).join(' · ')}</small></span></button>${a.missing ? `<button data-recover="${a.id}">Recover sound</button>` : ''}<button data-insert-existing="${a.id}" ${a.missing ? 'disabled' : ''}>${use}</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}" ${a.missing ? 'disabled' : ''}>▶</button><button data-live-sound="${escape(soundKey(a))}" aria-pressed="${libraryMidi && selectedSound === soundKey(a)}" aria-label="Live ${escape(soundLabel(a))}" title="Play this sound from your MIDI controller or the test keys" ${a.missing ? 'disabled' : ''}>Live</button><details class="asset-options"><summary aria-label="Options for ${escape(soundLabel(a))}">•••</summary><div><button data-rename-asset="${a.id}">Rename</button><button data-metadata="${a.id}">Tags and description</button>${a.pack ? `<button data-rename-pack="${a.pack.id}">Rename pack</button>` : ''}</div></details></article>`).join('') || (builtin.length ? '' : '<p class="empty">No matching sounds. Try another search or add sounds.</p>');
+  $('#builtin-sounds').innerHTML = builtin.map(e => `<article class="asset ${selectedSound === e.name ? 'selected' : ''}"><button class="asset-select" data-select-sound="${escape(e.name)}"><span><strong>${escape(e.label)}</strong><small>Built-in · ${escape(e.name)}</small></span></button><button data-use-sound="${escape(e.name)}">${use}</button><button data-preview-sound="${escape(e.name)}" aria-label="Preview ${escape(e.label)}">▶</button><button data-assign-midi="${escape(e.name)}" aria-label="Assign ${escape(e.label)} to MIDI">Assign to MIDI</button><button data-live-sound="${escape(e.name)}" aria-pressed="${libraryMidi && selectedSound === e.name}" aria-label="Live ${escape(e.label)}" title="Play this sound from your MIDI controller or the test keys">Live</button></article>`).join('');
+  $('#assets').innerHTML = visibleAssets.map(a => `<article data-asset="${a.id}" class="asset ${selectedSound === soundKey(a) || a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span><strong>${escape(soundLabel(a))}</strong>${soundRepository(a) ? `<small class="sound-repository">GitHub · ${escape(soundRepository(a))}</small>` : ''}<small>${[escape(a.description || a.prompt), a.tags?.length ? escape(a.tags.join(', ')) : '', a.pack ? escape(a.pack.name) : '', a.missing ? 'Audio missing' : ''].filter(Boolean).join(' · ')}</small></span></button>${a.missing ? `<button data-recover="${a.id}">Recover sound</button>` : ''}<button data-insert-existing="${a.id}" ${a.missing ? 'disabled' : ''}>${use}</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}" ${a.missing ? 'disabled' : ''}>▶</button><button data-assign-midi="${escape(soundKey(a))}" aria-label="Assign ${escape(soundLabel(a))} to MIDI" ${a.missing ? 'disabled' : ''}>Assign to MIDI</button><button data-live-sound="${escape(soundKey(a))}" aria-pressed="${libraryMidi && selectedSound === soundKey(a)}" aria-label="Live ${escape(soundLabel(a))}" title="Play this sound from your MIDI controller or the test keys" ${a.missing ? 'disabled' : ''}>Live</button><details class="asset-options"><summary aria-label="Options for ${escape(soundLabel(a))}">•••</summary><div><button data-rename-asset="${a.id}">Rename</button><button data-metadata="${a.id}">Tags and description</button>${a.pack ? `<button data-rename-pack="${a.pack.id}">Rename pack</button>` : ''}</div></details></article>`).join('') || (builtin.length ? '' : '<p class="empty">No matching sounds. Try another search or add sounds.</p>');
   $('#assignment').hidden = !selectedAsset;
   paintLibrarySelection();
   $('#assign-target').innerHTML = project.controls.filter((c) => c.kind === 'pad' || c.kind === 'key').map((c) => `<option value="pad:${c.id}">${escape(c.label)} · Note ${c.number}</option>`).join('') + project.slots.map((s) => `<option value="slot:${s.name}">Sound slot: ${escape(s.name)}</option>`).join('');
 }
 $('#sound-search').oninput = renderAssets;
 $('#library-source').onchange = renderAssets;
-$('#builtin-sounds').onclick = e => { const el = (e.target as HTMLElement).closest<HTMLElement>('button'); if (!el) return; if (el.dataset.previewSound) void guard(() => previewSound(el.dataset.previewSound!))(); else if (el.dataset.useSound) void guard(() => useSound(el.dataset.useSound!))(); else if (el.dataset.liveSound) void guard(() => toggleLive(el.dataset.liveSound!))(); else if (el.dataset.selectSound) { selectLibrarySound(el.dataset.selectSound); } };
+$('#builtin-sounds').onclick = e => { const el = (e.target as HTMLElement).closest<HTMLElement>('button'); if (!el) return; if (el.dataset.assignMidi) void guard(() => assignMidiSound(el.dataset.assignMidi!))(); else if (el.dataset.previewSound) void guard(() => previewSound(el.dataset.previewSound!))(); else if (el.dataset.useSound) void guard(() => useSound(el.dataset.useSound!))(); else if (el.dataset.liveSound) void guard(() => toggleLive(el.dataset.liveSound!))(); else if (el.dataset.selectSound) { selectLibrarySound(el.dataset.selectSound); } };
 $('#assets').addEventListener('click', e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-metadata]')?.dataset.metadata; if (id) void guard(() => editMetadata(id))(); });
 async function editMetadata(id: string) {
   const a = assetById(id), dialog = document.createElement('dialog');
@@ -485,6 +646,7 @@ function beginLearn(target: Target) {
 function bind(target: Target, profileId: string, channel: number, kind: 'cc' | 'note', number: number) {
   project.bindings = project.bindings.filter((b) => !(b.profileId === profileId && b.channel === channel && b.kind === kind && b.number === number));
   project.bindings.push({ id: crypto.randomUUID(), profileId, channel, kind, number, target, pickup: kind === 'cc' && profileId !== 'virtual', enabled: true });
+  if (target.kind === 'midi-preset') { $('#preset-learn-status').textContent = `Mapped ${targetLabel(target)} to channel ${channel}, key ${number}.`; $('#cancel-preset-learn').hidden = true; }
   learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = `Connected ${kind.toUpperCase()} ${number} to ${targetLabel(target)}.`;
   pickup.reset(); renderBindings(); dirty();
 }
@@ -500,35 +662,64 @@ async function selectVariation(slotName: string, assetId: string) {
   }
   renderSlots(); dirty(); return result;
 }
+let midiFeedbackFrame = 0;
+function scheduleMidiFeedback() {
+  if (midiFeedbackFrame) return;
+  midiFeedbackFrame = requestAnimationFrame(() => {
+    midiFeedbackFrame = 0;
+    $('#events').innerHTML = eventRows.join('');
+  });
+}
+const pendingMidiSliders = new Map<string, { owner: StudioEditor; id: string; value: number }>();
+let midiSliderFrame = 0;
+function queueMidiSlider(owner: StudioEditor, id: string, value: number) {
+  owner.values.set(id, value);
+  engine.liveEffects.update(id, value);
+  pendingMidiSliders.set(id, { owner, id, value });
+  if (midiSliderFrame) return;
+  midiSliderFrame = requestAnimationFrame(() => {
+    midiSliderFrame = 0;
+    for (const update of pendingMidiSliders.values()) {
+      if ([...editors.values()].includes(update.owner)) update.owner.setValue(update.id, update.value);
+    }
+    pendingMidiSliders.clear();
+  });
+}
 async function receive(event: MidiEvent) {
   const midi = parseMidi(event.bytes); if (!midi) return;
   eventRows.unshift(`<div><span>${new Date(event.receivedAt).toLocaleTimeString()}</span><b>${event.route === 'alsa' ? 'ALSA' : 'SIM'}</b><span>CH ${midi.channel} ${midi.kind.toUpperCase()} ${midi.number}</span><strong>${midi.value}</strong></div>`);
-  eventRows = eventRows.slice(0, 30); $('#events').innerHTML = eventRows.join('');
+  eventRows = eventRows.slice(0, 30); scheduleMidiFeedback();
   if (!event.source.startsWith('studio:') && !devicePorts.includes(event.source)) return;
   ensureDeviceProfiles();
   const profile = project.profiles.find(p => p.port === event.source && (p.enabled || !p.port.startsWith('studio:')));
   if (profile && !event.source.startsWith('studio:')) $('#device-activity').textContent = `${event.source} · Channel ${midi.channel} · ${midi.kind === 'note' ? 'Note' : 'CC'} ${midi.number} · ${midi.value}`;
   if (!profile) return;
-  if (libraryMidi && !$('#sounds-panel').hidden) { if (midi.kind === 'note') await libraryNote(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on); return; }
+  if (learning?.kind === 'midi-preset' && midi.on) { bind(learning, profile.id, midi.channel, midi.kind, midi.number); return; }
+  const presetBinding = project.bindings.find(b => b.enabled && b.profileId === profile.id && b.channel === midi.channel && b.kind === midi.kind && b.number === midi.number && b.target.kind === 'midi-preset');
+  if (presetBinding && presetBinding.target.kind === 'midi-preset') {
+    if (midi.on) { await recallMidiPreset(presetBinding.target.presetId); receipt(event, presetBinding, 'preset recalled'); }
+    return;
+  }
+  if (midi.kind === 'note' && libraryMidi && !$('#sounds-panel').hidden) { await libraryNote(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on); return; }
   if (midi.kind === 'note' && await midiComposition.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
   if (midi.kind === 'note' && await performancePanel.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
   if (learning && ((learning.kind === 'slider' && midi.kind === 'cc') || (learning.kind !== 'slider' && midi.on))) {
     bind(learning, profile.id, midi.channel, midi.kind, midi.number); return;
   }
   const assigned = project.bindings.some(b => b.enabled && b.profileId === profile.id && b.channel === midi.channel && b.kind === midi.kind && b.number === midi.number);
-  if (midi.kind === 'note' && !assigned) { if (midi.on) await engine.noteOn(midi.number, midi.value); else engine.noteOff(midi.number); }
+  if (midi.kind === 'note' && !assigned) { if (midi.on) await engine.noteOn(midi.number, midi.value, `${event.source}:${midi.channel}:${midi.number}`); else engine.noteOff(`${event.source}:${midi.channel}:${midi.number}`); }
   for (const binding of project.bindings.filter((b) => b.enabled && b.profileId === profile.id && b.channel === midi.channel && b.kind === midi.kind && b.number === midi.number)) {
     const target = binding.target;
     try {
       if (target.kind === 'slider') {
         const slider = getEditor(target.tabId).sliders.find((s) => s.id === target.sliderId);
         if (!slider) { receipt(event, binding, 'target missing; rebind'); continue; }
-        if (!pickup.accept(binding, midi.value / 127, (slider.value - slider.min) / (slider.max - slider.min))) { receipt(event, binding, 'waiting for pickup'); continue; }
+        if (!pickup.accept(binding, midi.value / 127, ((getEditor(target.tabId).values.get(slider.id) ?? slider.value) - slider.min) / (slider.max - slider.min))) { receipt(event, binding, 'waiting for pickup'); continue; }
         const value = scaleCC(midi.value, slider.min, slider.max, slider.step);
-        getEditor(target.tabId).setValue(slider.id, value); receipt(event, binding, 'applied', value);
+        queueMidiSlider(getEditor(target.tabId), slider.id, value); receipt(event, binding, 'applied', value);
       } else if (midi.on) {
         if (target.kind === 'trigger') { await engine.trigger(assetById(target.assetId), midi.value); receipt(event, binding, 'one-shot triggered'); }
-        else { const result = await selectVariation(target.slot, target.assetId); receipt(event, binding, result.cancelled ? 'superseded' : result.cycle === undefined ? 'assigned' : `queued for cycle ${result.cycle}`); }
+        else if (target.kind === 'swap') { const result = await selectVariation(target.slot, target.assetId); receipt(event, binding, result.cancelled ? 'superseded' : result.cycle === undefined ? 'assigned' : `queued for cycle ${result.cycle}`); }
       }
     } catch (error) { receipt(event, binding, error instanceof Error ? error.message : 'Failed'); notice('MIDI action failed. See MIDI feedback.', true); }
   }
@@ -555,14 +746,14 @@ function virtualSend(id: string, value: number, off = false) {
 $('#play').onclick = guard(() => { $('#play-target').value = 'tab'; return startPlayback(); });
 $('#evaluate').onclick = guard(() => engine.apply());
 $('#stop').onclick = stopPlayback;
-$('#project-name').oninput = dirty;
+$('#project-name').oninput = () => dirty();
 $('#slider-target').onchange = () => { selectedSlider = $('#slider-target').value || undefined; if (selectedSlider) editor.select(selectedSlider); };
-$('#learn-slider').onclick = guard(() => { if (!selectedSlider) throw new Error('Select an inline slider first.'); beginLearn({ kind: 'slider', sliderId: selectedSlider, tabId: project.activeTabId }); });
+$('#learn-slider').onclick = guard(() => { if (!selectedSlider) throw new Error('Select an inline slider first.'); beginLearn({ kind: 'slider', sliderId: selectedSlider, tabId: activeEditorId() }); });
 $('#cancel-learn').onclick = () => { learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = 'Learning cancelled.'; };
 $('#drawer-cancel-learn').onclick = () => $('#cancel-learn').click();
 $('#manual-map').onsubmit = (e) => { e.preventDefault(); void guard(() => {
   if (!selectedSlider) throw new Error('Select an inline slider first.');
-  bind({ kind: 'slider', sliderId: selectedSlider, tabId: project.activeTabId }, $('#manual-profile').value, Number($('#manual-channel').value), 'cc', Number($('#manual-number').value));
+  bind({ kind: 'slider', sliderId: selectedSlider, tabId: activeEditorId() }, $('#manual-profile').value, Number($('#manual-channel').value), 'cc', Number($('#manual-number').value));
 })(); };
 $('#route').onchange = renderRoute;
 $('#reconnect').onclick = guard(() => api('midi/reconnect', 'POST', {}));
@@ -595,6 +786,7 @@ async function renameSound(id: string) {
 $('#assets').onclick = (e) => { const button = (e.target as HTMLElement).closest<HTMLButtonElement>('button'); if (!button) return;
   if (button.dataset.recover) { setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; sampleImports.recover(button.dataset.recover); }
   if (button.dataset.insertExisting) void guard(() => insertSound(button.dataset.insertExisting!))();
+  if (button.dataset.assignMidi) void guard(() => assignMidiSound(button.dataset.assignMidi!))();
   if (button.dataset.liveSound) void guard(() => toggleLive(button.dataset.liveSound!))();
   if (button.dataset.renamePack) void guard(async () => { const name = await askEdit('Rename pack', assets.find(a => a.pack?.id === button.dataset.renamePack)?.pack?.name); if (name) { assets = await api<Asset[]>(`packs/${button.dataset.renamePack}`, 'PATCH', { name }); renderAssets(); } })();
   if (button.dataset.renameAsset) void guard(() => renameSound(button.dataset.renameAsset!))();
@@ -708,7 +900,7 @@ async function loadProject(next: Project) {
   if (recordingPanel.pending) throw new Error('Save or discard the pending audio take before switching sessions.');
   midiComposition.close(); recordingPanel.discard(); performancePanel.close();
   contextMenu.close(false);
-  const validated = ProjectSchema.parse(next);
+  const validated = ProjectSchema.parse(next); instrumentFor(validated); instrumentOpen = false;
   // Preload before changing the running project. Missing assets are explicit, and
   // leave the current session intact instead of partially applying a load.
   for (const slot of validated.slots) if (slot.active) { const asset = assets.find(a => a.id === slot.active); if (asset && !asset.missing) { try { await engine.preload(asset); } catch { asset.missing = true; } } }
@@ -750,12 +942,13 @@ $('#dark-mode').onchange = () => {
 };
 function workspaceKey() { return `studio.workspace:${selectedProjectName || project.name}`; }
 function saveWorkspace() {
-  try { localStorage.setItem(workspaceKey(), JSON.stringify({ openTabs: [...openTabs], height: drawerHeight, view: drawerView ?? null, expanded: document.body.dataset.expanded || '' })); } catch { /* optional local preferences */ }
+  try { localStorage.setItem(workspaceKey(), JSON.stringify({ instrumentOpen, openTabs: [...openTabs], height: drawerHeight, view: drawerView ?? null, expanded: document.body.dataset.expanded || '' })); } catch { /* optional local preferences */ }
 }
 function restoreWorkspace() {
   let saved: any = {}; try { saved = JSON.parse(localStorage.getItem(workspaceKey()) || '{}'); } catch { /* old preference */ }
   openTabs = new Set(Array.isArray(saved.openTabs) ? saved.openTabs.filter((id: string) => project.tabs.some(t => t.id === id)) : project.tabs.map(t => t.id));
   if (openTabs.size && !openTabs.has(project.activeTabId)) { project.activeTabId = [...openTabs][0]; editor = getEditor(); }
+  instrumentOpen = saved.instrumentOpen === true; editor = getEditor(instrumentOpen ? MIDI_EDITOR : project.activeTabId);
   resizeDrawer(Number(saved.height) || Math.min(300, window.innerHeight * .38)); document.body.dataset.expanded = ['editor', 'composition'].includes(saved.expanded) ? saved.expanded : '';
   if (!$('#sounds-panel').hidden) setSounds(false); setDrawer(saved.view === null ? undefined : saved.view === 'midi' || saved.view === 'devices' || saved.view === 'export' ? saved.view : 'composition');
   for (const name of ['editor', 'composition']) $(`#expand-${name}`).textContent = document.body.dataset.expanded === name ? 'Restore split' : 'Expand';
@@ -766,10 +959,10 @@ function renderPatterns() {
 }
 function renderTabs() {
   const visible = project.tabs.filter(t => openTabs.has(t.id));
-  $('#tabs').innerHTML = visible.map(tab => `<span class="pattern-tab"><button role="tab" id="tab-${tab.id}" aria-selected="${tab.id === project.activeTabId}" aria-controls="editor-${tab.id}" tabindex="${tab.id === project.activeTabId ? 0 : -1}" data-color="${tab.color}" data-tab="${tab.id}">${escape(tab.name)}</button><button class="tab-close" data-close-tab="${tab.id}" aria-label="Close ${escape(tab.name)}">×</button></span>`).join('');
-  editors.forEach((instance, id) => { const root = instance.view.dom.parentElement!; root.hidden = id !== project.activeTabId || !openTabs.has(id); root.id = `editor-${id}`; root.setAttribute('role', 'tabpanel'); root.setAttribute('aria-labelledby', `tab-${id}`); });
-  $('#editor').hidden = !visible.length; $('#empty-editor').hidden = !!visible.length; $('#tab-menu').hidden = !visible.length;
-  performButton.disabled = !visible.length; $('#play').disabled = !visible.length || engine.busy || engine.started;
+  $('#tabs').innerHTML = `<span class="pattern-tab"><button role="tab" id="tab-midi-instrument" aria-selected="${instrumentOpen}" aria-controls="editor-midi-instrument" tabindex="${instrumentOpen ? 0 : -1}" data-instrument-tab>MIDI instrument</button></span>` + visible.map(tab => `<span class="pattern-tab"><button role="tab" id="tab-${tab.id}" aria-selected="${!instrumentOpen && tab.id === project.activeTabId}" aria-controls="editor-${tab.id}" tabindex="${!instrumentOpen && tab.id === project.activeTabId ? 0 : -1}" data-color="${tab.color}" data-tab="${tab.id}">${escape(tab.name)}</button><button class="tab-close" data-close-tab="${tab.id}" aria-label="Close ${escape(tab.name)}">×</button></span>`).join('');
+  editors.forEach((instance, id) => { const root = instance.view.dom.parentElement!; root.hidden = id === MIDI_EDITOR ? !instrumentOpen : instrumentOpen || id !== project.activeTabId || !openTabs.has(id); root.id = id === MIDI_EDITOR ? 'editor-midi-instrument' : `editor-${id}`; root.setAttribute('role', 'tabpanel'); root.setAttribute('aria-labelledby', id === MIDI_EDITOR ? 'tab-midi-instrument' : `tab-${id}`); });
+  $('#editor').hidden = !instrumentOpen && !visible.length; $('#empty-editor').hidden = instrumentOpen || !!visible.length; $('#tab-menu').hidden = instrumentOpen || !visible.length; $('#instrument-toolbar').hidden = !instrumentOpen;
+  performButton.disabled = instrumentOpen || !visible.length; $('#play').disabled = instrumentOpen || !visible.length || engine.busy || engine.started;
   renderPatterns();
 }
 $('#pattern-search').oninput = renderPatterns;
@@ -782,6 +975,7 @@ function closeTab(id: string) {
   if (!openTabs.size) $('#open-patterns').focus();
 }
 function switchTab(id: string) {
+  instrumentOpen = false;
   openTabs.add(id); project.activeTabId = id; editor = getEditor(id); selectedSlider = undefined;
   $('#mapping-context').hidden = true; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
   renderTabs(); renderSliders(); renderBindings(); dirty(); saveWorkspace(); editor.view.requestMeasure();
@@ -794,11 +988,12 @@ function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start
 $('#new-tab').onclick = guard(() => createTab());
 $('#tab-menu').addEventListener('click', event => { if ((event.target as HTMLElement).closest('button')) ($('#tab-menu') as unknown as HTMLDetailsElement).open = false; });
 $('#tabs').onclick = e => { const close = (e.target as HTMLElement).closest<HTMLElement>('[data-close-tab]')?.dataset.closeTab; if (close) { closeTab(close); return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) switchTab(id); };
+$('#tabs').addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-instrument-tab]')) openMidiInstrument(); });
 $('#tabs').onkeydown = e => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-  e.preventDefault(); const tabs = project.tabs.filter(t => openTabs.has(t.id)); const index = tabs.findIndex(t => t.id === project.activeTabId);
+  e.preventDefault(); const tabs = [{ id: MIDI_EDITOR }, ...project.tabs.filter(t => openTabs.has(t.id))]; const index = tabs.findIndex(t => t.id === activeEditorId());
   const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
-  switchTab(tabs[next].id); $(`#tab-${project.activeTabId}`).focus();
+  if (tabs[next].id === MIDI_EDITOR) { openMidiInstrument(); $('#tab-midi-instrument').focus(); } else { switchTab(tabs[next].id); $(`#tab-${project.activeTabId}`).focus(); }
 };
 $('#edit-dialog button[value="cancel"]').onclick = () => {
   ($('#edit-dialog') as unknown as HTMLDialogElement).close('cancel');
@@ -1109,13 +1304,13 @@ async function boot() {
   let hasDraft = false;
   try { const cached = localStorage.getItem(draftKey); if (cached) { restored = ProjectSchema.parse(JSON.parse(cached)); hasDraft = true; } } catch { /* Ignore invalid local drafts. */ }
   if (restored) { try { await loadProject(restored); $('#saved-state').textContent = 'Recovery restored'; } catch (error) { notice(`Recovery could not load: ${(error as Error).message}`, true); } }
-  restoreWorkspace(); renderAll(); await refreshProjects(); openSocket(); booted = true;
+  restoreWorkspace(); renderAll(); await refreshProjects(); await refreshMidiPresets(); openSocket(); booted = true;
   try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); await recordingPanel.restore(); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
   renderComposition();
   if (hasDraft) dirty();
   setInterval(() => {
     engine.tick(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = false; $('#playhead').style.left = `${180 + engine.timelinePosition * 64}px`; const head = document.querySelector<HTMLElement>('#seek-handle'); if (head && !timelineDragging) { head.style.left = `${180 + engine.timelinePosition * 64}px`; head.setAttribute('aria-valuenow', String(engine.timelinePosition)); }
-    if (engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }
+    if (!instrumentOpen && engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }
     if (++frame % 10 === 0 && socket?.readyState === WebSocket.OPEN) send({ type: 'snapshot', diagnostics: engine.diagnostics, sliders: editor.sliders.map((s) => ({ id: s.id, label: s.label, value: s.value })), slots: project.slots });
   }, 100);
 }

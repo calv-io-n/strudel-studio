@@ -1,5 +1,8 @@
 import * as audio from '@strudel/webaudio';
 
+let nextAudioInstance = 0;
+let nextPrivateOrbit = -1;
+
 type Handle = { node: AudioNode & { gain?: AudioParam }; stop?: (time: number) => void; nodes?: Record<string, AudioNode[]> };
 export function assertIsolated(values: Record<string, any>) {
   if (values.bus !== undefined || values.duckorbit !== undefined || values.source !== undefined) throw new Error('This sound uses shared audio routing and cannot be isolated. Choose the fallback synth.');
@@ -8,7 +11,7 @@ export function assertIsolated(values: Record<string, any>) {
 /** A private orbit per voice keeps captured effects separate from the arrangement. */
 export class PerformanceAudio {
   private voices = new Map<string, { orbit: any; id: number; handle?: Handle; cancelled: boolean; release: number }>();
-  private nextOrbit = -1;
+  private readonly soundName = `studio_live_voice_${nextAudioInstance++}`;
   private bus?: GainNode;
   private initialized = false;
   get output() {
@@ -22,7 +25,7 @@ export class PerformanceAudio {
   async play(key: string, values: Record<string, any>, pitch: number, velocity: number, duration?: number) {
     this.release(key);
     if (!this.initialized) {
-      audio.registerSound('studio_live_voice', async (time: number, value: any, ended: () => void, cps: number) => {
+      audio.registerSound(this.soundName, async (time: number, value: any, ended: () => void, cps: number) => {
         const voice = this.voices.get(value.studioVoice);
         if (!voice || voice.cancelled) return;
         const sound = audio.getSound(value.studioSound);
@@ -38,16 +41,16 @@ export class PerformanceAudio {
     }
     assertIsolated(values);
     const context: AudioContext = audio.getAudioContext();
-    const id = this.nextOrbit--;
+    const id = nextPrivateOrbit--;
     const controller = audio.getSuperdoughAudioController();
     const orbit = controller.getOrbit(id, [0, 1]);
     orbit.output.disconnect(); orbit.output.connect(this.output);
     const voice = { orbit, id, cancelled: false, release: Math.max(.02, Math.min(15, Number(values.release) || .04)) };
     this.voices.set(key, voice);
     try {
-      await audio.superdough({ ...values, s: 'studio_live_voice', studioSound: values.bank ? `${values.bank}_${values.s}` : values.s || 'triangle', bank: undefined,
+      await audio.superdough({ ...values, s: this.soundName, studioSound: values.bank ? `${values.bank}_${values.s}` : values.s || 'triangle', bank: undefined,
         studioVoice: key, note: pitch, velocity: velocity / 127, orbit: id }, context.currentTime + .025, duration ?? 900, .5);
-      if (duration !== undefined) setTimeout(() => this.release(key), duration * 1000);
+      if (duration !== undefined) setTimeout(() => { if (this.voices.get(key) === voice) this.release(key); }, duration * 1000);
     } catch (error) { this.release(key); throw error; }
   }
   release(key: string) {

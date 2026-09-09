@@ -1,3 +1,4 @@
+import { MidiPresets } from './midi-presets';
 import { backupProject, restoreBackup } from './backup';
 import { discoverGitHub, downloadGitHub } from './github';
 import { importSample } from './imports';
@@ -22,6 +23,7 @@ try { process.loadEnvFile(path.join(root, '.env')); } catch { /* Key is optional
 const port = Number(process.env.STUDIO_PORT || 5173);
 const store = new Store(process.env.STUDIO_DATA_DIR || path.join(root, '.studio/projects'), process.env.STUDIO_SAMPLE_DIR || path.join(root, 'samples/ai'), process.env.STUDIO_LIBRARY_DIR || path.join(root, 'samples/libraries'));
 await store.init();
+const midiPresets = new MidiPresets(path.join(store.root, '.settings', 'midi-presets'));
 const generator = new Generator(store, process.env.ELEVENLABS_API_KEY, process.env.STUDIO_FIXTURE_GENERATION === '1');
 const sockets = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
 const events: object[] = [], receipts: object[] = [];
@@ -65,6 +67,8 @@ const server = createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/backups') { const bytes = await backupProject(parseProject(await body(req)), store); res.writeHead(200, { 'Content-Type': 'application/zip' }); return res.end(bytes); }
     if (req.method === 'POST' && url.pathname === '/api/backups/restore') { const chunks: Buffer[] = []; let size = 0; for await (const chunk of req) { size += chunk.length; if (size > 260_000_000) throw new Error('Backup exceeds 256 MB.'); chunks.push(chunk); } return json(res, 201, await restoreBackup(Buffer.concat(chunks), store)); }
     if (req.method === 'GET' && url.pathname === '/api/status') return json(res, 200, { bridge: bridge.status, midiConnections: midiConnections.ports, generation: { configured: generator.configured, fixture: generator.fixture }, format: PROJECT_FORMAT });
+    if (url.pathname === '/api/midi/presets' && req.method === 'GET') return json(res, 200, await midiPresets.list());
+    if (url.pathname === '/api/midi/presets' && req.method === 'POST') return json(res, 201, await midiPresets.save(await body(req)));
     if (url.pathname === '/api/midi/connections' && req.method === 'GET') return json(res, 200, { ports: midiConnections.ports });
     if (url.pathname === '/api/midi/connections' && req.method === 'POST') return json(res, 200, await midiConnections.update(await body(req)));
     if (req.method === 'GET' && url.pathname === '/api/feedback') return json(res, 200, { events, receipts, snapshot: studioSnapshot });

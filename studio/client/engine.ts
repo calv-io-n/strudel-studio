@@ -1,3 +1,5 @@
+import { instrumentFor, validateInstrumentInput, MIDI_EDITOR } from '../shared/midi-instrument';
+import { reconcileSliders, type Slider } from '../shared/sliders';
 import { LiveEffects } from './live-effects';
 import * as core from '@strudel/core';
 import * as mini from '@strudel/mini';
@@ -17,6 +19,64 @@ import { soundCatalog, soundKey } from './completions';
 type Scheduler = { started: boolean; lastEnd: number; cps: number; now(): number; stop(): void; setCps(cps: number): void; setPattern(pattern: Pattern, start?: boolean): Promise<void> };
 type Repl = { scheduler: Scheduler; state: { evalError?: Error; pattern?: { queryArc(a: number, b: number): unknown[] } }; evaluate(code: string, start: boolean): Promise<unknown> };
 export class Engine {
+  private instrumentPattern?: Pattern;
+  private instrumentInput?: { pitch: number; velocity: number };
+  private instrumentSerial = 0;
+  private instrumentCompileSliders?: Slider[];
+  private instrumentPreparation?: Promise<void>;
+  readonly instrumentAudio = new PerformanceAudio();
+  instrumentError = '';
+  private instrumentValues(hap: any) {
+    const controls: Record<string, string> = {};
+    for (const [key, value] of Object.entries(hap.context ?? {})) if (key.startsWith('studioControl_')) {
+      const control = value as { key: string; label: string };
+      controls[control.label === 'lpf' ? 'cutoff' : control.label] = control.key;
+    }
+    return this.liveEffects.wrap(hap.value, controls);
+  }
+  async applyInstrument(code = instrumentFor(this.project()).code) {
+    if (this.compilingBusy) throw new Error('Wait for the current compilation.');
+    this.compilingBusy = true;
+    const owner = this.editorFor(MIDI_EDITOR);
+    const config = instrumentFor(this.project());
+    const input = { pitch: 60, velocity: 100 };
+    const epoch = this.epoch;
+    try {
+      validateInstrumentInput(code);
+      this.compiling = owner;
+      this.instrumentCompileSliders = reconcileSliders(code, [], undefined, code === owner.code ? owner.anchors : config.appliedAnchors ?? []);
+      await core.evalScope({ MIDI: new core.Pattern((state: any) => core.note(input.pitch).velocity(input.velocity / 127).query(state)) });
+      const compiler = core.repl({ transpiler });
+      await compiler.evaluate(code, false);
+      if (compiler.state.evalError) throw compiler.state.evalError;
+      const pattern = compiler.state.pattern as Pattern | undefined;
+      if (!pattern) throw new Error('The MIDI instrument must return a Strudel pattern.');
+      {
+        const haps = pattern.queryArc(0, 1);
+        if (!haps.length) throw new Error('The instrument must produce notes in its first cycle.');
+        for (const hap of haps) {
+          if (typeof hap.value?.s !== 'string') throw new Error('Choose an instrument with .s("sound").');
+          assertIsolated(hap.value);
+        }
+      }
+      if (epoch !== this.epoch) throw new Error('The session changed during compilation. Apply again.');
+      if (this.instrumentPattern) { this.releaseInputNotes(); this.instrumentAudio.silence(); }
+      this.instrumentPattern = pattern; this.instrumentInput = input;
+      this.instrumentError = '';
+    } catch (error) { this.instrumentError = (error as Error).message; throw error; }
+    finally {
+      this.compiling = undefined; this.instrumentCompileSliders = undefined; this.compilingBusy = false;
+      await core.evalScope({ MIDI: core.silence });
+      core.setTime(() => this.repl.scheduler.now()); core.setCpsFunc(() => this.repl.scheduler.cps); core.setPattern(this.repl.state.pattern);
+    }
+  }
+  async prepareInstrument() {
+    if (!this.instrumentPattern) {
+      this.instrumentPreparation ??= this.applyInstrument(instrumentFor(this.project()).appliedCode).finally(() => { this.instrumentPreparation = undefined; });
+      await this.instrumentPreparation;
+    }
+  }
+  stopInstrument() { this.instrumentAudio.silence(); this.releaseInputNotes(); }
   private midiSolo = false;
   updateMidiDestination(destination: Destination) { if (this.midiSection) this.midiSection.destination = destination; }
   soloMidi(solo: boolean) { this.midiSolo = solo; }
@@ -154,10 +214,10 @@ export class Engine {
     return next;
   }
   private library: Asset[] = [];
-  get soundEntries() { return soundCatalog(Object.keys(audio.soundMap.get()).filter(key => !['studio_live_voice', 'studio_controlled_voice'].includes(key)), this.library); }
+  get soundEntries() { return soundCatalog(Object.keys(audio.soundMap.get()).filter(key => !key.startsWith('studio_live_voice') && key !== 'studio_controlled_voice'), this.library); }
   get functionNames(): string[] {
     return [...new Set([...Object.entries({ ...core, ...mini, ...tonal, ...audio, ...draw, ...fonts })
-      .filter(([, value]) => typeof value === 'function').map(([name]) => name), ...Object.getOwnPropertyNames(core.Pattern.prototype)])]
+      .filter(([, value]) => typeof value === 'function').map(([name]) => name), ...Object.getOwnPropertyNames(core.Pattern.prototype), 'slider', 'soundSlot'])]
       .filter(name => /^[a-zA-Z]\w*$/.test(name) && name !== 'constructor').sort();
   }
   async registerAssets(assets: Asset[]) {
@@ -186,8 +246,8 @@ export class Engine {
   target: string | 'composition' | undefined;
   endCycle = Infinity;
   pendingCycle: number | undefined;
-  private notes = new Map<number, OscillatorNode>();
-  private noteRequests = new Map<number, object>();
+  private notes = new Map<string, { stop(): void }>();
+  private noteRequests = new Map<string, object>();
   private selectionRequests = new Map<string, number>();
   constructor(private editorFor: (id?: string) => StudioEditor, private project: () => Project, private changed: () => void, private error: (message: string) => void) {}
   async setup(project: Project) {
@@ -199,7 +259,7 @@ export class Engine {
         let from = Number(runtimeId.replace('slider_', ''));
         if (this.compileShift && from >= this.compileShift.from + this.compileShift.delta) from -= this.compileShift.delta;
         const owner = this.compiling!;
-        const slider = owner.sliders.find((s) => s.from === from);
+        const slider = (this.instrumentCompileSliders ?? owner.sliders).find((s) => s.from === from);
         if (!slider) return core.pure(value);
         const stableId = slider.id;
         const revision = owner.liveVersions.get(stableId) ?? 0;
@@ -385,22 +445,31 @@ export class Engine {
     if (this.pendingCycle !== undefined && this.cycle >= this.pendingCycle) this.pendingCycle = undefined;
     if (this.started && this.cycle >= this.endCycle) this.stop();
   }
-  async noteOn(number: number, velocity: number) {
+  async noteOn(number: number, velocity: number, key = String(number)) {
     const epoch = this.epoch;
-    this.noteOff(number);
-    const request = {}; this.noteRequests.set(number, request);
+    this.noteOff(key);
+    const request = {}; this.noteRequests.set(key, request);
     await this.unlock();
-    if (epoch !== this.epoch || this.noteRequests.get(number) !== request) return;
-    const context: AudioContext = audio.getAudioContext();
-    const oscillator = context.createOscillator(), gain = context.createGain();
-    oscillator.type = 'triangle'; oscillator.frequency.value = 440 * 2 ** ((number - 69) / 12);
-    gain.gain.value = velocity / 127 * .12;
-    oscillator.connect(gain).connect(context.destination);
-    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
-    this.notes.set(number, oscillator); oscillator.start();
+    if (epoch !== this.epoch || this.noteRequests.get(key) !== request) return;
+    if (!instrumentFor(this.project()).enabled) { this.noteRequests.delete(key); return; }
+    await this.prepareInstrument();
+    if (epoch !== this.epoch || this.noteRequests.get(key) !== request || !instrumentFor(this.project()).enabled) return;
+    this.instrumentInput!.pitch = number; this.instrumentInput!.velocity = velocity;
+    const phase = this.started ? this.cycle : this.instrumentAudio.time * this.project().bpm / 240;
+    const haps = this.instrumentPattern!.queryArc(phase, phase + .00001);
+    const keys = haps.map((_: any, i: number) => `instrument:${number}:${i}:${this.instrumentSerial++}`);
+    this.notes.set(key, { stop: () => keys.forEach(key => this.instrumentAudio.release(key)) });
+    try {
+      await Promise.all(haps.map((hap: any, i: number) => {
+        assertIsolated(hap.value);
+        const values = this.instrumentValues(hap);
+        return this.instrumentAudio.play(keys[i], values, values.note ?? number, (values.velocity ?? velocity / 127) * 127);
+      }));
+    } catch (error) { if (this.noteRequests.get(key) === request) this.noteOff(key); throw error; }
   }
-  noteOff(number: number) { this.noteRequests.delete(number); const voice = this.notes.get(number); if (voice) { voice.stop(); this.notes.delete(number); } }
-  releaseInputNotes() { this.noteRequests.clear(); for (const number of this.notes.keys()) this.noteOff(number); }
+  noteOff(key: string | number) { const id = String(key); this.noteRequests.delete(id); const voice = this.notes.get(id); if (voice) { voice.stop(); this.notes.delete(id); } }
+  releaseInputNotes() { this.noteRequests.clear(); for (const key of this.notes.keys()) this.noteOff(key); }
+
   async preload(asset: Asset) {
     if (this.buffers.has(asset.id)) return;
     if (!this.loading.has(asset.id)) {
@@ -439,6 +508,7 @@ export class Engine {
     this.changed(); return { cycle, cancelled: false };
   }
   stop() {
+    this.stopInstrument();
     if (this.started && this.target === 'composition') this.transport.position = this.timelinePosition;
     this.jam = undefined; this.midiSection = undefined; this.midiSolo = false; this.suppressed.clear();
     this.performanceAudio.silence();
@@ -452,7 +522,7 @@ export class Engine {
     this.changed();
   }
   panic() { this.stop(); }
-  restore(project: Project) { this.panic(); this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
+  restore(project: Project) { this.panic(); this.instrumentPattern = undefined; this.instrumentInput = undefined; this.instrumentPreparation = undefined; this.instrumentError = ''; this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
   get started() { return this.repl?.scheduler.started ?? false; }
   get cycle() { return this.started ? Math.max(0, this.repl.scheduler.now()) : 0; }
   get voicesPlaying() { return this.voices.size; }

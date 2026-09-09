@@ -43,7 +43,7 @@ Existing buttons remain available. Pattern actions includes duplication, and the
 
 ### Bottom drawer
 
-Use one resizable bottom drawer. The footer exposes **Composition** and **MIDI devices**; **Project** exposes **On-screen controller** and **Export**. Only one view is visible at a time. Selecting the active view again collapses the drawer. All views start collapsed for a new project; remember the user's choice thereafter.
+Use one resizable bottom drawer. The footer exposes **Composition** and **MIDI**; **Project** exposes **On-screen controller** and **Export**. Only one view is visible at a time. Selecting the active view again collapses the drawer. All views start collapsed for a new project; remember the user's choice thereafter.
 
 Collapsing or switching a view does not stop playback or reset controls. On narrow screens, the active tool can fill the workspace while preserving a clear way back to the editor.
 
@@ -71,7 +71,13 @@ Keep volume mixing, track reordering, automation lanes, nested arrangements, and
 
 ### MIDI devices and on-screen controller
 
-**MIDI devices** is exclusively for external input connections: discover ports, Connect, Disconnect, show actual connection state and arriving input, and refresh discovery. Store device subscriptions at installation scope. Changing a project, reloading a page or closing another browser must not disconnect hardware. Remember unavailable selections and reconnect on replug; disconnect is an explicit action. Migrate enabled hardware choices from legacy projects once, retaining project mapping identities.
+The **MIDI** tab opens **MIDI devices**, exclusively for external input connections: discover ports, Connect, Disconnect, show actual connection state and arriving input, and refresh discovery. Store device subscriptions at installation scope. Changing a project, reloading a page or closing another browser must not disconnect hardware. Remember unavailable selections and reconnect on replug; disconnect is an explicit action. Migrate enabled hardware choices from legacy projects once, retaining project mapping identities.
+
+Each sound in the Sample library offers **Assign to MIDI**. The assignment is saved with the session and plays unbound MIDI notes after the library closes. The physical MIDI panel offers **Edit instrument**. The dedicated MIDI instrument tab contains the complete searchable output-sound catalog (built-in and library sounds), current output status, **Clear sound assignment**, effects editor, and presets. Choosing an output updates the same effects chain used by Assign to MIDI in the sample library. Explicit note mappings and note-capture workflows retain priority; **Live** remains a temporary library audition.
+
+The pinned **MIDI instrument** editor is an effects chain separate from composition patterns: `MIDI.s("triangle").gain(slider(0.35, 0, 1)).lpf(1200).room(0.4)`. `MIDI` is reserved for incoming keyboard pitch, velocity, and note duration; this editor has no scripted-note sequencer or source selector. Each session saves draft and applied code independently. Apply instrument activates a valid chain and stops previous instrument voices; errors keep the last working chain. Clear sound assignment mutes the instrument and stops its voices without replacing the saved effects with a fallback synth. Apply or assign a sound to enable it again.
+
+Inline sliders still support MIDI Learn, including control from physical knobs and faders. Supported effects update sounding notes; live slider changes persist without applying unrelated draft text. **Save preset** stores a named applied effects chain in the installation’s MIDI preset library, available across sessions and restarts. Choosing a preset immediately stops outgoing instrument voices and applies it to the current session; unapplied text is protected by a replacement confirmation. Controller bindings remain session-specific. The sound library replaces one literal sound selector while preserving effects and compatible slider identities; ambiguous selectors open the editor for correction. Backups include samples referenced by draft and applied instrument code. Unsupported shared audio routing is reported before applying. Legacy `input(...)` chains migrate to `MIDI` while retaining their effects and slider identities.
 
 **Project → On-screen controller** contains a compact set of knobs, sliders and a small keyboard for testing and performance. Keep mappings, sound slots, diagnostics and layout customization secondary in this separate view. See [ADR 0005](../adr/0005-external-midi-connections.md).
 
@@ -81,7 +87,7 @@ Mapped MIDI sliders and knobs must change their Strudel effect parameters live d
 
 Apply a live value to sounding or sustained audio when the underlying effect supports that update. Parameters evaluated only when a note starts affect the next scheduled notes; label that behavior. If an effect requires recompilation or cannot update live, show the limitation at the mapping and explain when the change will become audible. Live parameter updates must not apply unrelated draft edits, reset the playhead, or retrigger the pattern. Persist the latest control values; offline export captures them at render start rather than recording subsequent controller movements.
 
-Virtual controls use the browser route by default and work without connected hardware. Unassigned keyboard notes play a simple synth; sample assignments override that sound. External connection failures appear in MIDI devices. Advanced routing for generated virtual events remains inside On-screen controller and must not gate hardware input.
+Virtual controls use the browser route by default and work without connected hardware. Unassigned keyboard notes play a simple synth; sample assignments override that sound. External connection failures appear in the MIDI tab. Advanced routing for generated virtual events remains inside On-screen controller and must not gate hardware input.
 
 ### Play notes into selected code
 
@@ -117,7 +123,7 @@ Inserted code remains a draft under the existing Play / Apply changes rules. MID
 
 ## Sound library
 
-Open the library from a single **Sample library** action in the drawer bar, or by clicking a sound name in code. It is a drawer view alongside Composition and MIDI devices, closed by default and never modal: the editor and transport stay usable while it is open, and it can expand to fill the workspace. Every sound row offers preview, **Insert**/**Swap**, and **Live**, which routes the controller and test keys to that sound for audition only. Sources sit under an **Add sounds** disclosure with exactly two tabs: **Generate** and **Import**. Default to Import for new projects and remember the last used tab. Keep one shared searchable library of saved sounds and packs accessible beneath either tab, so users do not have to remember how a sound was acquired. Switching tabs preserves unfinished prompts, import selections, and recording state.
+Open the library from a single **Sample library** action in the drawer bar, or by clicking a sound name in code. It is a drawer view alongside Composition and MIDI, closed by default and never modal: the editor and transport stay usable while it is open, and it can expand to fill the workspace. Every sound row offers preview, **Insert**/**Swap**, and **Live**, which routes the controller and test keys to that sound for audition only. Sources sit under an **Add sounds** disclosure with exactly two tabs: **Generate** and **Import**. Default to Import for new projects and remember the last used tab. Keep one shared searchable library of saved sounds and packs accessible beneath either tab, so users do not have to remember how a sound was acquired. Switching tabs preserves unfinished prompts, import selections, and recording state.
 
 Generate contains sound generation. Import contains **Upload files or pack**, **From GitHub**, and **Record audio**. Upload supports drag-and-drop and a file picker; every flow also works by keyboard. Neither importing nor recording requires an ElevenLabs key or a generation request.
 
@@ -228,3 +234,9 @@ after reload. Switching or adding a session flushes pending edits first. A brows
 draft protects changes made immediately before reload or during a failed disk save.
 The save status reports failures and Save project retries them. Creation assigns
 collision-safe names on the server without replacing existing sessions.
+
+### MIDI preset recall and completion help
+
+A saved MIDI instrument preset can be assigned to a key with **Map preset to MIDI key**. Learning and recall use the connected controller; the selector key does not also play a note. Recall clears previous sounds, replaces the current effects chain, and preserves session-specific control mappings. Rapid knob movement follows the latest input without waiting for every intermediate editor update.
+
+Function autocomplete includes embedded signatures, parameter explanations and examples in pattern and MIDI editors. Include aliases and Studio-specific helpers, and identify gaps in the installed upstream documentation explicitly. See [ADR 0006](../adr/0006-default-midi-instrument-and-presets.md).

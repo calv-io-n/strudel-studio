@@ -1,3 +1,4 @@
+import { defaultInstrument } from '../shared/midi-instrument';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
@@ -18,9 +19,10 @@ test('backup restores referenced audio and creates a collision-safe session', as
     const target = new Store(path.join(root, 'restored'), path.join(root, 'restored-sounds')); await target.init();
     const asset = AssetSchema.parse({ id: randomUUID(), createdAt: new Date().toISOString(), label: 'Take', format: 'wav', provider: 'recording', duration: .1 });
     const wav = new Uint8Array(encodeWav(new Float32Array(4410), new Float32Array(4410), 44100).buffer); await source.writeAsset(asset, wav);
-    const project = newProject(); project.assetIds = [asset.id]; project.tabs[0].code = `s("studio_${asset.id.replaceAll('-', '')}")`;
+    const project = newProject(); project.assetIds = [asset.id]; project.midiSound = `studio_${asset.id.replaceAll('-', '')}`; project.tabs[0].code = `s("studio_${asset.id.replaceAll('-', '')}")`;
+    project.midiInstrument = defaultInstrument(project.midiSound);
     const bytes = await backupProject(project, source);
-    const restored = await restoreBackup(bytes, target); assert.equal(restored.project.version, 5); assert.deepEqual(restored.missing, []);
+    const restored = await restoreBackup(bytes, target); assert.equal(restored.project.version, 5); assert.deepEqual(restored.missing, []); assert.equal(restored.project.midiSound, project.midiSound); assert.deepEqual(restored.project.midiInstrument, project.midiInstrument);
     assert.deepEqual(await readFile(path.join(target.samplesRoot, `${asset.id}.wav`)), Buffer.from(wav));
     const duplicate = await restoreBackup(bytes, target); assert.notEqual(duplicate.project.sessionId, restored.project.sessionId);
     project.assetIds.push(randomUUID()); const missing = unzipSync(await backupProject(project, source));

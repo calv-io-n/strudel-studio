@@ -26,3 +26,7 @@ No audio binaries are committed in the initial source tree. Some older patterns 
 ## Source availability
 
 The complete application source, build instructions, lockfile and dependency patch are available at https://github.com/calv-io-n/strudel. If you distribute or host a modified version, provide the corresponding source for that version and preserve license notices. Update the in-app source links to your own source distribution when it differs from this repository. See [Strudel's licensing guidance](https://strudel.cc/technical-manual/project-start/) and the full license for the applicable terms.
+
+## Embedded Strudel function documentation
+
+`studio/client/strudel-docs.json` is generated from the documentation bundled with installed `@strudel/codemirror` 1.3.0 and signatures in the installed Strudel packages. Copyright remains with the Strudel contributors under AGPL-3.0-or-later. Studio converts documentation markup to text and supplements Studio-specific helpers in `function-docs.ts`. Regenerate with `npm run studio:docs`; no upstream package files are modified. Acorn (MIT) parses the installed bundle and sources during generation.

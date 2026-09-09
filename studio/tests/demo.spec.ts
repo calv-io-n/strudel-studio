@@ -19,7 +19,7 @@ test('Neon Drive plays every tab, renders its complete arrangement, and restores
   await expect(page.locator('.topbar').getByLabel('Sessions')).toBeVisible();
   await page.getByLabel('Sessions', { exact: true }).selectOption('Neon-Drive');
   await expect(page.getByRole('tab', { name: 'Lead', exact: true })).toBeVisible();
-  await expect(page.getByRole('tab')).toHaveCount(4);
+  await expect(page.locator('[data-tab][role=tab]')).toHaveCount(4);
 
   for (const name of ['Rhythm', 'Chords', 'Lead', 'Breakdown']) {
     await page.getByRole('tab', { name, exact: true }).click();

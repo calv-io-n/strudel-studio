@@ -2,6 +2,7 @@ import { autocompletion, closeCompletion, acceptCompletion, startCompletion, sni
 import { Prec } from '@codemirror/state';
 import { keymap, ViewPlugin } from '@codemirror/view';
 import { parser } from '@lezer/javascript';
+import { documentedCompletion } from './function-docs';
 import type { Asset } from '../shared/model';
 
 export const soundKey = (asset: Asset) => `studio_${asset.id.replaceAll('-', '')}`;
@@ -56,10 +57,10 @@ export function studioCompletionSource(sounds: () => SoundEntry[], functions: ()
     const word = context.matchBefore(/[\w$]*/)!;
     const dot = code[word.from - 1] === '.';
     if (!word.text && !dot && !context.explicit) return null;
-    const snippets = effects.map(([name, detail, value]) => snippetCompletion(`${name}(\${${value}})`, { label: name, detail, type: 'function' }));
+    const snippets = effects.map(([name, detail, value]) => snippetCompletion(`${name}(\${${value}})`, { ...documentedCompletion(name), detail }));
     return { from: word.from, options: [
       ...(dot ? snippets : []),
-      ...functions().filter(name => !dot || !effects.some(([effect]) => effect === name)).map(label => ({ label, type: 'function' })),
+      ...functions().filter(name => !dot || !effects.some(([effect]) => effect === name)).map(documentedCompletion),
     ], validFor: /^[\w$]*$/ };
   };
 }

@@ -123,3 +123,25 @@ test('completion redraw can remove a focused suggestion without a nested editor 
   await expect(page.getByRole('listbox')).toBeHidden();
   expect(errors).toEqual([]);
 });
+
+test('selected completions explain parameters in pattern and MIDI editors', async ({ page }) => {
+  await page.goto('/'); await expect(page.locator('#connection')).toHaveText('Studio connected');
+  await edit(page, 'note("c3").'); await page.keyboard.type('lpf');
+  const docs = page.locator('.studio-function-doc');
+  await expect(docs).toContainText('frequency');
+  await expect(docs).toContainText('20000');
+  await expect(docs).toContainText('Examples');
+  await expect(docs).toBeVisible();
+  await expect(docs).toBeInViewport();
+  await page.screenshot({ path: 'studio/test-results/function-docs.png' });
+  await page.keyboard.press('Escape');
+  await edit(page, ''); await page.keyboard.type('slider');
+  await expect(docs).toContainText('Initial value');
+  await expect(docs).toContainText('Minimum value');
+  await page.keyboard.press('Escape');
+  await page.locator('[data-instrument-tab]').click();
+  await edit(page, ''); await page.keyboard.type('MIDI');
+  await expect(docs).toContainText('pitch and velocity');
+  await page.keyboard.press('Tab');
+  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toHaveText('MIDI');
+});
