@@ -407,7 +407,7 @@
         }
       ],
       "sessionId": "Drum-Basics",
-      "version": 5,
+      "version": 6,
       "tabs": [
         {
           "id": "pattern-1",
@@ -721,7 +721,7 @@
           "value": 100
         }
       ],
-      "version": 5,
+      "version": 6,
       "tabs": [
         {
           "id": "neon-rhythm",
@@ -831,6 +831,60 @@
       "bpm": 168,
       "assetIds": [],
       "sessionId": "Neon-Drive"
+    }
+  ],
+  "catalogue": [
+    {
+      "id": "00000000-0000-4000-8000-000000000100",
+      "title": "Studio Starter",
+      "description": "Six original synthesized drums: kick, snare, hats, clap and tom.",
+      "license": "CC0-1.0",
+      "repository": "https://github.com/calv-io-n/strudel",
+      "revision": "769c70596ad9a1fe7f1b813c23be206a44429911",
+      "files": [
+        {
+          "id": "00000000-0000-4000-8000-000000000001",
+          "path": "studio/client/public/starter/00000000-0000-4000-8000-000000000001.wav",
+          "bytes": 70604,
+          "hash": "4e130646b6c8cf003c23b86b1d939cf90b7b94eacf817d2cb91b042c979ebd36",
+          "url": "https://raw.githubusercontent.com/calv-io-n/strudel/769c70596ad9a1fe7f1b813c23be206a44429911/studio/client/public/starter/00000000-0000-4000-8000-000000000001.wav"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000002",
+          "path": "studio/client/public/starter/00000000-0000-4000-8000-000000000002.wav",
+          "bytes": 42380,
+          "hash": "b3a32ca99b520c7289cbb88aa4ee0b15aa238c4dc030e5908a88ce23b81c941e",
+          "url": "https://raw.githubusercontent.com/calv-io-n/strudel/769c70596ad9a1fe7f1b813c23be206a44429911/studio/client/public/starter/00000000-0000-4000-8000-000000000002.wav"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000003",
+          "path": "studio/client/public/starter/00000000-0000-4000-8000-000000000003.wav",
+          "bytes": 15920,
+          "hash": "f45cba9985533df58203f8e18f30d92c5ebd30666e1a5617e02b1b0e1247e1e2",
+          "url": "https://raw.githubusercontent.com/calv-io-n/strudel/769c70596ad9a1fe7f1b813c23be206a44429911/studio/client/public/starter/00000000-0000-4000-8000-000000000003.wav"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000004",
+          "path": "studio/client/public/starter/00000000-0000-4000-8000-000000000004.wav",
+          "bytes": 70604,
+          "hash": "125dc3a5af7d6fb4d0f781d3a31d91b4efa22fc640c785cac1c4ccdfac4811c1",
+          "url": "https://raw.githubusercontent.com/calv-io-n/strudel/769c70596ad9a1fe7f1b813c23be206a44429911/studio/client/public/starter/00000000-0000-4000-8000-000000000004.wav"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000005",
+          "path": "studio/client/public/starter/00000000-0000-4000-8000-000000000005.wav",
+          "bytes": 44144,
+          "hash": "2e7614240956874842d4e0291973d4e1c4688630d71d273fbe90f1198ebe18b0",
+          "url": "https://raw.githubusercontent.com/calv-io-n/strudel/769c70596ad9a1fe7f1b813c23be206a44429911/studio/client/public/starter/00000000-0000-4000-8000-000000000005.wav"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000006",
+          "path": "studio/client/public/starter/00000000-0000-4000-8000-000000000006.wav",
+          "bytes": 70604,
+          "hash": "323ea84e5f7020d2868f3e4c38c5f8fe65d7272138dc5eb4e8eec2255a710fba",
+          "url": "https://raw.githubusercontent.com/calv-io-n/strudel/769c70596ad9a1fe7f1b813c23be206a44429911/studio/client/public/starter/00000000-0000-4000-8000-000000000006.wav"
+        }
+      ]
     }
   ]
 }

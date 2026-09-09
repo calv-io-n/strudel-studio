@@ -10,9 +10,9 @@ A focused Strudel workspace: write patterns in tabs, play MIDI notes into select
 
 The accepted runtime is a single browser-only application served as static files, including on Cloudflare Pages. This section supersedes older references below to local-server storage, AI generation, sample servers, and ALSA transport; see [ADR 0007](../adr/0007-browser-only-pages.md).
 
-- Store projects, samples, originals, presets, and settings in IndexedDB. Save transactionally and preserve drafts on failure. Keep existing project and ZIP backup compatibility.
+- Store metadata in IndexedDB and large audio in OPFS with IndexedDB fallback. Save transactionally and preserve drafts on failure. Keep existing project and ZIP backup compatibility.
 - Offer a dedicated `/#/samples/import` page for public GitHub discovery, selective download, and file/folder/ZIP review. Keep the editor mounted so navigation preserves drafts. No automatic external pack downloads.
-- Ship only Drum Basics, Neon Drive, and six original CC0 drum samples under 1 MB. Seed once without overwriting edits.
+- Seed only synth-only Neon Drive without overwriting edits. Ship catalogue metadata; install the original CC0 drum kit and Drum Basics only on request.
 - Run synthesis, recording, and WAV export in the browser. Use Web MIDI with explicit permission and remembered connections; retain on-screen controls without hardware access.
 - Explain browser-local storage, usage, persistence requests, and downloadable backups. No accounts, cross-device sync, backend APIs, AI generation, or OS loopback in this target.
 
@@ -230,20 +230,19 @@ used. No extra permanent browser, AI completion service, or sample-pack download
 Export opens from the Project menu into the bottom drawer. It renders the full
 composition from cycle zero to the last clip, or a chosen number of cycles from
 the current tab. The default effect tail is three seconds, adjustable from zero
-to fifteen. Output is a stereo, 44.1 kHz, 16-bit WAV, up to fifteen minutes long.
-Render & download WAV captures the current code, slider values and active sound
-slots. Offline rendering runs in an isolated frame, with progress, cancellation,
+to fifteen. Output is stereo WAV at 44.1 or 48 kHz, with 16/24-bit PCM or 32-bit float encoding, up to fifteen minutes long. Default to 48 kHz/24-bit; bound memory before allocating.
+Render & download WAV captures immutable code, slider values, active sound slots, and audio bytes. Ask explicitly whether to render drafts or last-applied code when they differ. Require captured takes or explicit exclusion for enabled live input. Offline rendering runs in an isolated frame, with progress, cancellation,
 error feedback and a repeat-download link. It does not record later live MIDI
 changes. Playback and editing remain available during export.
 
 ### Session persistence
 
 Sessions receive a stable storage identity when created. Edits autosave to that
-session's JSON file as well as recovery; the dropdown restores the selected session
+session's browser record as well as recovery; the dropdown restores the selected session
 after reload. Switching or adding a session flushes pending edits first. A browser
-draft protects changes made immediately before reload or during a failed disk save.
+draft protects changes made immediately before reload or during a failed save.
 The save status reports failures and Save project retries them. Creation assigns
-collision-safe names on the server without replacing existing sessions.
+collision-safe names in browser storage without replacing existing sessions.
 
 ### MIDI preset recall and completion help
 

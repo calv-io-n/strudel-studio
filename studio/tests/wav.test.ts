@@ -50,3 +50,30 @@ function pcm({ channels, bits, rate, frames, float = false, list = false, format
   }
   return new Uint8Array(buffer);
 }
+
+test('24-bit and float preserve sub-16-bit information; float retains overs and rejects non-finite data', () => {
+  const low = Float32Array.of(1 / 1048576, -1 / 1048576, .25);
+  for (const format of ['pcm24', 'float32'] as const) {
+    const result = encodeWav(low, low, 48000, { format });
+    const actual = decodeWav(new Uint8Array(result.buffer));
+    assert.equal(actual.rate, 48000); assert.equal(actual.bits, format === 'pcm24' ? 24 : 32);
+    assert.ok(actual.left[0] > 0); assert.ok(Math.abs(actual.left[0] - low[0]) <= 1 / 8388608);
+  }
+  const overs = Float32Array.of(1.5, -2);
+  const float = encodeWav(overs, overs, 44100, { format: 'float32' });
+  assert.deepEqual([...decodeWav(new Uint8Array(float.buffer)).left], [1.5, -2]); assert.equal(float.clipped, 0);
+  assert.equal(encodeWav(overs, overs, 44100, { format: 'pcm24' }).clipped, 4);
+  assert.throws(() => encodeWav(Float32Array.of(NaN), Float32Array.of(0), 44100, { format: 'float32' }), /NaN/);
+  assert.throws(() => encodeWav(low, Float32Array.of(0), 44100), /length/);
+  const bytes = new Uint8Array(encodeWav(low, low, 44100, { format: 'pcm24', channels: 1 }).buffer);
+  assert.equal(decodeWav(bytes).channels, 1); bytes[40] = 255; assert.throws(() => decodeWav(bytes), /bounds/);
+});
+
+test('TPDF dither affects only final integer quantization and has bounded, unbiased noise', () => {
+  const silence = new Float32Array(100000); let seed = 10;
+  const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296; };
+  const dry = decodeWav(new Uint8Array(encodeWav(silence, silence, 48000).buffer)); assert.ok(dry.left.every(n => n === 0));
+  const wet = decodeWav(new Uint8Array(encodeWav(silence, silence, 48000, { format: 'pcm16', dither: true, random }).buffer));
+  assert.ok(wet.left.some(n => n !== 0)); assert.ok(Math.abs(wet.left.reduce((a, b) => a + b, 0) / wet.left.length) < 1e-6); assert.ok(wet.left.every(n => Math.abs(n) <= 1 / 32768));
+  const float = encodeWav(silence, silence, 48000, { format: 'float32', dither: true }); assert.ok(decodeWav(new Uint8Array(float.buffer)).left.every(n => n === 0));
+});

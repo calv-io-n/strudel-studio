@@ -1,5 +1,7 @@
+import { prepareTake, takePattern } from './take-playback';
+import { asset as storedAsset, audioBlob } from './storage/workspace';
 import { sampleUrl, releaseSampleUrls } from './storage/workspace';
-import { instrumentFor, validateInstrumentInput, MIDI_EDITOR } from '../shared/midi-instrument';
+import { instrumentFor, validateInstrumentInput, MIDI_EDITOR, updateAppliedInstrumentSliders } from '../shared/midi-instrument';
 import { reconcileSliders, type Slider } from '../shared/sliders';
 import { LiveEffects } from './live-effects';
 import * as core from '@strudel/core';
@@ -151,6 +153,19 @@ export class Engine {
   endMidiSection() { if (this.midiSection) this.stop(); }
   jam?: { tabId: string; begin: number; end: number };
   private appliedCodes = new Map<string, string>();
+  private appliedAnchors = new Map<string, { id: string; from: number; fingerprint: string }[]>();
+  private appliedVersions = new Map<string, Map<string, number>>();
+  appliedState() {
+    const codes: Record<string, string> = {}, anchors: Record<string, { id: string; from: number; fingerprint: string }[]> = {};
+    for (const [id, code] of this.appliedCodes) {
+      let owner: StudioEditor; try { owner = this.editorFor(id); } catch { continue; }
+      const state = { code, appliedCode: code, anchors: [], appliedAnchors: this.appliedAnchors.get(id) ?? [] };
+      const updates = new Map<string, number>();
+      for (const [key, version] of owner.liveVersions) if (version !== (this.appliedVersions.get(id)?.get(key) ?? 0)) updates.set(key, owner.values.get(key)!);
+      updateAppliedInstrumentSliders(state, updates); codes[id] = state.appliedCode; anchors[id] = state.appliedAnchors;
+    }
+    return { codes, anchors };
+  }
   private suppressed = new Map<string, Pattern>();
   async startJam(tabId: string, begin: number, end: number) {
     const maximum = Math.max(0, ...this.project().clips.map(c => c.start + c.length));
@@ -178,6 +193,7 @@ export class Engine {
   }
   readonly liveEffects = new LiveEffects();
   get audioContext(): AudioContext { return audio.getAudioContext(); }
+  get masterInput(): AudioNode { return audio.getSuperdoughAudioController().output.destinationGain; }
   get tempo() { return this.project().bpm; }
   isolatePerformance(isolated: boolean) {
     if (isolated) { for (const note of this.notes.keys()) this.noteOff(note); this.voices.forEach(source => { try { source.stop(); } catch { /* ended */ } }); }
@@ -222,6 +238,7 @@ export class Engine {
       .filter(name => /^[a-zA-Z]\w*$/.test(name) && name !== 'constructor').sort();
   }
   async registerAssets(assets: Asset[]) {
+    for (const previous of this.library) { const current = assets.find(a => a.id === previous.id); if (!current || current.missing || current.precision?.working !== previous.precision?.working) { this.buffers.delete(previous.id); this.loading.delete(previous.id); audio.soundMap.setKey(soundKey(previous), undefined); } }
     this.library = assets;
     releaseSampleUrls(assets.map(a => a.id));
     await audio.samples(Object.fromEntries(await Promise.all(assets.filter(a => !a.missing).map(async asset => [soundKey(asset), [await sampleUrl(asset.id)]]))));
@@ -312,6 +329,28 @@ export class Engine {
     if (this.started) return this.apply();
     return this.compile(target, false);
   }
+  recordingTransport = false;
+  private recordingLoop = false;
+  async beginAudioRecording() {
+    const position = this.timelinePosition;
+    this.recordingLoop = this.transport.loop; this.transport.loop = false; this.recordingTransport = true;
+    try {
+      if (this.started && this.target === 'composition') {
+        if (this.recordingLoop && this.compositionBase) {
+          this.transportStart = position - this.cycle;
+          this.patterns.reset(this.timelinePattern(this.compositionBase));
+          this.repl.state.pattern = this.patterns.pattern();
+          await this.repl.scheduler.setPattern(this.patterns.pattern(), false);
+        }
+        this.endCycle = Infinity;
+      } else {
+        if (this.started) this.stop();
+        this.transport.position = position; this.transportStart = position;
+        await this.evaluate(true, 'composition');
+      }
+    } catch (error) { this.endAudioRecording(); throw error; }
+  }
+  endAudioRecording() { this.stop(); this.recordingTransport = false; this.transport.loop = this.recordingLoop; }
   transport = { position: 0, begin: 0, end: 4, loop: false };
   private compositionBase?: Pattern;
   private transportStart = 0;
@@ -319,11 +358,11 @@ export class Engine {
     if (!this.started || this.target !== 'composition') return this.transport.position;
     if (this.midiSection) return this.midiSection.begin + this.cycle % (this.midiSection.end - this.midiSection.begin);
     const position = this.transportStart + this.cycle;
-    return this.transport.loop ? this.transport.begin + ((position - this.transport.begin) % (this.transport.end - this.transport.begin) + this.transport.end - this.transport.begin) % (this.transport.end - this.transport.begin) : Math.min(position, this.arrangementLength);
+    return this.transport.loop ? this.transport.begin + ((position - this.transport.begin) % (this.transport.end - this.transport.begin) + this.transport.end - this.transport.begin) % (this.transport.end - this.transport.begin) : (this.recordingTransport ? position : Math.min(position, this.arrangementLength));
   }
   private timelinePattern(pattern: Pattern) {
     const t = this.transport;
-    return transportPattern(pattern, this.transportStart, t.begin, t.loop ? t.end : this.arrangementLength, t.loop);
+    return transportPattern(pattern, this.transportStart, t.begin, t.loop ? t.end : this.recordingTransport ? 8192 : this.arrangementLength, t.loop);
   }
   async playComposition() {
     if (this.busy) return;
@@ -334,6 +373,7 @@ export class Engine {
     return this.evaluate(true, 'composition');
   }
   async seek(position: number) {
+    if (this.recordingTransport) throw new Error('Stop recording before seeking.');
     if (this.midiSection) throw new Error('Finish MIDI capture or review before seeking.');
     if (this.busy) throw new Error('Wait for playback preparation.');
     const resume = this.started && this.target === 'composition';
@@ -359,12 +399,13 @@ export class Engine {
     const project = this.project();
     const ids = target === 'composition' ? [...new Set(project.clips.map(c => c.tabId))] : [target];
     const clips = project.clips.map(c => ({ ...c }));
-    const next = new Map<string, Pattern>(), codes = new Map<string, number>();
+    const next = new Map<string, Pattern>(), codes = new Map<string, number>(), appliedCodes = new Map<string, string>();
     let cps = project.bpm / 240;
     try {
-      if (!ids.length) throw new Error('Add a pattern to the composition first.');
+      if (!ids.length && !this.recordingTransport) throw new Error('Add a pattern to the composition first.');
       await this.unlock();
       for (const id of ids) {
+        if (target === 'composition' && clips.filter(c => c.tabId === id).every(c => !!c.takeId)) continue;
         const tab = project.tabs.find(t => t.id === id)!;
         if (epoch !== this.epoch) return;
         this.compositionCompile = target === 'composition';
@@ -394,10 +435,14 @@ export class Engine {
           }));
         }
         next.set(id, new core.Pattern((state: any) => (this.suppressed.get(id) ?? compiled).query(state))); codes.set(id, revision);
-        this.appliedCodes.set(id, code);
+        appliedCodes.set(id, code);
         if (target !== 'composition') cps = this.compiler.scheduler.cps;
       }
       if (epoch !== this.epoch) return;
+      if (target === 'composition') for (const clip of clips.filter(c => c.takeId)) {
+        const asset = await storedAsset(clip.takeId!); await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id));
+        next.set(clip.id, takePattern(clip, asset, cps));
+      }
       let pattern = target === 'composition' ? arrangement(clips, next, this.mutes, () => this.jam?.tabId) : next.get(target)!;
       if (this.midiSection && target === 'composition') {
         const composed = pattern; const section = this.midiSection;
@@ -427,12 +472,12 @@ export class Engine {
         this.patterns.reset(pattern);
         this.repl.scheduler.setCps(cps);
         this.target = target;
-        this.endCycle = target === 'composition' && !this.jam && !this.midiSection ? (this.transport.loop ? Infinity : Math.max(...clips.map(c => c.start + c.length)) - this.transportStart) : Infinity;
+        this.endCycle = target === 'composition' && !this.jam && !this.midiSection ? (this.recordingTransport || this.transport.loop ? Infinity : Math.max(...clips.map(c => c.start + c.length)) - this.transportStart) : Infinity;
         const live = this.patterns.pattern();
         this.repl.state.pattern = live;
         await this.repl.scheduler.setPattern(live, true);
       }
-      this.applied = codes;
+      this.applied = codes; for (const [id, code] of appliedCodes) { this.appliedCodes.set(id, code); this.appliedAnchors.set(id, structuredClone(this.editorFor(id).anchors)); this.appliedVersions.set(id, new Map(this.editorFor(id).liveVersions)); }
     } finally {
       this.compiling = undefined;
       core.setTime(() => this.repl.scheduler.now());
@@ -524,7 +569,7 @@ export class Engine {
     this.changed();
   }
   panic() { this.stop(); }
-  restore(project: Project) { this.panic(); this.applied.clear(); this.appliedCodes.clear(); this.instrumentPattern = undefined; this.instrumentInput = undefined; this.instrumentPreparation = undefined; this.instrumentError = ''; this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
+  restore(project: Project) { this.panic(); this.applied.clear(); this.appliedCodes = new Map(Object.entries(project.appliedPatterns ?? {})); this.appliedAnchors = new Map(Object.entries(project.appliedPatternAnchors ?? {})); this.appliedVersions.clear(); this.instrumentPattern = undefined; this.instrumentInput = undefined; this.instrumentPreparation = undefined; this.instrumentError = ''; this.transport = { position: 0, begin: 0, end: 4, loop: false }; this.compositionBase = undefined; this.timeline.reset(project.slots); this.selectionRequests.clear(); }
   get started() { return this.repl?.scheduler.started ?? false; }
   get cycle() { return this.started ? Math.max(0, this.repl.scheduler.now()) : 0; }
   get voicesPlaying() { return this.voices.size; }

@@ -62,6 +62,6 @@ async function cacheFile(store: Store, file: { owner: string; repo: string; revi
   const dir = store.libraryRoot ?? store.samplesRoot;
   const originalPath = path.join(dir, `${asset.id}.original.wav`), tmp = `${originalPath}.${randomUUID()}.tmp`;
   await writeFile(tmp, original); await rename(tmp, originalPath);
-  await store.writeAsset(asset, new Uint8Array(encodeWav(decoded.left, decoded.right, decoded.rate).buffer), dir);
+  await store.writeAsset(asset, new Uint8Array(encodeWav(decoded.left, decoded.right, decoded.rate, { format: 'float32', channels: decoded.channels === 1 ? 1 : 2 }).buffer), dir);
   return asset;
 }
