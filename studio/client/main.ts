@@ -1,3 +1,4 @@
+import { installQuickStart } from './quick-start';
 import { saveSession } from './storage/session-save';
 import { SessionDrafts } from './session-draft';
 import { AUDIO_EDITOR, defaultAudioCode, compileAudioEffects } from '../shared/audio-input';
@@ -1471,6 +1472,8 @@ document.addEventListener('keydown', event => {
   const target = event.target as HTMLElement, rect = target.getBoundingClientRect();
   if (showContextMenu(target, rect.left, rect.bottom, true)) { event.preventDefault(); event.stopPropagation(); }
 });
+
+installQuickStart();
 
 async function boot() {
   await sessionDrafts.initialize();
