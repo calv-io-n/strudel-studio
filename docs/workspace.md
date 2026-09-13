@@ -2,70 +2,125 @@
 
 Studio saves projects and sounds in this browser. See [setup and migration](setup.md) for hosting and moving existing projects.
 
-## Workspace
+## Layout
 
-- Write in named pattern tabs. Use **+** to add a pattern. Right-click a tab for Color, Rename, Duplicate, Add to composition, or Close; **•••** also offers these actions.
-- Use **Play pattern** below the editor or **Play composition** in the timeline. Stop silences playback, previews, and held notes.
-- Typed code changes wait for **Apply changes** (Ctrl+Enter). MIDI and inline sliders affect the sound immediately. Code-defined tempo changes take effect on the next Play.
-- Open **Composition** or **MIDI devices** from the footer. **Project** contains **On-screen controller** and **Export**. Click the active view again to return to the editor. The drawer remembers its view and height.
-- The **moon/sun toggle** in the top bar switches the entire workspace and editor; light is the default. The choice is remembered in this browser.
+- **Top bar:** the session picker and **+** to add a session, the project name, and the transport. The transport has a **Tab | Composition** target switch, **Play**, **Stop** and **● Record**. After that come **Search** (Ctrl+K, or Cmd+K on macOS) and the moon/sun appearance toggle.
+- **Editor:** the rest of the page. When a pattern has typed edits that haven't been applied, an **Unapplied edits · Apply** pill floats in the lower right.
+- **Bottom bar:** the pattern tabs, with **+** for a new pattern, and the **Input** and **MIDI** tabs with their activity meters. It also shows playback status and save state with **Save**, and has a **Composition** toggle that opens the timeline drawer.
+- **Command palette:** press Ctrl+K anywhere, or click **Search**. Most actions live here: go to a pattern, rename, recolor, duplicate, close or delete it, import or export pattern files, open the Sample Catalogue, import samples, export audio, back up and restore projects, manage sessions, reopen the quick start, and open settings sheets. Type to filter, use the arrow keys to choose, press Enter to run, and press Escape to close.
+- **Settings sheets:** **MIDI**, **Audio input**, **Record**, **Play MIDI** and **Export** open as a sheet on the right. Press Escape or click outside the sheet to return to the editor.
+- **Appearance:** light is the default. The choice applies to the whole workspace and editor and is remembered in this browser.
+- **Quick start:** the guide opens on the first visit in a browser. Reopen it any time with **Quick start guide** in the command palette.
+
+## Patterns and playback
+
+- Write in named pattern tabs. **+** asks for a name and one of eight colors. Right-click a tab for Color, Rename, Duplicate, Add to composition, Close or Delete; the command palette offers the same actions for the open pattern.
+- Choose **Tab** or **Composition** in the top bar, then press **Play**. Stop silences playback, previews and held notes.
+- Typed code changes wait for **Apply** (Ctrl+Enter). MIDI and inline sliders affect the sound immediately. Code-defined tempo changes take effect on the next Play.
 
 ## Composition
 
-Drag a pattern tab onto a track, or use **••• → Add to composition**. New clips are four cycles long. Tab colors carry through to every source clip, including duplicates. Use **Color…** in the tab menu to choose one of eight named colors.
+Open the drawer with **Composition** in the bottom bar. Drag a pattern tab onto a track, or right-click the tab and choose **Add to composition**. New clips are four cycles long. Tab colors carry through to every clip made from that pattern, including duplicates.
 
-Projects start with two tracks. **Add track** appends and selects a new track for subsequent additions, up to 16. Track **•••** menus rename or remove tracks; removing a populated track confirms removal of its clips. Keep at least one track. Opaque headers remain flush against the left edge and cover the timeline when scrolling horizontally, and the track area scrolls vertically.
+Projects start with two tracks. **Add track** adds a new track and selects it, so later additions land there, up to 16 tracks. The track **•••** menu renames or removes a track; removing a track that has clips asks for confirmation first. A project always keeps at least one track. Track headers stay pinned to the left edge when you scroll sideways, and the track area scrolls vertically.
 
-Choose **1 cycle**, **½ cycle**, or **¼ cycle** snapping. Dragging a tab opens Composition and displays a colored label following the pointer. The destination track highlights when you can drop. Moving and resizing show a preview and align magnetically to nearby clip edges. Invalid overlapping placements are rejected; Escape cancels a gesture. Clips keep their original grab offset while moving. Focus a clip and use Left/Right to move by the grid, Up/Down to change tracks, or Shift+Left/Right to resize. Click a clip for numeric editing in quarter-cycle increments. Changing the grid leaves existing timing intact.
+Choose **1 cycle**, **½ cycle** or **¼ cycle** snapping.
+- **Dragging a tab** opens Composition and shows a colored label that follows the pointer. The destination track highlights when you can drop there.
+- **Moving or resizing a clip** shows a preview, and edges snap to nearby clips. Overlapping placements are rejected. Clips keep your original grab offset while moving. Escape cancels any drag.
+- **From the keyboard:** focus a clip, then use Left/Right to move it by the grid, Up/Down to change tracks, and Shift+Left/Right to resize. Click a clip to edit its numbers in quarter-cycle steps.
+- **Changing the grid** leaves existing timing intact.
 
-Use a track's **Mute** button or a clip's right-click **Mute/Unmute** action. Track mute silences its clips without changing their individual mute settings. During composition playback, changes take effect at the next safe cycle boundary shown in the toolbar. Existing notes and effect tails can finish. Mutes never apply unfinished code edits, affect standalone tab playback, or shorten the arrangement. Stop clears pending scheduling; the next Play uses saved settings.
+**Looping:** while playback is stopped, drag across the ruler to select a range. The drawer then shows **Looping cycles…**, and playback repeats that range. **Clear selection** turns the loop off and resets the range to the whole song. Clicking the ruler without dragging moves the playhead. The range handles and the playhead can also be moved with the arrow keys. **Return to range start** and **Loop the selected range** are in the command palette.
 
-**Solo** isolates one track immediately while stopped, or at the next safe cycle boundary during playback. Click another track’s Solo to switch; click the active Solo again to restore the previous mix. Solo respects both track mute and individual clip mutes. Unmute a soloed track to hear it. It is saved with the session, included in WAV exports, and cleared if the soloed track is removed.
+**Mute:** use a track's **Mute** button or a clip's right-click **Mute/Unmute** action. Track mute silences the track's clips without changing their own mute settings. During composition playback, changes take effect at the next safe cycle boundary shown in the toolbar, and notes or effect tails that are already sounding can finish. Mutes never apply unfinished code edits, affect tab playback, or shorten the arrangement. Stop clears pending changes; the next Play uses the saved settings.
 
-Structural edits require stopped playback. Each clip starts its source pattern from cycle zero. All tracks use the shared composition tempo, with four beats per cycle, and playback ends at the last clip, including muted clips. Right-click clips for Edit, Duplicate, Open source pattern, and Remove.
+**Solo:** isolates one track immediately while stopped, or at the next safe cycle boundary during playback. Click another track's Solo to switch; click the active Solo again to restore the previous mix. Solo respects both track mutes and clip mutes, so unmute a soloed track to hear it. Solo is saved with the session, included in WAV exports, and cleared if the soloed track is removed.
+
+Structural edits require stopped playback. Each clip plays its source pattern from cycle zero. All tracks share the composition tempo of four beats per cycle, and playback ends at the last clip, including muted clips. Right-click a clip for Edit, Duplicate, Open source pattern and Remove.
 
 ## MIDI
 
-Select an inline slider, choose **MIDI Learn**, then move a virtual or physical knob. Browser controls work without MIDI hardware. Unassigned keyboard notes play a simple synth.
+The **MIDI** tab edits the MIDI instrument: its output sound, presets and effects chain. When MIDI isn't enabled, or no input is connected, a banner explains what's missing and offers **Enable MIDI** or a link to settings. The tab's dot turns blue when an input is connected and pulses as notes and controls arrive.
 
-**MIDI devices** connects external keyboards and controllers through Web MIDI. Choose **Enable MIDI**, grant browser access, select an input, and choose **Connect**. Remembered inputs show Connected or Waiting for device, with an explicit Disconnect action. Input activity confirms arriving notes and CC messages. Selection stays independent of the current project. Selected devices reconnect when replugged; reload resumes them when browser permission is already granted. Unsupported browsers can still use the on-screen controller.
+Open **MIDI & on-screen controller** from the command palette to connect external keyboards and controllers through Web MIDI. Choose **Enable MIDI**, grant browser access, select an input, then choose **Connect**.
+- Remembered inputs show **Connected** or **Waiting for device**, with an explicit **Disconnect**.
+- The activity line confirms arriving notes and CC messages.
+- Your input selection doesn't change when you switch projects. Selected devices reconnect when you replug them, and reloading resumes them when browser permission was already granted.
+- Browsers without Web MIDI can still use the on-screen controller.
 
-**Project → On-screen controller** contains browser keys, knobs, sliders, mappings, sound slots, and event feedback. MIDI Learn works with physical or on-screen controls. There is no Python bridge or OS loopback route.
+The same sheet contains the on-screen controller: browser knobs, sliders, pads and keys. Under **Mappings, sound slots & diagnostics** you'll find your mappings, sound slots and a MIDI event monitor. To map a control, select an inline slider in the editor, choose **MIDI Learn**, then move a physical or on-screen control. Unassigned keyboard notes play a simple synth. There is no Python bridge or OS loopback route.
 
 ## Sounds
 
-The bundled collection contains six original CC0 drum sounds. Add more through **Import samples**, using public GitHub links or file uploads.
+The bundled collection contains six original CC0 drum sounds. Add more through **Import samples from GitHub or files…** in the command palette, using public GitHub links or file uploads.
 
-**Sample library** is a drawer view alongside Composition and MIDI devices: open it from the top bar or by clicking a sound name in your code, and keep editing or playing while it is open. Each sound has **Insert** (or **Swap** when you opened it from a sound name), a preview button, and **Live**, which plays that sound from your MIDI controller or the test keys without recording anything. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Import a sound, preview it, then choose **Insert into pattern**. Inserting does not start playback or apply a running draft. Existing sample-to-pad and sound-slot assignment is available under the selected sound's advanced controls.
+**Open Sample Catalogue** in the command palette opens the sound library as a sheet; clicking a sound name in your code opens it too. Each sound row has these actions:
+- **Insert**, or **Swap** when you opened the library from a sound name. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Inserting doesn't start playback or apply a running draft.
+- **Preview** (▶).
+- **Assign to MIDI**.
+- **Live**, which plays the sound from your MIDI controller or the test keys without recording anything.
 
-Type inside `s("…")` or `sound("…")` to find sounds by name or label; use arrow keys and **Tab** to complete. **Ctrl+Space** opens suggestions and **Escape** dismisses them. Typing after a dot suggests effects such as reverb and filters. Saved sound labels can be renamed in the Sounds panel.
+Assigning a sample to a pad or sound slot is available under the selected sound's advanced controls.
 
-Imported and recorded sounds are stored as browser-local audio blobs. AI generation is not part of this version.
+Type inside `s("…")` or `sound("…")` to find sounds by name or label. Use the arrow keys and **Tab** to complete, **Ctrl+Space** to open suggestions, and **Escape** to dismiss them. Typing after a dot suggests effects such as reverb and filters. Saved sound labels can be renamed in the library.
+
+Imported and recorded sounds are stored as browser-local audio files. AI generation is not part of this version.
+
+## Recording
+
+**● Record** in the top bar opens the record bar. Choose **Audio input** or **MIDI** under **Capture**.
+
+**Audio input:**
+1. Pick a track under **Record to**, then choose **Record audio input**.
+2. Studio asks for microphone permission if it doesn't have it, rolls the composition from the playhead, and draws the take on the track as it records.
+3. Stop to save the take onto the timeline.
+
+**Settings** opens the Record sheet: wet or dry capture, latency compensation and a one-cycle count-in. If a save fails, the record bar stays open with **Retry save**, **Download recording** and **Discard recording…**.
+
+**The Input tab** edits the live input's `AUDIO` effects chain. While no input is connected, a banner offers **Connect microphone**. Once connected, the input bar shows the device, a level meter and **Monitor input**. Monitoring starts off; use headphones to avoid feedback. **Audio input settings…** covers the rest:
+- device, channel and monitor track
+- input and output levels
+- effects presets
+- **Test vocal effects**, which applies the current chain to a recorded take without changing it
+
+**MIDI** capture turns what you play into Strudel code:
+1. Click a `note(…)` phrase in a pattern, then choose **Play MIDI** from the record bar or the phrase's menu.
+2. The **Play MIDI** sheet opens. If the pattern is on the composition, each loop of the selected range becomes a take. Otherwise, a single phrase is captured.
+3. **Preview** a take, compare **Original** with **Proposed**, and choose **Notes** (snapped to the beat) or **timeCat** (played timing). **Keep take** writes the result into the composition as editable code; **Discard** leaves the code unchanged.
+
+**Jam with composition** repeats the displayed range while temporarily leaving out the destination tab. **Record highlighted sound** captures the audio actually played, including its effects.
+
+MIDI takes, import reviews and interrupted audio recordings can be recovered in the browser. Recovered work stays stopped and needs explicit review; recovered MIDI takes reopen the Play MIDI sheet. Browser storage limits can prevent recovery, and Studio reports when that happens.
 
 ## Projects
 
-Use **+ beside Sessions** to create a named session. Press **Ctrl+S** (Cmd+S on macOS) or **Save** to save immediately. Wait for **Saved in this browser** before closing the page. Sessions autosave in IndexedDB and retain their identity after reload. Switching sessions saves pending edits first. Recovery drafts protect interrupted saves; Save retries a failure. Projects include all tabs, clips, mappings, slots, and controller values. Download a ZIP project backup to retain both the project and referenced sound files independently of browser storage.
+Use **+** beside the session picker to create a named session. Press **Ctrl+S** (Cmd+S on macOS) or **Save** in the bottom bar to save immediately, and wait for **Saved in this browser** before closing the page.
+- **Autosave:** sessions save automatically in IndexedDB and keep their identity after reload. Switching sessions saves pending edits first.
+- **Recovery:** recovery drafts protect interrupted saves, and Save retries a failed one.
+- **What's saved:** every tab, clip, mapping, slot and controller value.
+- **Session commands:** the command palette has **Save session as copy**, **Reload saved session** and **Delete session…**.
 
-Older single-pattern and two-lane projects migrate to format v5 when opened. Their code and MIDI mappings are preserved; stored records are updated when saved. Closing a tab hides it from the editor strip; deleting a pattern removes its code, clips and mappings after confirmation.
+Older single-pattern and two-lane projects migrate to format v5 when opened. Their code and MIDI mappings are preserved, and the stored records are updated on the next save. Closing a tab hides it from the tab strip; deleting a pattern removes its code, clips and mappings after confirmation.
 
 ## Audio export
 
-Open **Project → Export**, choose **Full composition**, and click **Render & download WAV**. The offline renderer exports stereo 44.1 kHz, 16-bit audio with an adjustable effect tail (three seconds by default). You can also render a chosen number of cycles from the current tab. Rendering captures current code, slider values, sound slots, and track/clip mute settings without interrupting playback; progress and cancellation are available. Maximum export length is fifteen minutes.
-
-## Perform, review and keep a take
-
-Highlight a note expression and choose **Play into selection**. **Audition** plays its sound without saving anything. **Transcribe** shows inferred Strudel code beside the original while you play; choose phrase length, quantization and optional count-in before starting. **Stop take** retains the proposal. **Preview isolated** hears it alone; **Preview with accompaniment** retains the playing mix. **Accept into selection** replaces the armed expression as one undoable draft edit. Discard leaves the code unchanged, and Retry explicitly replaces the pending take.
-
-**Jam with composition** repeats the displayed range while temporarily excluding the destination tab. Stopping a take keeps the jam running. Global Stop ends both. Original-phrase suppression and jam exclusions never change saved mutes or Solo.
-
-**Record highlighted sound** captures the actual played audio and effects. For an interface or microphone, open **Sample library → Add sounds → Record audio**, select the source, and set it up. Check levels before recording; monitoring starts off. Stop, finish the tail, preview/trim, name and save the take. Insert it from the library as a separate sample phrase; the original effects are not added again.
-
-MIDI proposals, import reviews and audio-take chunks have browser recovery. Recovered work stays stopped and requires explicit review. Keep important audio with **Save sound**; browser storage limits can prevent recovery and are reported.
+Run **Export full song render…** from the command palette, choose **Full composition**, and click **Render & download WAV**.
+- **Format:** stereo WAV. Choose the sample rate and format (24-bit PCM, 16-bit PCM or 32-bit float), plus an adjustable effect tail (three seconds by default).
+- **Current tab:** you can instead render a chosen number of cycles from the current tab.
+- **What's captured:** current code, slider values, sound slots, and track and clip mutes. Rendering doesn't interrupt playback, and you can follow progress or cancel.
+- **Limit:** exports can be up to fifteen minutes long.
 
 ## Import samples and back up projects
 
-Open **Import samples** in the header, or follow the import link under **Sample library → Add sounds**. On the dedicated page, paste a public GitHub repository/folder/audio-file link, find samples, select downloads, and import them after review. Alternatively upload audio files, a folder, or ZIP pack. Downloading is explicit; no pack is fetched automatically. Identical files reuse sound identities, and pack/sound renames preserve references. Back to Studio returns to your draft.
+Run **Import samples from GitHub or files…** from the command palette, or follow the import link under **Add sounds** in the library. On the import page:
+- **From GitHub:** paste a link to a public repository, folder or audio file, find samples, select which to download, and import them after review.
+- **From your device:** upload audio files, a folder or a ZIP pack.
 
-Imports support WAV, MP3, OGG and FLAC where the browser decoder supports them, up to 64 MB per source file, 256 MB unpacked and 500 files per review. Originals are retained alongside playback WAVs. Individual failures remain visible; valid imports survive cancellation.
+Downloads only happen when you ask; no pack is fetched automatically. Identical files reuse the existing sound, and renaming a pack or sound keeps references intact. **Back to Studio** returns to your draft.
 
-**Project → Download project backup** bundles referenced audio and available originals with the session. The manifest lists missing files and external URLs. **Restore project backup** creates a new session, preserving existing sessions. Backups are limited to 256 MB; export smaller project selections if a backup exceeds that limit. Missing library audio offers **Recover sound** for reimporting the original file.
+Imports support WAV, MP3, OGG and FLAC wherever the browser can decode them. The limits are 64 MB per source file, 256 MB unpacked and 500 files per review. Originals are kept alongside the playback WAVs. Individual failures stay visible, and imports that already succeeded survive cancellation.
+
+**Download project backup** bundles the session with its referenced audio and any available originals. The manifest lists missing files and external URLs.
+- **Restore project backup…** creates a new session and leaves your existing sessions untouched.
+- **Size limit:** backups are limited to 256 MB; if a project exceeds that, export smaller selections.
+- **Missing audio:** sounds whose audio is missing from the library offer **Recover sound** for re-importing the original file.

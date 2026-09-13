@@ -1,0 +1,23 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "border-left: 4px solid var(--pattern-color)",
+        "createdAt": "2026-09-13T09:43:29.672Z",
+        "reason": "1a design: clips use a 4px pattern-color left border"
+      },
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "studio/client/style.css"
+        ],
+        "createdAt": "2026-09-13T09:44:53.905Z",
+        "reason": "1a design: clips, drag label and MIDI readout use left rules"
+      }
+    ]
+  }
+}

@@ -36,96 +36,166 @@ import { setupExport } from './export';
 import { soundLabel, soundKey, soundToken } from './completions';
 import { ContextMenu, type MenuAction } from './context-menu';
 import { canPlace, duplicatePlacement } from '../shared/clips';
+import { CommandPalette, type Command } from './command-palette';
+import { Sheets } from './sheet';
 
 type UIElement = HTMLElement & { value: string; checked: boolean; disabled: boolean; files?: FileList | null; showModal(): void; returnValue: string };
 const $ = <T extends HTMLElement = UIElement>(selector: string) => document.querySelector<T>(selector)!;
 const escape = (value: unknown) => String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 try { document.documentElement.dataset.appearance = localStorage.getItem('studio.appearance') === 'dark' ? 'dark' : 'light'; } catch { document.documentElement.dataset.appearance = 'light'; }
 const app = $('#app');
+const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+const libraryKeys = ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'].map((n, i) => `<button data-library-note="${60 + i}" aria-label="Test ${n}4" class="${n.includes('♯') ? 'black' : ''}">${n}</button>`).join('');
 app.innerHTML = `
-<header class="topbar"><a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" aria-label="Add session" title="Add session">+</button></div><div class="session"><input id="project-name" aria-label="Project name" value="Untitled project"><span id="saved-state" role="status">Browser project</span></div><button id="save-now" title="Save session (Ctrl+S)">Save</button><div class="transport"><select id="play-target" aria-label="Playback target"><option value="tab">Current tab</option><option value="composition">Composition</option></select><button id="play" class="primary">Play</button><button id="evaluate" hidden>Apply changes <kbd>Ctrl ↵</kbd></button><button id="stop">Stop</button></div><output id="transport-state" aria-live="polite">Stopped</output><button id="sounds-toggle" aria-expanded="false" aria-controls="sounds-panel">Sample Catalogue</button><label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label></header>
-<details class="project-menu"><summary>Project</summary><nav class="sessionbar" aria-label="Project tools"><span class="section-label">Workspace</span><button id="save">Save project</button><button id="import">Import .strudel</button><button id="export">Export code</button><input type="file" id="import-file" accept=".strudel,.str,.js" hidden><span id="connection">Connecting…</span><button id="backup-project">Download project backup</button><button id="restore-backup">Restore project backup</button><input id="backup-file" type="file" accept=".zip" hidden><button id="new-project">New project</button><a class="source-link" href="https://github.com/calv-io-n/strudel" target="_blank" rel="noopener noreferrer">Source code &amp; license ↗</a><a class="source-link" href="https://github.com/calv-io-n/strudel/blob/master/LICENSE" target="_blank" rel="noopener noreferrer">AGPL-3.0-or-later ↗</a></nav></details>
+<header class="topbar">
+  <a class="wordmark" href="/" aria-label="Strudel Studio">strudel<span>studio</span></a><span class="divider" aria-hidden="true"></span>
+  <div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" class="bare icon" aria-label="Add session" title="Add session">+</button></div>
+  <input id="project-name" aria-label="Project name" value="Untitled project">
+  <div class="transport">
+    <div class="segmented" role="group" aria-label="Playback target"><button data-play-target="tab" aria-pressed="true">Tab</button><button data-play-target="composition" aria-pressed="false">Composition</button></div>
+    <select id="play-target" aria-label="Playback target" hidden><option value="tab">Current tab</option><option value="composition">Composition</option></select>
+    <button id="play" class="primary pill" aria-label="Play pattern">Play</button><button id="composition-play" class="primary pill" aria-label="Play composition" hidden>Play</button>
+    <button id="stop" class="bare" aria-label="Stop playback">Stop</button><button id="composition-stop" class="bare" aria-label="Stop playback" hidden>Stop</button>
+    <span class="divider" aria-hidden="true"></span>
+    <button id="record-toggle" class="record-toggle pill" aria-pressed="false" aria-controls="record-bar">Record</button>
+  </div>
+  <button id="palette-open" class="bare search-button" aria-haspopup="dialog" aria-controls="command-palette"><span>Search</span><kbd>${mod} K</kbd></button>
+  <label class="appearance-choice" title="Toggle dark mode"><input id="dark-mode" type="checkbox" aria-label="Dark mode"><span class="appearance-icon" aria-hidden="true"><svg class="theme-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 13A8.5 8.5 0 0 1 11 3.5 8.5 8.5 0 1 0 20.5 13Z"/></svg><svg class="theme-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></svg></span></label>
+</header>
+<div id="record-bar" aria-label="Record" hidden>
+  <div class="record-options">
+    <span class="record-label">Capture</span>
+    <div class="chips" role="group" aria-label="Capture source"><button data-capture="audio" aria-pressed="true">Audio input</button><button data-capture="midi" aria-pressed="false">MIDI</button></div>
+    <label class="inline record-track">Record to <select id="record-track" aria-label="Recording track"></select></label>
+    <span id="midi-record-hint" class="hint" hidden>Click a note(…) phrase in a pattern, then Play MIDI · notes become Strudel code</span>
+  </div>
+  <div class="record-actions">
+    <button id="audio-record" class="record-button">Record audio input</button><button id="midi-record" class="record-button" hidden>Play MIDI</button>
+    <output id="record-status" role="status" aria-live="polite"></output>
+    <button id="record-retry" hidden>Retry save</button><button id="record-download" hidden>Download recording</button><button id="record-discard" hidden>Discard recording…</button>
+    <button id="record-settings" class="bare">Settings</button><button id="record-close" class="bare icon" aria-label="Close record bar">✕</button>
+  </div>
+</div>
 <main class="workspace">
-  <aside id="sounds-panel" class="sound-panel panel" hidden aria-label="Sample library"><div class="panel-heading"><h1>Sample library <small id="asset-count">0 sounds</small></h1><button id="sounds-close" class="quiet">Close library</button></div>
-    <section id="sound-import" role="tabpanel" aria-label="Import sounds"><p class="hint">Bring samples and recorded takes into this browser’s library.</p></section>
-    <div class="library-heading"><h2>All sounds</h2><button id="refresh-assets" class="quiet">Refresh</button></div><label>Search sounds <input id="sound-search" type="search" placeholder="Name, tag, description, or pack"></label><div id="assets" class="asset-list"></div>
-    <section id="assignment" class="assignment" hidden><button id="insert-sound" class="primary">Insert into pattern</button><details><summary>Assign to a control or slot</summary><h2>Assign selected sound</h2><label for="assign-target">Destination</label><select id="assign-target"></select><button id="assign">Assign sound</button><button id="learn-trigger">Learn a trigger key</button><p class="hint">Pads play one-shots. Slots swap sounds on the next cycle.</p></details></section>
-  </aside>
-  <section class="editor-panel panel"><div class="tabbar"><div id="tabs" role="tablist" aria-label="Patterns"></div><button id="new-tab" aria-label="New pattern">+</button><details id="tab-menu"><summary aria-label="Pattern actions">•••</summary><div><button id="color-tab">Color…</button><button id="rename-tab">Rename pattern</button><button id="duplicate-tab">Duplicate pattern</button><button id="add-to-composition">Add to composition</button><button id="close-tab">Close pattern</button></div></details></div><div id="editor"></div><div id="mapping-context" hidden></div><div class="editor-footer"><span id="slider-hint">Select an inline slider to map it</span><span id="cycle">Cycle 0</span></div></section>
-  <aside class="mapping-panel panel"><div class="panel-heading"><h2>Control mappings</h2><span id="mapping-count">0</span></div><section class="mapping-setup" aria-label="Slider mapping"><label for="slider-target">Inline slider</label><select id="slider-target"><option value="">Select a slider…</option></select><button id="learn-slider" class="primary">MIDI Learn</button><button id="cancel-learn" hidden>Cancel learning</button><div id="selected-bindings"></div><p id="learn-status" class="hint" role="status">Select a slider, then move a knob or fader.</p><details><summary>Enter mapping manually</summary><form id="manual-map"><label>Device profile<select id="manual-profile"></select></label><div class="form-row"><label>Channel<input id="manual-channel" type="number" min="1" max="16" value="1" required></label><label>CC number<input id="manual-number" type="number" min="0" max="127" value="20" required></label></div><button type="submit">Bind slider</button></form></details></section><div id="bindings"></div>
-    <section class="slots-section"><div class="library-heading"><h2>Sound slots</h2><button id="add-slot" class="quiet">Add</button></div><div id="slots"></div></section>
-    <details class="devices" open><summary>MIDI devices</summary><p id="bridge-status" class="hint"></p><button id="reconnect">Reconnect MIDI</button><div id="profiles"></div><div class="form-row"><select id="available-ports" aria-label="Available MIDI inputs"></select><button id="add-profile">Connect</button></div></details>
-  </aside>
-  <section class="controller-panel panel"><div class="panel-heading"><div><h2>Virtual MIDI</h2><span class="hint">Channel <input id="controller-channel" type="number" min="1" max="16" value="1" aria-label="Virtual controller channel"></span></div><div class="controller-options"><select id="route" aria-label="MIDI route"><option value="simulation">Browser</option></select><button id="edit-layout">Edit layout</button></div></div><p id="route-status" class="route-status"></p><div id="drawer-learning" hidden><span>Learning… move a control.</span><button id="drawer-cancel-learn">Cancel</button></div><div id="controls" class="controls"></div><div id="layout-editor" hidden></div></section>
-  <section class="monitor-panel panel"><div class="panel-heading"><h2>MIDI feedback</h2><button id="clear-events" class="quiet">Clear</button></div><div id="last-receipt" class="receipt">Move a control to inspect its route and binding.</div><div id="events" class="event-list" aria-label="MIDI event monitor"></div></section>
+  <section class="editor-panel">
+    <div id="input-alert" class="alert" hidden><span class="alert-dot" aria-hidden="true"></span><span id="input-alert-text" role="status"></span><button id="audio-connect" class="alert-action">Connect microphone</button><button id="audio-cancel" class="alert-action" hidden>Cancel</button><button id="midi-enable" class="alert-action" hidden>Enable MIDI</button><button id="input-alert-settings" class="bare">Settings</button></div>
+    <div id="audio-toolbar" class="input-bar" hidden>
+      <span class="input-source"><span class="live-dot" aria-hidden="true"></span><span id="audio-source-label">Default input</span></span>
+      <span class="level-bar" aria-hidden="true"><span></span></span>
+      <label class="toggle-pill" title="Monitoring routes the live input to your speakers — use headphones to avoid feedback"><input id="audio-monitor" type="checkbox"><span>Monitor input</span></label>
+      <button id="audio-settings" class="bare">Settings</button>
+      <p id="monitor-warning" hidden>Monitoring is live — use headphones, or the microphone will capture your own output.</p>
+    </div>
+    <div id="instrument-toolbar" class="input-bar" hidden>
+      <div id="midi-output-controls"><input id="midi-output-search" type="search" aria-label="Find MIDI output sound" placeholder="Find sound"><select id="midi-output-sound" aria-label="MIDI output sound"></select><button id="clear-midi-sound" class="bare" hidden>Clear sound</button></div>
+      <span class="divider" aria-hidden="true"></span>
+      <select id="midi-preset" aria-label="MIDI preset"><option value="">Choose preset…</option></select><button id="save-midi-preset" class="bare">Save preset…</button><button id="learn-midi-preset" class="bare">Map preset to a key</button><button id="cancel-preset-learn" class="bare" hidden>Cancel preset mapping</button>
+      <span class="toolbar-end"><button id="instrument-stop" class="bare">Stop instrument</button><button id="instrument-apply" class="primary">Apply instrument</button></span>
+      <p class="instrument-status"><span id="midi-assignment" role="status"></span><span id="instrument-state" role="status"></span><span id="preset-learn-status" role="status"></span></p>
+    </div>
+    <div id="mapping-context" hidden><button id="mapping-close" class="bare">Close mapping</button><section class="mapping-setup" aria-label="Slider mapping"><label for="slider-target">Inline slider</label><select id="slider-target"><option value="">Select a slider…</option></select><p id="slider-hint" class="hint"></p><button id="learn-slider" class="primary">MIDI Learn</button><button id="cancel-learn" hidden>Cancel learning</button><div id="selected-bindings"></div><p id="learn-status" class="hint" role="status">Select a slider, then move a knob or fader.</p><details><summary>Enter mapping manually</summary><form id="manual-map"><label>Device profile<select id="manual-profile"></select></label><div class="form-row"><label>Channel<input id="manual-channel" type="number" min="1" max="16" value="1" required></label><label>CC number<input id="manual-number" type="number" min="0" max="127" value="20" required></label></div><button type="submit">Bind slider</button></form></details></section></div>
+    <div id="editor"></div>
+    <div id="empty-editor" hidden><p>No open patterns</p><button id="open-patterns">Open a pattern</button></div>
+    <div id="apply-pill" role="status" hidden><span class="dirty-dot" aria-hidden="true"></span>Unapplied edits<button id="evaluate" aria-label="Apply changes" hidden>Apply <kbd>${mod} ↵</kbd></button><button id="audio-apply" hidden>Apply effects</button></div>
+  </section>
 </main>
-<footer class="drawer-bar"><button data-drawer="composition" aria-expanded="false" aria-controls="composition-content">Composition</button><button data-drawer="midi" aria-expanded="false" aria-controls="midi-content">Virtual MIDI</button><button data-drawer="export" aria-expanded="false" aria-controls="export-content">Export</button><span class="footer-hint">Select a slider to map a control</span></footer>
-<section id="drawer" hidden><div id="drawer-resize" role="separator" tabindex="0" aria-label="Resize tools" aria-orientation="horizontal" aria-valuemin="180" aria-valuemax="600" aria-valuenow="300"></div>
-<div id="composition-content" hidden><div class="composition-toolbar"><h2>Composition</h2><label>Tempo <input id="bpm" type="number" min="20" max="300" value="120"> BPM</label><button id="add-track">Add track</button><label>Snap <select id="snap"><option value="1">1 cycle</option><option value="0.5">½ cycle</option><option value="0.25">¼ cycle</option></select></label><span id="arrangement-status">Edit while stopped · 4 beats per cycle</span></div><div id="sequencer-scroll"><div id="sequencer"><div id="ruler"></div><div id="tracks"></div><div id="playhead" hidden></div></div></div></div>
-<div id="midi-content" hidden></div><div id="export-content" hidden></div></section>
+<footer class="drawer-bar">
+  <div id="tabs" role="tablist" aria-label="Patterns"></div>
+  <div class="new-pattern"><button id="new-tab" class="bare icon" aria-label="New pattern" aria-expanded="false" aria-controls="new-pattern">+</button>
+    <form id="new-pattern" class="popover" aria-label="New pattern" hidden><span class="eyebrow">New pattern</span><input id="new-pattern-name" aria-label="Pattern name" maxlength="80"><div class="swatches" role="group" aria-label="Pattern color">${palette.map(color => `<button type="button" data-color="${color}" aria-pressed="false" aria-label="${color}" title="${color}"></button>`).join('')}</div><div class="popover-actions"><button type="submit" class="primary">Create</button><button type="button" class="bare" data-cancel>Cancel</button></div></form>
+  </div>
+  <span class="divider" aria-hidden="true"></span>
+  <div id="input-tabs" role="tablist" aria-label="Inputs"></div>
+  <span id="transport-state">Stopped</span>
+  <span class="save-state"><span id="saved-state" role="status">Browser project</span><button id="save-now" class="bare" title="Save session (${mod}+S)">Save</button></span>
+  <button data-drawer="composition" class="composition-toggle bare" aria-expanded="false" aria-controls="drawer"><span class="mini-clips" aria-hidden="true"><i></i><i></i><i></i></span>Composition<span class="chevron" aria-hidden="true"></span></button>
+</footer>
+<section id="drawer" aria-label="Composition" hidden><div id="drawer-resize" role="separator" tabindex="0" aria-label="Resize composition" aria-orientation="horizontal" aria-valuemin="180" aria-valuemax="600" aria-valuenow="300"></div>
+  <div id="composition-content" hidden><div class="composition-toolbar">
+    <output id="composition-position" aria-label="Timeline position">0.00</output>
+    <span id="loop-readout">Drag the ruler to loop a range</span><button id="clear-loop" class="bare" hidden>Clear selection</button>
+    <label class="inline">Snap <select id="snap"><option value="1">1 cycle</option><option value="0.5">½ cycle</option><option value="0.25">¼ cycle</option></select></label>
+    <button id="add-track" class="bare">Add track</button>
+    <span id="arrangement-status" hidden>Edit while stopped · 4 beats per cycle</span>
+    <label class="inline tempo"><input id="bpm" type="number" min="20" max="300" value="120" aria-label="Tempo in BPM">BPM · 4 beats per cycle</label>
+    <button id="composition-close" class="bare icon" aria-label="Close composition">✕</button>
+  </div><div id="sequencer-scroll"><div id="sequencer"><div id="ruler"></div><div id="tracks"></div><div id="playhead" hidden></div></div></div></div>
+</section>
+<div id="sheet-backdrop" class="sheet-backdrop" hidden></div>
+<aside id="sheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" tabindex="-1" hidden>
+  <header class="sheet-header"><div><h1 id="sheet-title" data-sheet-title></h1><p data-sheet-subtitle></p></div><button class="bare" data-sheet-close>Close</button></header>
+  <div class="sheet-body">
+    <section data-sheet="midi" data-title="MIDI" data-subtitle="Hardware and the on-screen controller" hidden>
+      <section id="devices-content" class="sheet-section" aria-label="MIDI devices"><h2>Devices</h2><p class="hint">Connect an external keyboard or controller. Connections stay active when you switch sessions.</p>
+        <div class="form-row"><button id="reconnect" class="primary">Enable MIDI</button><p id="bridge-status" class="hint"></p></div>
+        <div id="profiles"></div>
+        <div class="form-row"><select id="available-ports" aria-label="Available MIDI inputs"></select><button id="add-profile">Connect</button></div>
+        <p id="device-activity" role="status">Play a key or move a control to check input.</p>
+        <div class="form-row"><button id="edit-midi-instrument" class="bare">Edit MIDI instrument</button></div>
+      </section>
+      <section class="controller-panel sheet-section"><div class="section-heading"><h2>On-screen controller</h2><label class="inline">Channel <input id="controller-channel" type="number" min="1" max="16" value="1" aria-label="Virtual controller channel"></label><select id="route" aria-label="MIDI route"><option value="simulation">Browser</option></select><button id="edit-layout" class="bare">Edit layout</button></div>
+        <p id="route-status" class="route-status hint"></p><div id="drawer-learning" hidden><span>Learning… move a control.</span><button id="drawer-cancel-learn">Cancel</button></div><div id="controls" class="controls"></div><div id="layout-editor" hidden></div>
+      </section>
+      <details class="midi-advanced sheet-section"><summary>Mappings, sound slots &amp; diagnostics</summary>
+        <section class="mapping-panel"><div class="section-heading"><h2>Control mappings</h2><span id="mapping-count">0</span></div><div id="bindings"></div></section>
+        <section class="slots-section"><div class="section-heading"><h2>Sound slots</h2><button id="add-slot" class="bare">Add</button></div><div id="slots"></div></section>
+        <section class="monitor-panel"><div class="section-heading"><h2>MIDI feedback</h2><button id="clear-events" class="bare">Clear</button></div><div id="last-receipt" class="receipt">Move a control to inspect its route and binding.</div><div id="events" class="event-list" aria-label="MIDI event monitor"></div></section>
+      </details>
+    </section>
+    <section data-sheet="audio" data-title="Audio input" data-subtitle="Route a microphone or interface into a track" hidden>
+      <section class="sheet-section"><h2>Input</h2>
+        <div class="field-grid"><label>Device <select id="audio-device"><option value="">Default input</option></select></label><label>Channel <select id="audio-channel"><option value="stereo">Stereo</option></select></label><label>Monitor track <select id="audio-track"></select></label></div>
+        <div class="form-row"><button id="audio-sheet-connect" class="primary">Connect microphone</button><button id="audio-disconnect">Disconnect / cancel permission</button></div>
+        <p id="audio-state" class="hint" role="status">Input is disarmed. Monitoring defaults off.</p>
+      </section>
+      <section class="sheet-section"><h2>Levels</h2><div class="levels"><span>Input</span><meter id="audio-input-level" min="0" max="1" value="0" aria-label="Input level"></meter><span>Output</span><meter id="audio-output-level" min="0" max="1" value="0" aria-label="Output level"></meter></div></section>
+      <section class="sheet-section"><h2>Effects chain</h2><pre id="audio-chain" class="code-block"></pre>
+        <div class="form-row"><button id="audio-edit-effects">Edit in the Input tab</button><button id="audio-save-preset" class="bare">Save effects preset…</button><label class="inline">Preset <select id="audio-preset"><option value="">Choose preset…</option></select></label></div>
+        <p class="hint">gain, pan, lpf, hpf, delay, delaytime, delayfeedback and room are supported. Monitoring starts off; takes keep a dry original.</p>
+      </section>
+      <section class="sheet-section"><h2>Test on a recording</h2><div class="form-row"><select id="audio-test-take" aria-label="Test on recording"><option value="">Choose a recorded take…</option></select><button id="audio-test-play">Test vocal effects</button><button id="audio-test-stop" class="bare">Stop test</button></div><p class="hint">Testing changes the preview; your saved recording stays intact.</p></section>
+    </section>
+    <section data-sheet="record" data-title="Record" data-subtitle="Capture audio input onto the timeline" hidden>
+      <section class="sheet-section"><h2>Capture</h2><div class="field-grid"><label>Capture <select id="record-mode"><option value="wet">With vocal effects</option><option value="dry">Dry · editable effects</option></select></label><label>Latency compensation (seconds)<input id="record-latency" type="number" min="-2" max="2" step="0.001" value="0"></label><label class="check"><input id="record-countin" type="checkbox"> One-cycle count-in</label></div></section>
+      <p class="hint">Choose a track under <b>Record to</b> in the record bar, then record. Stopping saves the take with your applied effects and drops a clip on that track. <button type="button" class="link" id="record-audio-settings">Audio input settings</button> control the device and monitoring.</p>
+    </section>
+    <section data-sheet="transcribe" data-title="Play MIDI" data-subtitle="Play a part in and transcribe it to Strudel" hidden>
+      <p id="transcribe-empty" class="hint">Click a <code>note(…)</code> phrase in a pattern, then choose <b>Play MIDI</b>. When the pattern is on the composition, each loop of the selected range becomes a take.</p>
+      <div id="transcribe-content"></div>
+    </section>
+    <section data-sheet="export" data-title="Export" data-subtitle="Full song render to stereo WAV" hidden><div id="export-content"></div></section>
+  </div>
+</aside>
+<div class="sheet-backdrop library-backdrop" hidden></div>
+<aside id="sounds-panel" class="sound-panel" role="dialog" aria-modal="true" aria-label="Sample Catalogue" hidden>
+  <div class="library-header">
+    <div class="panel-heading"><h1>Sounds <small id="asset-count">0 sounds</small></h1><button id="refresh-assets" class="bare" aria-label="Refresh sounds">Refresh</button><button id="sounds-close" class="bare">Close</button></div>
+    <div class="library-filters"><label>Search sounds <input id="sound-search" type="search" placeholder="Name, tag, description, or pack"></label><select id="library-source" aria-label="Filter sound source"><option value="all">All sources</option><option value="builtin">Built-in</option><option value="upload">Imported</option><option value="recording">Recorded</option></select></div>
+    <p id="library-destination" class="hint"></p>
+  </div>
+  <div id="library-scroll">
+    <details id="add-sounds"><summary>Add sounds</summary><section id="sound-import" role="tabpanel" aria-label="Import sounds"><p class="hint">Bring samples and recorded takes into this browser’s library.</p></section></details>
+    <div id="builtin-sounds" class="asset-list"></div>
+    <div id="assets" class="asset-list"></div>
+    <section id="assignment" class="assignment" hidden><button id="insert-sound" class="primary">Insert into pattern</button><details><summary>Assign to a control or slot</summary><h2>Assign selected sound</h2><label for="assign-target">Destination</label><select id="assign-target"></select><button id="assign">Assign sound</button><button id="learn-trigger">Learn a trigger key</button><p class="hint">Pads play one-shots. Slots swap sounds on the next cycle.</p></details></section>
+  </div>
+  <div class="library-test"><span id="library-midi-status" role="status">Choose Live on a sound to play it from your controller</span><div id="library-keys" aria-label="Test keyboard" hidden>${libraryKeys}</div></div>
+</aside>
 <dialog id="edit-dialog"><form method="dialog"><h2 id="edit-title"></h2><label id="edit-label">Name<input id="edit-name" maxlength="80" required></label><p id="edit-description"></p><div class="form-row"><button type="button" value="cancel">Cancel</button><button type="submit" value="confirm" class="primary">Confirm</button></div></form></dialog>
 <dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Start cycle<input id="clip-start" step="0.25" type="number" min="0" max="4096" required></label><label>Length<input id="clip-length" step="0.25" type="number" min="0.25" max="4096" required></label></div><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
-<dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>`;
+<dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>
+<input type="file" id="import-file" accept=".strudel,.str,.js" hidden><input id="backup-file" type="file" accept=".zip" hidden>`;
 
-// Reuse existing MIDI and sample functionality behind progressive disclosure.
-$('.topbar').append($('.project-menu'));
-const patternMenu = document.createElement('details'); patternMenu.id = 'patterns-menu';
-patternMenu.innerHTML = '<summary>Patterns</summary><div class="menu-sheet"><input id="pattern-search" type="search" aria-label="Find a pattern" placeholder="Find a pattern"><div id="pattern-list"></div></div>';
-$('.topbar').insertBefore(patternMenu, $('#sounds-toggle'));
-$('.editor-footer').append($('.transport'), $('#transport-state'));
-$('#play-target').hidden = true;
-$('#play').setAttribute('aria-label', 'Play pattern'); $('#stop').setAttribute('aria-label', 'Stop playback');
-$('.composition-toolbar').insertAdjacentHTML('afterbegin', '<div class="timeline-transport"><button id="composition-return" aria-label="Return to range start" title="Return to range start">↤</button><button id="composition-play" class="primary">Play composition</button><button id="composition-stop">Stop</button><button id="composition-loop" aria-pressed="false">Loop</button><output id="composition-position" aria-label="Timeline position">0.00</output></div>');
-$('.tabbar').insertAdjacentHTML('beforeend', '<button id="expand-editor" class="quiet" aria-label="Expand editor">Expand</button>');
-$('.composition-toolbar').insertAdjacentHTML('beforeend', '<button id="expand-composition" class="quiet" aria-label="Expand composition">Expand</button>');
-$('#tab-menu > div').insertAdjacentHTML('beforeend', '<button id="delete-tab">Delete pattern…</button>');
-const emptyEditor = document.createElement('div'); emptyEditor.id = 'empty-editor'; emptyEditor.hidden = true;
-emptyEditor.innerHTML = '<p>No open patterns</p><button id="open-patterns">Open a pattern</button>'; $('#editor').after(emptyEditor);
-// Sound selection floats above the workspace so previewing never changes its layout.
-const libraryBackdrop = document.createElement('div');
-libraryBackdrop.className = 'library-backdrop'; libraryBackdrop.hidden = true;
-document.body.append(libraryBackdrop, $('#sounds-panel'));
+const libraryBackdrop = $('.library-backdrop');
 libraryBackdrop.onclick = () => setSounds(false);
-$('#sounds-panel').setAttribute('role', 'dialog');
-$('#sounds-panel').setAttribute('aria-modal', 'true');
-
-$('#sounds-panel').setAttribute('aria-label', 'Sample Catalogue');
-const addSounds = document.createElement('details'); addSounds.id = 'add-sounds'; addSounds.innerHTML = '<summary>Add sounds</summary>';
-addSounds.append($('#sound-import')); $('#sounds-panel > .panel-heading').after(addSounds);
-$('#sound-search').parentElement!.insertAdjacentHTML('afterend', '<select id="library-source" aria-label="Filter sound source"><option value="all">All sources</option><option value="builtin">Built-in</option><option value="upload">Imported</option><option value="recording">Recorded</option></select><p id="library-destination" class="hint"></p><div id="builtin-sounds" class="asset-list"></div>');
-$('#library-destination').insertAdjacentHTML('afterend', '<div class="library-test"><span id="library-midi-status" role="status">Choose Live on a sound to play it from your controller</span><div id="library-keys" hidden aria-label="Test keyboard">' + ['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'].map((n, i) => `<button data-library-note="${60 + i}" aria-label="Test ${n}4" class="${n.includes('♯') ? 'black' : ''}">${n}</button>`).join('') + '</div></div>');
-const libraryHeader = document.createElement('div'); libraryHeader.className = 'library-header';
-const libraryFilters = document.createElement('div'); libraryFilters.className = 'library-filters';
-libraryFilters.append($('#sound-search').parentElement!, $('#library-source'));
-libraryHeader.append($('#sounds-panel > .panel-heading'), libraryFilters, $('#library-destination'));
-const libraryScroll = document.createElement('div'); libraryScroll.id = 'library-scroll';
-libraryScroll.append($('#add-sounds'), $('#builtin-sounds'), $('#assets'), $('#assignment'));
-$('#sounds-panel').append(libraryHeader, libraryScroll, $('.library-test'));
-$('#sounds-close').before($('#refresh-assets'));
-$('#refresh-assets').setAttribute('aria-label', 'Refresh sounds');
-$('.sessionbar').append($('[data-drawer="export"]'));
-$('.footer-hint').textContent = '';
-$('#mapping-context').append($('.mapping-setup'));
-const mappingClose = document.createElement('button'); mappingClose.textContent = 'Close mapping'; mappingClose.className = 'quiet';
-mappingClose.onclick = () => { $('#mapping-context').hidden = true; }; $('#mapping-context').prepend(mappingClose);
-const devices = document.createElement('section'); devices.id = 'devices-content'; devices.hidden = true;
-devices.setAttribute('aria-label', 'MIDI devices');
-devices.innerHTML = '<h2>MIDI devices</h2><p class="hint">Connect an external keyboard or controller. Connections stay active when you switch sessions.</p><p id="device-activity" role="status">Play a key or move a control to check input.</p>';
-devices.insertAdjacentHTML('beforeend', '<div class="form-row"><span id="midi-assignment" role="status"></span><button id="edit-midi-instrument">Edit instrument</button><button id="clear-midi-sound" hidden>Clear sound assignment</button></div>');
-const deviceControls = $('.devices');
-for (const child of [...deviceControls.children]) if (child.tagName !== 'SUMMARY') devices.append(child);
-deviceControls.remove(); $('#drawer').append(devices);
-const deviceButton = document.createElement('button'); deviceButton.dataset.drawer = 'devices'; deviceButton.textContent = 'MIDI';
-deviceButton.setAttribute('aria-expanded', 'false'); deviceButton.setAttribute('aria-controls', 'devices-content');
-$('[data-drawer="midi"]').before(deviceButton);
-$('[data-drawer="midi"]').textContent = 'On-screen controller'; $('.sessionbar').append($('[data-drawer="midi"]'));
-$('.controller-panel h2').textContent = 'On-screen controller';
-$('#reconnect').textContent = 'Enable MIDI';
-$('#midi-content').append($('.controller-panel'));
-const advanced = document.createElement('details'); advanced.className = 'midi-advanced';
-advanced.innerHTML = '<summary>Mappings, sound slots & diagnostics</summary>';
-advanced.append($('.mapping-panel'), $('.monitor-panel')); $('#midi-content').append(advanced);
+$('#mapping-close').onclick = () => { $('#mapping-context').hidden = true; };
+/** Regions a modal sheet or the sound library makes inert; dialogs and notices stay outside them. */
+const workspaceRegions = () => ['.topbar', '#record-bar', '.workspace', '.drawer-bar', '#drawer'].map(selector => $<HTMLElement>(selector));
+const sheets = new Sheets($('#sheet'), $('#sheet-backdrop'), workspaceRegions, id => sheetOpened(id));
+let recordBarOpen = false;
+let captureMode: 'audio' | 'midi' = 'audio';
+let midiPulseUntil = 0;
 
 let project: Project = newProject();
 let openTabs = new Set(project.tabs.map(t => t.id));
@@ -275,6 +345,7 @@ let audioOpen = false;
 const activeEditorId = () => audioOpen ? AUDIO_EDITOR : instrumentOpen ? MIDI_EDITOR : project.activeTabId;
 function openMidiInstrument() {
   if (!$('#sounds-panel').hidden) setSounds(false);
+  sheets.close(false);
   audioOpen = false; instrumentOpen = true; editor = getEditor(MIDI_EDITOR); selectedSlider = undefined;
   $('#mapping-context').hidden = true; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
   renderTabs(); renderSliders(); renderBindings(); saveWorkspace(); editor.view.requestMeasure(); editor.view.focus();
@@ -307,6 +378,7 @@ function ensureAudioInput() {
   return project.audioInput ??= { id: crypto.randomUUID(), name: 'Audio input', trackId: project.tracks[0].id, enabled: true, mode: 'audio', code: defaultAudioCode, appliedCode: defaultAudioCode, anchors: [] };
 }
 function openAudioInput() {
+  sheets.close(false);
   ensureAudioInput(); audioOpen = true; instrumentOpen = false; editor = getEditor(AUDIO_EDITOR); selectedSlider = undefined;
   renderTabs(); renderSliders(); renderBindings(); renderAudioInput(); dirty(); editor.view.focus();
 }
@@ -316,30 +388,33 @@ async function applyAudioInput() {
   input.code = input.appliedCode = owner.code; input.anchors = input.appliedAnchors = owner.anchors;
   renderAudioInput(); dirty(); await persistSession();
 }
-$('#editor').insertAdjacentHTML('beforebegin', '<div id="audio-toolbar" hidden><strong>Test vocal effects</strong><button id="audio-apply">Apply input effects</button><label>Monitor track <select id="audio-track"></select></label><label>Device <select id="audio-device"><option value="">Default input</option></select></label><label>Channel <select id="audio-channel"><option value="stereo">Stereo</option></select></label><button id="audio-connect">Connect microphone</button><button id="audio-disconnect">Disconnect / cancel permission</button><label><input id="audio-monitor" type="checkbox"> Monitor input</label><button id="audio-save-preset">Save effects preset…</button><label>Preset <select id="audio-preset"><option value="">Choose preset…</option></select></label><label>Input <meter id="audio-input-level" min="0" max="1" value="0"></meter></label><label>Output <meter id="audio-output-level" min="0" max="1" value="0"></meter></label><p id="audio-state" role="status">Input is disarmed. Monitoring defaults off.</p></div>');
 function renderAudioInput() {
   if (!document.querySelector('#audio-test-take')) return;
   const input = project.audioInput; if (!input) return;
   $('#audio-track').innerHTML = project.tracks.map(t => `<option value="${t.id}">${escape(t.name)}</option>`).join(''); $('#audio-track').value = input.trackId;
   $('#audio-monitor').checked = liveInput.monitoring;
+  $('#audio-chain').textContent = input.appliedCode;
+  $('#audio-source-label').textContent = `${$<HTMLSelectElement>('#audio-device').selectedOptions[0]?.textContent || 'Default input'} · ${$<HTMLSelectElement>('#audio-channel').selectedOptions[0]?.textContent || 'Stereo'}`;
   const chosen = $('#audio-test-take').value; $('#audio-test-take').innerHTML = '<option value="">Choose a recorded take…</option>' + assets.filter(a => a.provider === 'recording' && !a.missing).map(a => `<option value="${a.id}">${escape(a.label || 'Recorded take')}</option>`).join(''); $('#audio-test-take').value = chosen;
   $('#audio-state').textContent = `${liveInput.pending ? 'Waiting for microphone permission; cancel is available' : liveInput.active ? 'Armed' : 'Disarmed'} · ${input.code === input.appliedCode ? 'Applied effects' : 'Draft changes — last applied effects remain active'}${liveInput.settings ? ` · ${liveInput.settings.sampleRate || 'device'} Hz · ${liveInput.settings.channelCount || 1} channels · echo cancellation ${liveInput.settings.echoCancellation ?? 'unknown'}, noise suppression ${liveInput.settings.noiseSuppression ?? 'unknown'}, auto gain ${liveInput.settings.autoGainControl ?? 'unknown'}` : ''}`;
 }
 $('#audio-apply').onclick = guard(applyAudioInput);
 $('#audio-track').onchange = () => { ensureAudioInput().trackId = $('#audio-track').value; liveInput.mix(); dirty(); };
 $('#audio-monitor').onchange = () => { liveInput.setMonitoring($('#audio-monitor').checked); renderAudioInput(); };
-$('#audio-connect').onclick = guard(async () => {
+async function connectAudio() {
   ensureAudioInput().enabled = true; dirty(); const connecting = liveInput.connect(ensureAudioInput(), $('#audio-device').value, $('#audio-channel').value); renderAudioInput();
   try { await connecting; const chosenChannel = $('#audio-channel').value; const devices = await navigator.mediaDevices.enumerateDevices(); $('#audio-device').innerHTML = '<option value="">Default input</option>' + devices.filter(d => d.kind === 'audioinput').map(d => `<option value="${escape(d.deviceId)}">${escape(d.label || 'Audio input')}</option>`).join(''); $('#audio-device').value = liveInput.settings?.deviceId ?? ''; $('#audio-channel').innerHTML = '<option value="stereo">Stereo channels 1–2</option>' + Array.from({ length: liveInput.settings?.channelCount ?? 1 }, (_, i) => `<option value="${i}">Mono channel ${i + 1}</option>`).join('') + Array.from({ length: Math.floor((liveInput.settings?.channelCount ?? 1) / 2) }, (_, i) => `<option value="${i * 2},${i * 2 + 1}">Stereo channels ${i * 2 + 1}–${i * 2 + 2}</option>`).join(''); $('#audio-channel').value = chosenChannel; }
   finally { renderAudioInput(); }
-});
+}
+$('#audio-connect').onclick = $('#audio-sheet-connect').onclick = guard(connectAudio);
 $('#audio-device').onchange = $('#audio-channel').onchange = () => { liveInput.disconnect(); renderAudioInput(); };
-$('#audio-disconnect').onclick = () => { if (timelineRecording?.pending) { void timelineRecording.stop(true); return; } liveInput.disconnect(); renderAudioInput(); };
-$('.composition-toolbar').insertAdjacentHTML('beforeend', '<div class="composition-recording"><label>Record to <select id="record-track" aria-label="Recording track"></select></label><button id="audio-record" class="record-button">Record audio input</button><output id="record-status" role="status" aria-live="polite"></output><button id="record-retry" hidden>Retry save</button><button id="record-download" hidden>Download recording</button><button id="record-discard" hidden>Discard recording…</button><details id="record-options"><summary>Recording settings</summary><label>Capture <select id="record-mode"><option value="wet">With vocal effects</option><option value="dry">Dry · editable effects</option></select></label><label><input id="record-countin" type="checkbox"> One-cycle count-in</label><label>Latency compensation (seconds)<input id="record-latency" type="number" min="-2" max="2" step="0.001" value="0"></label></details></div>');
+function disconnectAudio() { if (timelineRecording?.pending) { void timelineRecording.stop(true); return; } liveInput.disconnect(); renderAudioInput(); }
+$('#audio-disconnect').onclick = $('#audio-cancel').onclick = disconnectAudio;
 $('#audio-record').onclick = guard(async () => {
   if (timelineRecording!.pending) { await timelineRecording!.stop(); return; }
   if (recordingPanel.pending || midiComposition.pending || performancePanel.take?.notes.length) throw new Error('Finish the pending performance before recording.');
   stopTakePreview(); await persistSession();
+  $('#play-target').value = 'composition'; setDrawer('composition');
   await timelineRecording!.start({ trackId: $('#record-track').value, device: $('#audio-device').value, channel: $('#audio-channel').value, mode: $('#record-mode').value as 'wet' | 'dry', latency: Number($('#record-latency').value), countin: $('#record-countin').checked });
 });
 $('#record-retry').onclick = guard(() => timelineRecording!.retry());
@@ -353,9 +428,19 @@ function renderRecording() {
   $('#audio-record').disabled = !!recording && ['finishing', 'saving', 'failed'].includes(recording.state);
   $('#record-status').textContent = recording?.state === 'recording' ? `Recording · ${recording.elapsed.toFixed(1)} s` : recording?.message ?? '';
   $('#record-retry').hidden = $('#record-download').hidden = $('#record-discard').hidden = recording?.state !== 'failed';
-  for (const id of ['record-track', 'record-mode', 'record-countin', 'record-latency', 'audio-device', 'audio-channel', 'audio-connect', 'audio-disconnect', 'audio-track', 'new-tab']) $('#' + id).disabled = pending;
-  if (pending) { for (const id of ['composition-play', 'composition-return', 'composition-loop', 'bpm', 'play', 'add-track']) $('#' + id).disabled = true; }
+  for (const id of ['record-track', 'record-mode', 'record-countin', 'record-latency', 'audio-device', 'audio-channel', 'audio-connect', 'audio-sheet-connect', 'audio-disconnect', 'audio-track', 'new-tab']) $('#' + id).disabled = pending;
+  if (pending) { for (const id of ['composition-play', 'bpm', 'play', 'add-track']) $('#' + id).disabled = true; document.querySelectorAll<HTMLButtonElement>('[data-play-target]').forEach(button => { button.disabled = true; }); }
   $('#composition-content').classList.toggle('capturing-audio', pending);
+  // A pending take keeps the record bar open on the audio controls that can stop or recover it.
+  const audio = captureMode === 'audio' || pending, midiArmed = midiComposition.armed || !!performancePanel.take;
+  $('#record-bar').hidden = !recordBarOpen && !pending && recording?.state !== 'failed';
+  $('#record-toggle').setAttribute('aria-pressed', String(!$('#record-bar').hidden));
+  $('#record-toggle').classList.toggle('recording', recording?.state === 'recording');
+  document.querySelectorAll<HTMLButtonElement>('[data-capture]').forEach(button => { button.setAttribute('aria-pressed', String((button.dataset.capture === 'audio') === audio)); button.disabled = pending; });
+  $('#audio-record').hidden = $('#record-status').hidden = $('.record-track').hidden = !audio;
+  $('#midi-record').hidden = $('#midi-record-hint').hidden = audio;
+  $('#midi-record').textContent = midiArmed ? 'Open Play MIDI' : 'Play MIDI';
+  $('#transcribe-empty').hidden = midiArmed;
 }
 
 const takeView = document.createElement('section'); takeView.id = 'recorded-take-view'; takeView.hidden = true;
@@ -399,7 +484,6 @@ function renderTakeView() {
 $('#take-stop').onclick = stopTakePreview;
 $('#take-rename').onclick = guard(async () => { await renameTab(project.activeTabId); renderTakeView(); });
 $('#take-code').onclick = () => { const id = project.activeTabId; if (takeCodeOpen.has(id)) takeCodeOpen.delete(id); else takeCodeOpen.add(id); renderTakeView(); editor.view.requestMeasure(); };
-$('#audio-toolbar').insertAdjacentHTML('beforeend', '<div class="test-recording"><label>Test on recording <select id="audio-test-take"><option value="">Choose a recorded take…</option></select></label><button id="audio-test-play">Test vocal effects</button><button id="audio-test-stop">Stop test</button><span>Testing changes the preview; your saved recording stays intact.</span></div>');
 $('#audio-test-play').onclick = guard(() => { const id = $('#audio-test-take').value; if (!id) throw new Error('Choose a recording to test.'); return previewRecordedAudio(id, true); });
 $('#audio-test-stop').onclick = stopTakePreview;
 $('#audio-save-preset').onclick = guard(async () => {
@@ -410,11 +494,6 @@ $('#audio-save-preset').onclick = guard(async () => {
 let audioPresets: { id: string; name: string; code: string }[] = [];
 async function refreshAudioPresets() { audioPresets = (await workspace.all<any>('settings')).filter(p => p?.kind === 'audio-preset'); $('#audio-preset').innerHTML = '<option value="">Choose preset…</option>' + audioPresets.map(p => `<option value="${p.id}">${escape(p.name)}</option>`).join(''); }
 $('#audio-preset').onchange = guard(async () => { const preset = audioPresets.find(p => p.id === $('#audio-preset').value); if (!preset) return; const owner = getEditor(AUDIO_EDITOR); if (owner.code !== ensureAudioInput().appliedCode && !await askEdit('Replace input draft?', undefined, 'Preset recall replaces your unapplied input effects.')) return; owner.view.dispatch({ changes: { from: 0, to: owner.code.length, insert: preset.code } }); await applyAudioInput(); });
-$('#editor').insertAdjacentHTML('beforebegin', '<div id="instrument-toolbar" hidden><strong>MIDI effects</strong><button id="instrument-apply" class="primary">Apply instrument</button><label>Preset <select id="midi-preset" aria-label="MIDI preset"><option value="">Choose preset…</option></select></label><button id="save-midi-preset">Save preset…</button><button id="learn-midi-preset">Map preset to MIDI key</button><button id="cancel-preset-learn" hidden>Cancel preset mapping</button><span id="preset-learn-status" role="status"></span><button id="instrument-stop">Stop instrument</button><span id="instrument-state" role="status"></span><p class="hint">MIDI is your keyboard input. Add a sound and effects, then Apply. Save preset keeps the applied chain for any session.</p></div>');
-const midiOutputControls = document.createElement('div'); midiOutputControls.id = 'midi-output-controls';
-midiOutputControls.innerHTML = '<label>Find sound <input id="midi-output-search" type="search" aria-label="Find MIDI output sound" placeholder="Search all sounds"></label><label>Output sound <select id="midi-output-sound" aria-label="MIDI output sound"></select></label>';
-midiOutputControls.append($('#midi-assignment'), $('#clear-midi-sound'));
-$('#instrument-toolbar').prepend(midiOutputControls);
 function renderMidiOutputs() {
   const config = instrumentFor(project), current = instrumentSound(config.appliedCode);
   const query = $('#midi-output-search').value.trim().toLowerCase();
@@ -502,7 +581,7 @@ async function recallMidiPreset(id: string) {
   } finally { recallingMidiPreset = false; pendingMidiPreset = undefined; }
 }
 const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine, () => selectedProjectName || project.name, () => persistSession());
-$('#editor').after(performancePanel.root);
+$('#transcribe-content').append(performancePanel.root);
 const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { project.assetIds.push(asset.id); assets.unshift(asset); await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => performancePanel.stop(), liveInput, ensureAudioInput, async asset => {
   const recording = asset.recording!;
   let trackId = recording.trackId ?? project.tracks[0].id;
@@ -539,36 +618,32 @@ document.body.append(importPage);
 $('#file-import-column').append(sampleImports.root);
 $('#github-import-column').append(new GitHubImports(sampleImports, message => notice(message, true)).root);
 $('#sound-import').insertAdjacentHTML('afterbegin', '<a class="import-page-link" href="#/samples/import">Import samples from GitHub or files ↗</a>');
-$('.topbar').insertAdjacentHTML('beforeend', '<a class="import-nav" href="#/samples/import">Import samples</a>');
 async function updateStorageUsage() {
   const estimate = await navigator.storage?.estimate();
   $('#storage-usage').textContent = estimate ? `${((estimate.usage ?? 0) / 1e6).toFixed(1)} MB used · ${((estimate.quota ?? 0) / 1e6).toFixed(0)} MB available quota` : 'Storage usage is unavailable in this browser.';
 }
 function routePage() {
   const importing = location.hash === '#/samples/import';
-  if (importing) setSounds(false);
+  if (importing) { setSounds(false); sheets.close(false); }
   importPage.hidden = !importing; app.hidden = importing;
   if (importing) { void updateStorageUsage().catch(() => {}); importPage.querySelector('h1')!.setAttribute('tabindex', '-1'); importPage.querySelector('h1')!.focus(); }
 }
 window.addEventListener('hashchange', routePage);
 $('#persist-storage').onclick = guard(async () => { const kept = await navigator.storage?.persist?.(); notice(kept ? 'Persistent storage granted. Keep project backups too.' : 'The browser did not grant persistent storage. Project backups are still available.'); await updateStorageUsage(); });
-$('#import-backup').onclick = () => $('#backup-project').click();
+$('#import-backup').onclick = guard(downloadBackup);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
-recordButton.onclick = () => { setSounds(false); setDrawer('composition'); $('#audio-record').focus(); }; $('#sound-import').prepend(recordButton);
+recordButton.onclick = () => { setSounds(false); openRecordBar('audio'); }; $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
 recordSelected.onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish recording first.'); performancePanel.stop(); await persistSession(); await recordingPanel.open('internal'); setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; });
 performancePanel.root.querySelector('[data-actions]')!.append(recordSelected);
-const performButton = document.createElement('button'); performButton.textContent = 'Play MIDI';
-performButton.onclick = guard(() => playMidi());
-$('.editor-footer').prepend(performButton);
+$('#midi-record').onclick = guard(() => midiComposition.armed || performancePanel.take ? openSheet('transcribe') : playMidi());
 let selectedMidiClip: string | undefined;
 const midiComposition = new MidiComposition(engine, () => snapshot(), async next => {
   for (const tab of next.tabs) if (!project.tabs.some(t => t.id === tab.id)) openTabs.add(tab.id);
   project = next; renderTabs(); renderComposition(); renderTransport(); dirty(); await persistSession();
 }, () => selectedProjectName || project.name, message => notice(message, true));
-$('#editor').after(midiComposition.root);
+$('#transcribe-content').prepend(midiComposition.root, midiComposition.range);
 const compositionRecord = document.createElement('button'); compositionRecord.textContent = 'Record phrase audio'; compositionRecord.onclick = guard(async () => { if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.'); midiComposition.close(); performancePanel.arm(); await performancePanel.prepare(); recordSelected.click(); }); midiComposition.root.querySelector('.midi-more')!.append(compositionRecord);
-const rangeDetails = document.createElement('details'); rangeDetails.className = 'range-details'; rangeDetails.innerHTML = '<summary>Range options</summary>'; rangeDetails.append(midiComposition.range); $('.composition-toolbar').append(rangeDetails);
 async function armCompositionMidi() {
   if (performancePanel.take?.notes.length || recordingPanel.pending) throw new Error('Resolve the pending performance take first.');
   performancePanel.close();
@@ -579,13 +654,13 @@ async function armCompositionMidi() {
   }
   midiComposition.arm(editor, project.activeTabId, selectedMidiClip);
   await midiComposition.audition();
-  setDrawer('composition'); $('#play-target').value = 'composition'; renderTransport();
+  setDrawer('composition'); $('#play-target').value = 'composition'; renderTransport(); openSheet('transcribe');
 }
 async function playMidi() {
   if (!openTabs.has(project.activeTabId)) throw new Error('Open a pattern and select a note phrase first.');
   if (project.clips.some(c => c.tabId === project.activeTabId)) return armCompositionMidi();
   if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.');
-  midiComposition.close(); performancePanel.arm(); await performancePanel.prepare();
+  midiComposition.close(); performancePanel.arm(); await performancePanel.prepare(); openSheet('transcribe');
 }
 function expressionActions(pos: number, x: number, y: number) {
   if (instrumentOpen) return false;
@@ -597,7 +672,7 @@ function expressionActions(pos: number, x: number, y: number) {
     const d = destinationFor(editor.code, project.activeTabId, pos, pos);
     if (!d.original.startsWith('note(')) return false;
     editor.view.dispatch({ selection: { anchor: pos } });
-    contextMenu.open([{ label: 'Play MIDI', run: guard(playMidi) }, ...(project.clips.some(c => c.tabId === project.activeTabId) ? [{ label: 'Play MIDI without composition', run: guard(async () => { if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.'); midiComposition.close(); performancePanel.arm(); await performancePanel.prepare(); }) }] : [])], x, y, () => editor.view.contentDOM); return true;
+    contextMenu.open([{ label: 'Play MIDI', run: guard(playMidi) }, ...(project.clips.some(c => c.tabId === project.activeTabId) ? [{ label: 'Play MIDI without composition', run: guard(async () => { if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.'); midiComposition.close(); performancePanel.arm(); await performancePanel.prepare(); openSheet('transcribe'); }) }] : [])], x, y, () => editor.view.contentDOM); return true;
   } catch { return false; }
 }
 $('#editor').addEventListener('click', event => {
@@ -694,28 +769,50 @@ function ensureDeviceProfiles() {
 }
 function renderTransport() {
   paintMidiAssignment();
-  const playing = engine.started;
+  const playing = engine.started, target = $('#play-target').value === 'composition' ? 'composition' : 'tab';
+  document.querySelectorAll<HTMLButtonElement>('[data-play-target]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.playTarget === target)); button.disabled = playing || engine.busy; });
+  $('#play').hidden = $('#stop').hidden = target !== 'tab';
+  $('#composition-play').hidden = $('#composition-stop').hidden = target !== 'composition';
   $('#composition-play').disabled = playing || engine.busy || !project.clips.length;
-  $('#composition-play').textContent = engine.busy ? 'Preparing…' : 'Play composition';
-  $('#composition-loop').disabled = playing || midiComposition.running || midiComposition.pending;
-  $('#composition-return').disabled = midiComposition.running || midiComposition.pending;
+  $('#composition-play').textContent = engine.busy ? 'Preparing…' : 'Play';
   $('#composition-position').textContent = engine.timelinePosition.toFixed(2);
-  $('#composition-loop').setAttribute('aria-pressed', String(engine.transport.loop));
   const name = engine.target === 'composition' ? 'Composition' : project.tabs.find(t => t.id === engine.target)?.name ?? '';
-  $('#transport-state').textContent = playing ? `Playing · ${name}${engine.pendingCycle !== undefined ? ' · changes queued' : ''}` : 'Stopped';
+  $('#transport-state').textContent = playing ? `${name} · cycle ${Math.max(0, Math.floor(engine.cycle))}${engine.pendingCycle !== undefined ? ' · changes queued' : ''}` : `Stopped · ${project.bpm} BPM`;
   $('#transport-state').classList.toggle('playing', playing);
   $('#play').disabled = audioOpen || instrumentOpen || !openTabs.has(project.activeTabId) || playing || engine.busy;
   $('#play').textContent = engine.busy ? 'Preparing…' : 'Play';
   $('#play-target').disabled = playing || engine.busy;
   $('#evaluate').hidden = audioOpen || instrumentOpen || !engine.hasChanges;
   $('#evaluate').disabled = engine.busy || !!timelineRecording?.pending;
+  const input = project.audioInput;
+  $('#audio-apply').hidden = !audioOpen || !input || input.code === input.appliedCode;
+  $('#apply-pill').hidden = $('#evaluate').hidden && $('#audio-apply').hidden;
+  const range = midiComposition.loopRange, loop = engine.transport.loop;
+  $('#loop-readout').textContent = loop ? `Looping cycles ${range.begin}–${range.end} · ${range.end - range.begin} selected` : 'Drag the ruler to loop a range';
+  $('#loop-readout').classList.toggle('active', loop); $('#sequencer').classList.toggle('looping', loop);
+  $('#clear-loop').hidden = !loop;
+  $('#clear-loop').disabled = playing || midiComposition.running || midiComposition.pending;
   $('#bpm').disabled = playing || engine.busy;
   $('#add-track').disabled = playing || engine.busy || project.tracks.length >= 16;
   $('#arrangement-status').hidden = engine.pendingMuteCycle === undefined;
-  renderRecording();
+  renderInputAlert(); renderRecording();
   $('#arrangement-status').textContent = engine.pendingMuteCycle !== undefined ? `Mix change at cycle ${engine.pendingMuteCycle}` : playing ? 'Stop playback to edit clips' : 'Edit while stopped · 4 beats per cycle';
 }
-
+/** Input tabs explain what is missing before offering their controls: a banner while disconnected, the input bar once live. */
+function renderInputAlert() {
+  const live = liveInput.active, requesting = liveInput.pending, midiReady = bridge.ready && bridge.connected.length > 0;
+  const audioAlert = audioOpen && !live, midiAlert = instrumentOpen && !midiReady;
+  $('#input-alert').hidden = !audioAlert && !midiAlert;
+  $('#audio-connect').hidden = !audioAlert || requesting; $('#audio-cancel').hidden = !audioAlert || !requesting;
+  $('#midi-enable').hidden = !midiAlert || bridge.ready;
+  $('#input-alert-text').textContent = audioAlert ? (requesting ? 'Waiting for microphone permission…' : 'No audio input connected. Choose a device and grant microphone permission to monitor or record.') : midiAlert ? (bridge.ready ? 'No MIDI input connected. Choose your keyboard or controller in MIDI settings.' : bridge.message) : '';
+  $('#input-alert-settings').textContent = midiAlert && bridge.ready ? 'Choose input' : 'Settings';
+  $('#audio-toolbar').hidden = !audioOpen || !live;
+  $('#monitor-warning').hidden = !liveInput.monitoring;
+  const tabs = $('#input-tabs');
+  tabs.dataset.audio = !live ? 'off' : timelineRecording?.state === 'recording' ? 'recording' : 'live';
+  tabs.dataset.midi = !bridge.ready ? 'off' : midiReady ? 'ready' : 'idle';
+}
 function renderSliders() {
   $('#slider-target').innerHTML = '<option value="">Select a slider…</option>' + editor.sliders.map((s, i) => `<option value="${s.id}">${i + 1}. ${escape(s.label)} · ${s.min}–${s.max}</option>`).join('');
   if (selectedSlider && editor.sliders.some((s) => s.id === selectedSlider)) $('#slider-target').value = selectedSlider;
@@ -863,6 +960,7 @@ async function receive(event: MidiEvent) {
   if (!event.source.startsWith('studio:') && !devicePorts.includes(event.source)) return;
   ensureDeviceProfiles();
   const profile = project.profiles.find(p => p.port === event.source && (p.enabled || !p.port.startsWith('studio:')));
+  if (profile) midiPulseUntil = performance.now() + 250;
   if (profile && !event.source.startsWith('studio:')) $('#device-activity').textContent = `${event.source} · Channel ${midi.channel} · ${midi.kind === 'note' ? 'Note' : 'CC'} ${midi.number} · ${midi.value}`;
   if (!profile) return;
   if (learning?.kind === 'midi-preset' && midi.on) { bind(learning, profile.id, midi.channel, midi.kind, midi.number); return; }
@@ -901,7 +999,6 @@ function connectMidiEvents() {
     if (message.type === 'midi-connections') { devicePorts = message.ports; ensureDeviceProfiles(); renderProfiles(); renderBindings(); }
     if (message.type === 'midi') void receive(message).catch((err) => notice(err.message, true));
   });
-  $('#connection').textContent = 'Saved in this browser';
 }
 
 function virtualSend(id: string, value: number, off = false) {
@@ -923,7 +1020,7 @@ $('#manual-map').onsubmit = (e) => { e.preventDefault(); void guard(() => {
   bind({ kind: 'slider', sliderId: selectedSlider, tabId: activeEditorId() }, $('#manual-profile').value, Number($('#manual-channel').value), 'cc', Number($('#manual-number').value));
 })(); };
 $('#route').onchange = renderRoute;
-$('#reconnect').onclick = guard(() => browserMidi.enable());
+$('#reconnect').onclick = $('#midi-enable').onclick = guard(() => browserMidi.enable());
 $('#available-ports').onchange = () => { $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value; };
 $('#add-profile').onclick = guard(async () => {
   const port = $('#available-ports').value; if (!port) throw new Error('Select a MIDI input port.');
@@ -1030,8 +1127,7 @@ function refreshProjects() {
 $('#saved-projects').onfocus = guard(refreshProjects);
 $('#saved-projects').onpointerdown = guard(refreshProjects);
 
-$('#backup-project').onclick = guard(async () => { const state = snapshot(); state.assetIds = assetReferences(state); const blob = await backupProject(state); const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `${state.name.replace(/[^a-zA-Z0-9_-]/g, '-')}.studio.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); notice('Backup downloaded. Its manifest lists any missing or external files.'); });
-$('#restore-backup').onclick = () => $('#backup-file').click();
+async function downloadBackup() { const state = snapshot(); state.assetIds = assetReferences(state); const blob = await backupProject(state); const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = `${state.name.replace(/[^a-zA-Z0-9_-]/g, '-')}.studio.zip`; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); notice('Backup downloaded. Its manifest lists any missing or external files.'); }
 $('#backup-file').onchange = guard(async () => {
   const file = $('#backup-file').files?.[0]; if (!file) return;
   if (file.size > 260_000_000) throw new Error('Backup exceeds 256 MB.');
@@ -1045,12 +1141,11 @@ $('#backup-file').onchange = guard(async () => {
   });
 });
 const saveNow = guard(() => persistSession());
-$('#save').onclick = saveNow; $('#save-now').onclick = saveNow;
+$('#save-now').onclick = saveNow;
 document.addEventListener('keydown', e => { if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') { e.preventDefault(); if (!e.repeat) void saveNow(); } }, true);
-$('.sessionbar').insertAdjacentHTML('beforeend', '<button id="save-copy">Save session as copy</button><button id="reload-session">Reload saved session</button><button id="delete-session">Delete session…</button>');
-$('#save-copy').onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish or save the recording first.'); clearTimeout(saveTimer); await saveChain.catch(() => {}); const next = await workspace.createProject({ ...snapshot(), sessionId: undefined }); await loadProject(next); await persistSession(); });
-$('#reload-session').onclick = guard(async () => { if (!selectedProjectName || !await askEdit('Reload saved session?', undefined, 'Your current draft will be replaced by the saved version.')) return; clearTimeout(saveTimer); await saveChain.catch(() => {}); await loadProject(await workspace.loadProject(selectedProjectName)); });
-$('#delete-session').onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish or save the recording first.'); if (!selectedProjectName || !await askEdit('Delete this session?', undefined, 'Audio stays in your library. Download a backup first if you need this arrangement.')) return; clearTimeout(saveTimer); await saveChain.catch(() => {}); await workspace.deleteProject(selectedProjectName, project.revision ?? 0); sessionDrafts.clear(); await loadProject(await workspace.createProject(newProject())); await persistSession(); });
+async function saveCopy() { if (timelineRecording?.pending) throw new Error('Finish or save the recording first.'); clearTimeout(saveTimer); await saveChain.catch(() => {}); const next = await workspace.createProject({ ...snapshot(), sessionId: undefined }); await loadProject(next); await persistSession(); }
+async function reloadSession() { if (!selectedProjectName || !await askEdit('Reload saved session?', undefined, 'Your current draft will be replaced by the saved version.')) return; clearTimeout(saveTimer); await saveChain.catch(() => {}); await loadProject(await workspace.loadProject(selectedProjectName)); }
+async function deleteSession() { if (timelineRecording?.pending) throw new Error('Finish or save the recording first.'); if (!selectedProjectName || !await askEdit('Delete this session?', undefined, 'Audio stays in your library. Download a backup first if you need this arrangement.')) return; clearTimeout(saveTimer); await saveChain.catch(() => {}); await workspace.deleteProject(selectedProjectName, project.revision ?? 0); sessionDrafts.clear(); await loadProject(await workspace.createProject(newProject())); await persistSession(); }
 async function loadProject(next: Project, markDirty = true, expectedRevision?: number) {
   if (midiComposition.pending || midiComposition.running) throw new Error('Accept or discard the MIDI takes before switching sessions.');
   if (timelineRecording?.pending) throw new Error('Finish or save the recording before switching sessions.');
@@ -1078,12 +1173,11 @@ $('#saved-projects').onchange = guard(async () => {
     await persistSession();
   });
 });
-$('#import').onclick = () => $('#import-file').click();
 $('#import-file').onchange = guard(async () => { const file = $('#import-file').files?.[0]; if (!file) return;
   if (file.size > 200000) throw new Error('Pattern file is too large.');
   createTab(file.name.replace(/\.(strudel|str|js)$/, ''), await file.text()); $('#import-file').value = '';
 });
-$('#export').onclick = () => { const blob = new Blob([editor.code], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${project.tabs.find(t => t.id === project.activeTabId)!.name.replace(/[^\w-]/g, '_')}.strudel`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+function exportCode() { const blob = new Blob([editor.code], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${project.tabs.find(t => t.id === project.activeTabId)!.name.replace(/[^\w-]/g, '_')}.strudel`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
 function settleSlots(stopped = !engine.started) {
   const committed = engine.timeline.settle(engine.cycle, stopped);
   if (committed.length) { for (const { name, asset } of committed) { const slot = project.slots.find((s) => s.name === name); if (slot) slot.active = asset; } renderSlots(); dirty(); }
@@ -1108,26 +1202,22 @@ function restoreWorkspace() {
   if (openTabs.size && !openTabs.has(project.activeTabId)) { project.activeTabId = [...openTabs][0]; editor = getEditor(); }
   instrumentOpen = saved.instrumentOpen === true; editor = getEditor(instrumentOpen ? MIDI_EDITOR : project.activeTabId);
   resizeDrawer(Number(saved.height) || Math.min(300, window.innerHeight * .38)); document.body.dataset.expanded = ['editor', 'composition'].includes(saved.expanded) ? saved.expanded : '';
-  if (!$('#sounds-panel').hidden) setSounds(false); setDrawer(saved.view === null ? undefined : saved.view === 'midi' || saved.view === 'devices' || saved.view === 'export' ? saved.view : 'composition');
-  for (const name of ['editor', 'composition']) $(`#expand-${name}`).textContent = document.body.dataset.expanded === name ? 'Restore split' : 'Expand';
-}
-function renderPatterns() {
-  const query = $('#pattern-search').value.toLowerCase();
-  $('#pattern-list').innerHTML = project.tabs.filter(t => t.name.toLowerCase().includes(query)).map(t => `<button data-open-pattern="${t.id}"><span>${escape(t.name)}</span><small>${openTabs.has(t.id) ? 'Open' : 'Closed'}</small></button>`).join('') || '<p>No matching patterns</p>';
+  if (!$('#sounds-panel').hidden) setSounds(false); setDrawer(saved.view === null ? undefined : 'composition');
 }
 function renderTabs() {
   const visible = project.tabs.filter(t => openTabs.has(t.id));
-  $('#tabs').innerHTML = `<span class="pattern-tab"><button role="tab" id="tab-audio-input" aria-selected="${audioOpen}" data-audio-tab>Audio input</button></span><span class="pattern-tab"><button role="tab" id="tab-midi-instrument" aria-selected="${instrumentOpen}" aria-controls="editor-midi-instrument" tabindex="${instrumentOpen ? 0 : -1}" data-instrument-tab>MIDI instrument</button></span>` + visible.map(tab => `<span class="pattern-tab"><button role="tab" id="tab-${tab.id}" aria-selected="${!audioOpen && !instrumentOpen && tab.id === project.activeTabId}" aria-controls="editor-${tab.id}" tabindex="${!audioOpen && !instrumentOpen && tab.id === project.activeTabId ? 0 : -1}" data-color="${tab.color}" data-tab="${tab.id}">${escape(tab.name)}</button><button class="tab-close" data-close-tab="${tab.id}" aria-label="Close ${escape(tab.name)}">×</button></span>`).join('');
+  const patternSelected = !audioOpen && !instrumentOpen && visible.some(t => t.id === project.activeTabId);
+  $('#input-tabs').innerHTML = `<button role="tab" id="tab-audio-input" aria-label="Audio input" aria-selected="${audioOpen}" tabindex="${audioOpen || (!instrumentOpen && !patternSelected) ? 0 : -1}" data-audio-tab><span class="meter-bars" aria-hidden="true"><i></i><i></i><i></i></span>Input</button><button role="tab" id="tab-midi-instrument" aria-label="MIDI instrument" aria-selected="${instrumentOpen}" aria-controls="editor-midi-instrument" tabindex="${instrumentOpen ? 0 : -1}" data-instrument-tab><span class="activity-dot" aria-hidden="true"></span>MIDI</button>`;
+  $('#tabs').innerHTML = visible.map(tab => {
+    const selected = patternSelected && tab.id === project.activeTabId;
+    return `<span class="pattern-tab"><button role="tab" id="tab-${tab.id}" aria-selected="${selected}" aria-controls="editor-${tab.id}" tabindex="${selected ? 0 : -1}" data-color="${tab.color}" data-tab="${tab.id}"><i class="tab-dot" aria-hidden="true"></i>${escape(tab.name)}</button><button class="tab-close" data-close-tab="${tab.id}" aria-label="Close ${escape(tab.name)}">×</button></span>`;
+  }).join('');
   editors.forEach((instance, id) => { const root = instance.view.dom.parentElement!; root.hidden = id === AUDIO_EDITOR ? !audioOpen : audioOpen || (id === MIDI_EDITOR ? !instrumentOpen : instrumentOpen || id !== project.activeTabId || !openTabs.has(id)); root.id = id === AUDIO_EDITOR ? 'editor-audio-input' : id === MIDI_EDITOR ? 'editor-midi-instrument' : `editor-${id}`; root.setAttribute('role', 'tabpanel'); root.setAttribute('aria-labelledby', id === AUDIO_EDITOR ? 'tab-audio-input' : id === MIDI_EDITOR ? 'tab-midi-instrument' : `tab-${id}`); });
-  $('#audio-toolbar').hidden = !audioOpen;
-  $('#editor').hidden = !audioOpen && !instrumentOpen && !visible.length; $('#empty-editor').hidden = audioOpen || instrumentOpen || !!visible.length; $('#tab-menu').hidden = audioOpen || instrumentOpen || !visible.length; $('#instrument-toolbar').hidden = !instrumentOpen;
-  performButton.disabled = audioOpen || instrumentOpen || !visible.length; $('#play').disabled = audioOpen || instrumentOpen || !visible.length || engine.busy || engine.started;
-  renderPatterns(); renderTakeView();
+  $('#editor').hidden = !audioOpen && !instrumentOpen && !visible.length; $('#empty-editor').hidden = audioOpen || instrumentOpen || !!visible.length; $('#instrument-toolbar').hidden = !instrumentOpen;
+  $('#midi-record').disabled = audioOpen || instrumentOpen || !visible.length; $('#play').disabled = audioOpen || instrumentOpen || !visible.length || engine.busy || engine.started;
+  renderInputAlert(); renderTakeView();
 }
-$('#pattern-search').oninput = renderPatterns;
-$('#pattern-list').onclick = e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-open-pattern]')?.dataset.openPattern; if (id) { switchTab(id); (patternMenu as HTMLDetailsElement).open = false; editor.view.focus(); } };
-$('#open-patterns').onclick = () => { (patternMenu as HTMLDetailsElement).open = true; $('#pattern-search').focus(); };
-function closeTab(id: string) {
+$('#open-patterns').onclick = () => commandPalette.show('Go to ');function closeTab(id: string) {
   openTabs.delete(id);
   if (project.activeTabId === id && openTabs.size) switchTab([...openTabs][0]);
   renderTabs(); saveWorkspace(); renderTransport();
@@ -1140,19 +1230,17 @@ function switchTab(id: string) {
   $('#mapping-context').hidden = true; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
   renderTabs(); renderSliders(); renderBindings(); dirty(); saveWorkspace(); editor.view.requestMeasure();
 }
-function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start a new pattern\n$: note("c3 e3 g3").s("triangle").gain(0.2)\n') {
+function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start a new pattern\n$: note("c3 e3 g3").s("triangle").gain(0.2)\n', color: Tab['color'] = palette[project.tabs.length % palette.length]) {
   if (timelineRecording?.pending) throw new Error('Finish recording before creating patterns.');
   if (project.tabs.length >= 50) throw new Error('A project can contain up to 50 patterns.');
-  const tab: Tab = { id: crypto.randomUUID(), name: name.slice(0, 80) || 'Pattern', code, anchors: [], color: palette[project.tabs.length % palette.length] };
+  const tab: Tab = { id: crypto.randomUUID(), name: name.slice(0, 80) || 'Pattern', code, anchors: [], color };
   project.tabs.push(tab); switchTab(tab.id);
 }
-$('#new-tab').onclick = guard(() => createTab());
-$('#tab-menu').addEventListener('click', event => { if ((event.target as HTMLElement).closest('button')) ($('#tab-menu') as unknown as HTMLDetailsElement).open = false; });
 $('#tabs').onclick = e => { const close = (e.target as HTMLElement).closest<HTMLElement>('[data-close-tab]')?.dataset.closeTab; if (close) { closeTab(close); return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) switchTab(id); };
-$('#tabs').addEventListener('click', e => { if ((e.target as HTMLElement).closest('[data-audio-tab]')) openAudioInput(); if ((e.target as HTMLElement).closest('[data-instrument-tab]')) openMidiInstrument(); });
-$('#tabs').onkeydown = e => {
+$('#input-tabs').onclick = e => { if ((e.target as HTMLElement).closest('[data-audio-tab]')) openAudioInput(); if ((e.target as HTMLElement).closest('[data-instrument-tab]')) openMidiInstrument(); };
+$('#tabs').onkeydown = $('#input-tabs').onkeydown = e => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
-  e.preventDefault(); const tabs = [{ id: AUDIO_EDITOR }, { id: MIDI_EDITOR }, ...project.tabs.filter(t => openTabs.has(t.id))]; const index = tabs.findIndex(t => t.id === activeEditorId());
+  e.preventDefault(); const tabs = [...project.tabs.filter(t => openTabs.has(t.id)), { id: AUDIO_EDITOR }, { id: MIDI_EDITOR }]; const index = tabs.findIndex(t => t.id === activeEditorId());
   const next = e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length;
   if (tabs[next].id === AUDIO_EDITOR) { openAudioInput(); $('#tab-audio-input').focus(); } else if (tabs[next].id === MIDI_EDITOR) { openMidiInstrument(); $('#tab-midi-instrument').focus(); } else { switchTab(tabs[next].id); $(`#tab-${project.activeTabId}`).focus(); }
 };
@@ -1169,8 +1257,6 @@ async function renameTab(id: string) {
   const tab = project.tabs.find(t => t.id === id)!;
   const name = await askEdit('Rename pattern', tab.name); if (name) { tab.name = name; renderTabs(); renderComposition(); renderTransport(); dirty(); }
 }
-$('#rename-tab').onclick = guard(() => renameTab(project.activeTabId));
-$('#duplicate-tab').onclick = guard(() => duplicateTab(project.activeTabId));
 async function deleteTab(id: string) {
   if (timelineRecording?.pending) throw new Error('Finish recording before deleting patterns.');
   if (midiComposition.destination?.tabId === id) { if (midiComposition.pending || midiComposition.running) throw new Error('Resolve MIDI takes before closing their source tab.'); midiComposition.close(); }
@@ -1187,8 +1273,6 @@ async function deleteTab(id: string) {
   project.bindings = project.bindings.filter(b => b.target.kind !== 'slider' || b.target.tabId !== id);
   switchTab(project.activeTabId === id ? project.tabs[0].id : project.activeTabId); renderComposition();
 }
-$('#close-tab').onclick = () => closeTab(project.activeTabId);
-$('#delete-tab').onclick = guard(() => deleteTab(project.activeTabId));
 function duplicateTab(id: string) {
   const tab = project.tabs.find(t => t.id === id)!;
   let name = '', index = 1;
@@ -1214,20 +1298,18 @@ async function addSession() {
   editor.view.focus();
 }
 $('#add-session').onclick = guard(addSession);
-$('#new-project').onclick = guard(addSession);
 async function insertSound(id: string) { const asset = assetById(id); await useSound(soundKey(asset), asset); }
 $('#insert-sound').onclick = guard(() => selectedAsset ? insertSound(selectedAsset) : undefined);
 function setSounds(open: boolean) {
   const wasOpen = !$('#sounds-panel').hidden;
+  if (open) sheets.close(false);
   if (open && !wasOpen) libraryReturn = document.activeElement as HTMLElement;
   $('#sounds-panel').hidden = !open; libraryBackdrop.hidden = !open;
-  $('#sounds-toggle').setAttribute('aria-expanded', String(open));
   document.body.classList.toggle('sounds-open', open);
-  for (const selector of ['.topbar', '.workspace', '.drawer-bar', '#drawer']) $(selector).inert = open;
+  for (const element of workspaceRegions()) element.inert = open;
 
   if (open) {
     void catalogue.refresh().catch(error => notice(error.message, true));
-    document.querySelectorAll<HTMLDetailsElement>('.topbar details[open]').forEach(el => el.open = false);
     $('#mapping-context').hidden = true;
     if (!selectedSound) selectedSound = engine.soundEntries.find(s => s.name === 'triangle')?.name;
     renderAssets(); $('#sound-search').focus();
@@ -1238,7 +1320,7 @@ function setSounds(open: boolean) {
     if (wasOpen) libraryReturn?.focus();
   }
 }
-$('#sounds-toggle').onclick = () => { libraryTarget = undefined; $('#sound-search').value = ''; $('#library-source').value = 'all'; setSounds(true); };
+function openLibrary() { libraryTarget = undefined; $('#sound-search').value = ''; $('#library-source').value = 'all'; setSounds(true); }
 $('#sounds-close').onclick = () => setSounds(false);
 $('#sounds-panel').addEventListener('keydown', e => {
   if (e.key !== 'Tab') return;
@@ -1248,18 +1330,21 @@ $('#sounds-panel').addEventListener('keydown', e => {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
 });
 
-document.addEventListener('keydown', e => { if (e.key === 'Escape') { if (!$('#sounds-panel').hidden && !document.querySelector('dialog[open]')) setSounds(false); $('#mapping-context').hidden = true; } });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  $('#mapping-context').hidden = true;
+  if (document.querySelector('dialog[open]')) return;
+  if (sheets.current) sheets.close(); else if (!$('#sounds-panel').hidden) setSounds(false);
+  if (!$('#new-pattern').hidden) { openNewPattern(false); $('#new-tab').focus(); }
+});
 const catalogue = new Catalogue(async () => { assets = await workspace.assets(); await engine.registerAssets(assets); renderAssets(); await refreshProjects(); });
 $('#library-scroll').prepend(catalogue.root);
 const openExport = setupExport($('#export-content'), snapshot, () => assets);
-type DrawerView = 'composition' | 'midi' | 'devices' | 'export';
+type DrawerView = 'composition';
 let drawerView: DrawerView | undefined;
 let drawerHeight = 300;
 function setDrawer(view?: DrawerView) {
-  drawerView = view; $('#drawer').hidden = !view;
-  $('#devices-content').hidden = view !== 'devices'; $('#composition-content').hidden = view !== 'composition'; $('#midi-content').hidden = view !== 'midi'; $('#export-content').hidden = view !== 'export';
-  $('#expand-editor').hidden = !view && document.body.dataset.expanded !== 'editor';
-  if (view === 'export') openExport();
+  drawerView = view; $('#drawer').hidden = !view; $('#composition-content').hidden = view !== 'composition';
   document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.setAttribute('aria-expanded', String(b.dataset.drawer === view)));
   document.body.classList.toggle('tools-open', !!view);
   saveWorkspace();
@@ -1273,6 +1358,7 @@ document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.onclick =
   if (!$('#sounds-panel').hidden) setSounds(false);
   setDrawer(drawerView === b.dataset.drawer ? undefined : b.dataset.drawer as DrawerView);
 });
+$('#composition-close').onclick = () => setDrawer(undefined);
 $('#drawer-resize').onpointerdown = e => {
   const start = e.clientY, height = drawerHeight, handle = e.currentTarget as HTMLElement; handle.setPointerCapture(e.pointerId);
   handle.onpointermove = event => resizeDrawer(height + start - event.clientY);
@@ -1281,26 +1367,35 @@ $('#drawer-resize').onpointerdown = e => {
 $('#drawer-resize').onkeydown = e => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); resizeDrawer(drawerHeight + (e.key === 'ArrowUp' ? 20 : -20)); setDrawer(drawerView); } };
 $('#composition-play').onclick = guard(() => { $('#play-target').value = 'composition'; return engine.playComposition(); });
 $('#composition-stop').onclick = stopPlayback;
-$('#composition-loop').onclick = () => { engine.transport.loop = !engine.transport.loop; renderTransport(); };
-$('#composition-return').onclick = guard(() => engine.seek(midiComposition.loopRange.begin));
-function setExpanded(pane: string, on: boolean) {
-  document.body.dataset.expanded = on ? pane : '';
-  for (const name of ['editor', 'composition']) $(`#expand-${name}`).textContent = document.body.dataset.expanded === name ? 'Restore split' : 'Expand';
-  $('#expand-editor').hidden = !drawerView && document.body.dataset.expanded !== 'editor';
-  saveWorkspace(); editor.view.requestMeasure();
-}
-for (const pane of ['editor', 'composition']) $(`#expand-${pane}`).onclick = () => {
+function toggleLoop() { if (engine.started) throw new Error('Stop playback to change the loop.'); engine.transport.loop = !engine.transport.loop; renderTransport(); }
+$('#clear-loop').onclick = guard(() => {
+  if (engine.started || midiComposition.running || midiComposition.pending) throw new Error('Stop playback and resolve the take before changing the loop.');
+  engine.transport.loop = false; midiComposition.resetRange(); renderComposition();
+});
+function toggleExpanded(pane: 'editor' | 'composition') {
   const on = document.body.dataset.expanded !== pane;
   if (pane === 'composition') { if (!$('#sounds-panel').hidden) setSounds(false); setDrawer('composition'); }
-  setExpanded(pane, on);
-};
-let timelineDragging = false;
+  document.body.dataset.expanded = on ? pane : '';
+  saveWorkspace(); editor.view.requestMeasure();
+}
+document.querySelectorAll<HTMLElement>('[data-play-target]').forEach(button => button.onclick = () => {
+  $('#play-target').value = button.dataset.playTarget!;
+  if (button.dataset.playTarget === 'composition') setDrawer('composition');
+  renderTransport();
+});let timelineDragging = false;
 function changeRange(edge: string, value: number) {
   if (engine.started || midiComposition.running || midiComposition.pending) throw new Error('Stop playback and resolve the take before changing its range.');
   const range = midiComposition.loopRange, maximum = engine.arrangementLength || 4;
   const snapped = Math.round(value / project.snap) * project.snap;
   if (edge === 'begin') range.begin = Math.max(0, Math.min(range.end - .25, snapped)); else range.end = Math.min(maximum, Math.max(range.begin + .25, snapped));
   midiComposition.setRange(range.begin, range.end); renderComposition();
+}
+/** Whole snap steps covering a dragged span, clamped inside the arrangement. */
+function loopSelection(a: number, b: number) {
+  const snap = project.snap, maximum = engine.arrangementLength || 4;
+  const end = Math.min(maximum, Math.max(snap, Math.ceil(Math.max(a, b) / snap) * snap));
+  const begin = Math.max(0, Math.min(end - snap, Math.floor(Math.min(a, b) / snap) * snap));
+  return { begin, end };
 }
 $('#ruler').onpointerdown = event => {
   const element = event.target as HTMLElement; if (element.closest('.track-corner')) return;
@@ -1309,13 +1404,28 @@ $('#ruler').onpointerdown = event => {
   if (edge && engine.started) { notice('Stop playback to change the loop range.', true); return; }
   event.preventDefault(); timelineDragging = true;
   const ruler = $('#ruler'); ruler.setPointerCapture(event.pointerId);
-  let value = engine.timelinePosition;
-  const update = (e: PointerEvent) => { value = Math.min(engine.arrangementLength || 4, Math.max(0, (e.clientX - ruler.getBoundingClientRect().left - 180) / 64)); if (edge) { const handle = ruler.querySelector<HTMLElement>(`[data-range-edge="${edge}"]`); if (handle) handle.style.left = `${180 + value * 64}px`; } else { $('#seek-handle').style.left = `${180 + value * 64}px`; } };
+  const cycleAt = (e: PointerEvent) => Math.min(engine.arrangementLength || 4, Math.max(0, (e.clientX - ruler.getBoundingClientRect().left - 180) / 64));
+  // While stopped, dragging across the ruler selects a loop; a click without movement seeks.
+  const origin = cycleAt(event); let value = origin, selecting = false;
+  const update = (e: PointerEvent) => {
+    value = cycleAt(e);
+    if (edge) { const handle = ruler.querySelector<HTMLElement>(`[data-range-edge="${edge}"]`); if (handle) handle.style.left = `${180 + value * 64}px`; return; }
+    selecting ||= !engine.started && Math.abs(value - origin) >= project.snap / 2;
+    if (!selecting) { $('#seek-handle').style.left = `${180 + value * 64}px`; return; }
+    ruler.classList.add('selecting');
+    const { begin, end } = loopSelection(origin, value), band = $('#timeline-range');
+    band.style.left = `${180 + begin * 64}px`; band.style.width = `${(end - begin) * 64}px`;
+  };
   update(event); ruler.onpointermove = update;
-  ruler.onpointerup = () => { timelineDragging = false; ruler.onpointermove = null; ruler.onpointerup = null; void guard(async () => { if (edge) changeRange(edge, value); else await engine.seek(value); renderComposition(); })(); };
-  ruler.onpointercancel = () => { timelineDragging = false; ruler.onpointermove = null; renderComposition(); };
-};
-$('#ruler').onkeydown = event => {
+  ruler.onpointerup = () => { timelineDragging = false; ruler.classList.remove('selecting'); ruler.onpointermove = null; ruler.onpointerup = null; void guard(async () => {
+    try {
+      if (edge) changeRange(edge, value);
+      else if (selecting) { const { begin, end } = loopSelection(origin, value); midiComposition.setRange(begin, end); engine.transport.loop = true; }
+      else await engine.seek(value);
+    } finally { renderComposition(); }
+  })(); };
+  ruler.onpointercancel = () => { timelineDragging = false; ruler.classList.remove('selecting'); ruler.onpointermove = null; renderComposition(); };
+};$('#ruler').onkeydown = event => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
   const el = event.target as HTMLElement; if (!el.matches('[role=slider]')) return;
   event.preventDefault(); if (midiComposition.running || midiComposition.pending) { notice('Keep or discard the current take first.', true); return; }
@@ -1344,7 +1454,7 @@ function renderComposition() {
   $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
     const tab = project.tabs.find(t => t.id === c.tabId)!;
     return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · cycle ${c.start} · ${c.length} cycles${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${c.length} cycles</small><span class="clip-resize" data-resize="${c.id}" aria-hidden="true"></span></button>`;
-  }).join('') || '<p class="lane-empty">Drag a pattern here, or use Pattern actions → Add to composition</p>'}</div></div>`).join('');
+  }).join('') || '<p class="lane-empty">Drag a pattern tab here, or right-click it → Add to composition</p>'}</div></div>`).join('');
   paintRecordingClip(); renderTransport(); renderRecording();
 }
 function paintRecordingClip() {
@@ -1386,7 +1496,6 @@ function colorTab(id: string) {
   document.body.append(dialog); dialog.onclick = e => { const color = (e.target as HTMLElement).dataset.color; if (color) { tab.color = color as Tab['color']; renderTabs(); renderComposition(); dirty(); } if (color || (e.target as HTMLElement).hasAttribute('data-cancel')) dialog.close(); };
   dialog.addEventListener('close', () => { dialog.remove(); document.querySelector<HTMLElement>(`[data-tab="${id}"]`)?.focus(); }); dialog.showModal();
 }
-$('#color-tab').onclick = () => colorTab(project.activeTabId);
 function putClip(clip: Clip) {
   editArrangement();
   if (!canPlace(project.clips, clip)) throw new Error('Use quarter-cycle increments and leave space between clips in the same track.');
@@ -1402,7 +1511,6 @@ function addToComposition(tabId: string) {
   editArrangement(); const clip: Clip = { id: crypto.randomUUID(), tabId, trackId: selectedTrack ?? project.tracks[0].id, muted: false, start: Math.max(0, ...project.clips.filter(c => c.trackId === (selectedTrack ?? project.tracks[0].id)).map(c => c.start + c.length)), length: 4 };
   putClip(clip); setDrawer('composition'); openClip(clip.id);
 }
-$('#add-to-composition').onclick = guard(() => addToComposition(project.activeTabId));
 function duplicateClip(id: string) {
   editArrangement();
   const original = project.clips.find(c => c.id === id)!;
@@ -1473,7 +1581,105 @@ document.addEventListener('keydown', event => {
   if (showContextMenu(target, rect.left, rect.bottom, true)) { event.preventDefault(); event.stopPropagation(); }
 });
 
-installQuickStart();
+const openQuickStart = installQuickStart();
+
+function openSheet(id: string) { if (!$('#sounds-panel').hidden) setSounds(false); contextMenu.close(false); sheets.open(id); }
+function sheetOpened(id: string) {
+  if (id === 'export') openExport();
+  if (id === 'audio') { ensureAudioInput(); renderAudioInput(); }
+  if (id === 'midi') renderProfiles();
+}
+function openRecordBar(mode: 'audio' | 'midi') {
+  recordBarOpen = true; if (!timelineRecording?.pending) captureMode = mode;
+  renderRecording(); $(captureMode === 'audio' ? '#audio-record' : '#midi-record').focus();
+}
+$('#record-toggle').onclick = () => { if ($('#record-bar').hidden) openRecordBar(captureMode); else { recordBarOpen = false; renderRecording(); } };
+$('#record-close').onclick = () => { recordBarOpen = false; renderRecording(); $('#record-toggle').focus(); };
+document.querySelectorAll<HTMLElement>('[data-capture]').forEach(button => button.onclick = () => { captureMode = button.dataset.capture === 'midi' ? 'midi' : 'audio'; renderRecording(); });
+$('#record-settings').onclick = () => openSheet(captureMode === 'audio' ? 'record' : 'transcribe');
+$('#record-audio-settings').onclick = $('#audio-settings').onclick = () => openSheet('audio');
+$('#input-alert-settings').onclick = () => openSheet(audioOpen ? 'audio' : 'midi');
+$('#audio-edit-effects').onclick = openAudioInput;
+
+let newPatternColor: Tab['color'] = palette[0];
+function paintSwatches() { $('#new-pattern').querySelectorAll<HTMLElement>('[data-color]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === newPatternColor))); }
+function openNewPattern(open = true) {
+  $('#new-pattern').hidden = !open; $('#new-tab').setAttribute('aria-expanded', String(open));
+  if (!open) return;
+  newPatternColor = palette[project.tabs.length % palette.length];
+  $('#new-pattern-name').value = ''; $('#new-pattern-name').setAttribute('placeholder', `Pattern ${project.tabs.length + 1}`);
+  paintSwatches(); $('#new-pattern-name').focus();
+}
+$('#new-tab').onclick = () => openNewPattern($('#new-pattern').hidden === true);
+$('#new-pattern').onclick = event => {
+  const target = event.target as HTMLElement, color = target.closest<HTMLElement>('[data-color]')?.dataset.color;
+  if (color) { newPatternColor = color as Tab['color']; paintSwatches(); }
+  if (target.closest('[data-cancel]')) { openNewPattern(false); $('#new-tab').focus(); }
+};
+$('#new-pattern').onsubmit = event => { event.preventDefault(); void guard(() => { createTab($('#new-pattern-name').value.trim() || undefined, undefined, newPatternColor); openNewPattern(false); editor.view.focus(); })(); };
+document.addEventListener('pointerdown', event => { if (!$('#new-pattern').hidden && !(event.target as HTMLElement).closest('.new-pattern')) openNewPattern(false); });
+
+const commandPalette = new CommandPalette(commands);
+$('#palette-open').onclick = () => commandPalette.show();
+document.addEventListener('keydown', e => {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'k') return;
+  e.preventDefault(); e.stopPropagation();
+  if (commandPalette.open) commandPalette.close(); else if (!document.querySelector('dialog[open]')) commandPalette.show();
+}, true);
+function command(name: string, run: () => unknown, options: Omit<Command, 'name' | 'run'> = {}): Command { return { name, run: guard(run), ...options }; }
+/** Everything that used to live in the Project and Patterns menus, rebuilt on each keystroke so names and disabled reasons stay current. */
+function commands(): Command[] {
+  const stopped = engine.started || engine.busy ? 'Stop playback first' : undefined;
+  const takePending = midiComposition.running || midiComposition.pending ? 'Resolve the MIDI take first' : undefined;
+  const tab = project.tabs.find(t => t.id === project.activeTabId);
+  const pattern = !audioOpen && !instrumentOpen && tab && openTabs.has(tab.id) ? tab : undefined;
+  const expanded = document.body.dataset.expanded;
+  return [
+    ...project.tabs.map(t => command(`Go to ${t.name}`, () => { switchTab(t.id); editor.view.focus(); }, { color: t.color, hint: openTabs.has(t.id) ? '' : 'Closed', keywords: 'pattern tab open switch' })),
+    command('Go to Audio input', openAudioInput, { keywords: 'input tab microphone effects' }),
+    command('Go to MIDI instrument', openMidiInstrument, { keywords: 'input tab keyboard sound' }),
+    command('New pattern', () => openNewPattern(), { keywords: 'tab add create' }),
+    ...(pattern ? [
+      command(`Rename ${pattern.name}…`, () => renameTab(pattern.id), { keywords: 'pattern tab' }),
+      command(`Change color of ${pattern.name}…`, () => colorTab(pattern.id), { keywords: 'pattern tab colour' }),
+      command(`Duplicate ${pattern.name}`, () => duplicateTab(pattern.id), { keywords: 'pattern tab copy', disabled: project.tabs.length >= 50 ? 'Pattern limit reached (50)' : undefined }),
+      command(`Add ${pattern.name} to composition`, () => addToComposition(pattern.id), { keywords: 'pattern clip track arrange', disabled: stopped }),
+      command(`Close ${pattern.name}`, () => closeTab(pattern.id), { keywords: 'pattern tab hide' }),
+      command(`Delete ${pattern.name}…`, () => deleteTab(pattern.id), { keywords: 'pattern tab remove', disabled: project.tabs.length === 1 ? 'Keep at least one pattern' : stopped }),
+      command('Export pattern code', exportCode, { keywords: 'download strudel file save' }),
+    ] : []),
+    command('Import .strudel file…', () => $('#import-file').click(), { keywords: 'pattern open load file' }),
+    command('Play the current tab', () => { $('#play-target').value = 'tab'; return startPlayback(); }, { disabled: !pattern ? 'Open a pattern first' : stopped }),
+    command('Play the composition', () => { $('#play-target').value = 'composition'; setDrawer('composition'); return engine.playComposition(); }, { disabled: !project.clips.length ? 'Add a clip to the composition first' : stopped }),
+    command('Stop playback', stopPlayback, { keywords: 'silence' }),
+    command('Apply changes', () => audioOpen ? applyAudioInput() : instrumentOpen ? applyMidiInstrument() : engine.apply(), { hint: `${mod} ↵`, disabled: !audioOpen && !instrumentOpen && !engine.hasChanges ? 'No unapplied edits' : undefined }),
+    command(drawerView ? 'Hide composition' : 'Show composition', () => setDrawer(drawerView ? undefined : 'composition'), { keywords: 'timeline arrangement tracks drawer' }),
+    command(expanded === 'editor' ? 'Restore editor and composition' : 'Expand editor', () => toggleExpanded('editor'), { keywords: 'focus full height split' }),
+    command(expanded === 'composition' ? 'Restore composition and editor' : 'Expand composition', () => toggleExpanded('composition'), { keywords: 'timeline full height split' }),
+    command('Return to range start', () => engine.seek(midiComposition.loopRange.begin), { keywords: 'rewind playhead loop', disabled: takePending }),
+    command(engine.transport.loop ? 'Turn loop off' : 'Loop the selected range', toggleLoop, { keywords: 'repeat cycle range', disabled: engine.started ? 'Stop playback first' : takePending }),
+    command('Record audio input', () => openRecordBar('audio'), { keywords: 'microphone capture take vocals' }),
+    command('Transcribe MIDI to a clip', () => openRecordBar('midi'), { keywords: 'play midi capture notes keyboard record' }),
+    command('Recording settings…', () => openSheet('record'), { keywords: 'latency count-in wet dry capture' }),
+    command('Audio input settings…', () => openSheet('audio'), { keywords: 'microphone device channel monitor effects preset levels test' }),
+    command('MIDI & on-screen controller', () => openSheet('midi'), { keywords: 'devices enable keyboard controller mappings learn knobs pads slots' }),
+    command('Play MIDI takes…', () => openSheet('transcribe'), { keywords: 'transcription notes review keep' }),
+    command('Open Sample Catalogue', openLibrary, { keywords: 'sounds library samples packs insert' }),
+    command('Import samples from GitHub or files…', () => { location.hash = '#/samples/import'; }, { keywords: 'sounds upload zip folder' }),
+    command('Export full song render…', () => openSheet('export'), { keywords: 'wav audio bounce download' }),
+    command('Save session', () => persistSession(), { hint: `${mod} S` }),
+    command('New session…', addSession, { keywords: 'project create add' }),
+    command('Save session as copy', saveCopy, { keywords: 'project duplicate' }),
+    command('Reload saved session', reloadSession, { keywords: 'project revert' }),
+    command('Delete session…', deleteSession, { keywords: 'project remove' }),
+    command('Download project backup', downloadBackup, { keywords: 'zip export session' }),
+    command('Restore project backup…', () => $('#backup-file').click(), { keywords: 'zip import session' }),
+    command('Quick start guide', () => openQuickStart(), { keywords: 'help tutorial how' }),
+    command('Toggle dark mode', () => $('#dark-mode').click(), { keywords: 'theme appearance light' }),
+    command('Source code', () => window.open('https://github.com/calv-io-n/strudel', '_blank', 'noopener,noreferrer'), { keywords: 'github repository' }),
+    command('License · AGPL-3.0-or-later', () => window.open('https://github.com/calv-io-n/strudel/blob/master/LICENSE', '_blank', 'noopener,noreferrer'), { keywords: 'legal' }),
+  ];
+}
 
 async function boot() {
   await sessionDrafts.initialize();
@@ -1501,10 +1707,13 @@ async function boot() {
   if (pendingDraft) acceptedProject = draft?.base;
   $('#saved-state').textContent = pendingDraft ? 'Not saved · draft retained' : draft ? 'Draft recovered and saved' : 'Saved in this browser';
   restoreWorkspace(); renderAll(); await refreshProjects(); await refreshMidiPresets(); await refreshAudioPresets(); connectMidiEvents(); booted = true; routePage();
-  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
+  // A browser's first visit opens the quick start; closing it marks it seen, and the command palette reopens it.
+  try { if (localStorage.getItem('studio.quick-start') !== 'seen' && location.hash !== '#/samples/import') openQuickStart(); } catch { /* Storage unavailable: the guide stays in the command palette. */ }
+  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); if (midiComposition.pending || performancePanel.take?.notes.length) openSheet('transcribe'); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
   renderComposition();
   setInterval(() => {
-    liveInput.mix(); const levels = liveInput.levels(); for (const name of ['input', 'output'] as const) { const meter = $<HTMLMeterElement>(`#audio-${name}-level`); meter.value = levels[name]; meter.title = levels[name] >= 1 ? 'Clipping — reduce gain' : `${Math.round(levels[name] * 100)}%`; } engine.tick(); renderRecording(); paintRecordingClip(); $('#cycle').textContent = `Cycle ${engine.cycle.toFixed(2)}`; settleSlots(); renderTransport(); $('#playhead').hidden = false; $('#playhead').style.left = `${180 + engine.timelinePosition * 64}px`; const head = document.querySelector<HTMLElement>('#seek-handle'); if (head && !timelineDragging) { head.style.left = `${180 + engine.timelinePosition * 64}px`; head.setAttribute('aria-valuenow', String(engine.timelinePosition)); }
+    liveInput.mix(); const levels = liveInput.levels(); for (const name of ['input', 'output'] as const) { const meter = $<HTMLMeterElement>(`#audio-${name}-level`); meter.value = levels[name]; meter.title = levels[name] >= 1 ? 'Clipping — reduce gain' : `${Math.round(levels[name] * 100)}%`; }
+    app.style.setProperty('--input-level', String(Math.min(1, levels.input))); $('#input-tabs').toggleAttribute('data-midi-active', performance.now() < midiPulseUntil); engine.tick(); paintRecordingClip(); settleSlots(); renderTransport(); $('#playhead').hidden = false; $('#playhead').style.left = `${180 + engine.timelinePosition * 64}px`; const head = document.querySelector<HTMLElement>('#seek-handle'); if (head && !timelineDragging) { head.style.left = `${180 + engine.timelinePosition * 64}px`; head.setAttribute('aria-valuenow', String(engine.timelinePosition)); }
     if (!instrumentOpen && engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }
   }, 100);
 }
