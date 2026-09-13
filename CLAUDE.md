@@ -65,7 +65,7 @@ Two layers, both optional:
 1. **Virtual MIDI** in the browser needs nothing installed. Knobs, faders and pads in the drawer send simulated events.
 2. **Hardware / OS loopback** goes through the Python bridge. It needs `.venv-midi` with `python-rtmidi` (see `docs/setup.md`) and `/dev/snd/seq` on the host. The server spawns `studio/midi/bridge.py` on start; `STUDIO_DISABLE_MIDI=1` turns it off, `STUDIO_PYTHON` overrides the interpreter.
 
-The bridge only subscribes to ports the project has selected. A plugged-in controller does nothing until the user picks its port under **Virtual MIDI → Devices, mappings & advanced controls → Connect**. When debugging "keys do nothing", check that first, then `aconnect -l` and `aseqdump -p <client>` to prove the hardware is sending. The bridge also creates a virtual **Strudel Studio In** port that is always enabled, so `aconnect '<device>':0 'Strudel Studio':0` is a valid temporary route.
+The bridge only subscribes to ports the project has selected. A plugged-in controller does nothing until the user picks its port under **Ctrl+K → MIDI & on-screen controller → Connect**. When debugging "keys do nothing", check that first, then `aconnect -l` and `aseqdump -p <client>` to prove the hardware is sending. The bridge also creates a virtual **Strudel Studio In** port that is always enabled, so `aconnect '<device>':0 'Strudel Studio':0` is a valid temporary route.
 
 The Axiom AIR Mini 32 is class-compliant and exposes two ALSA ports; use the one named "MIDI", not "HyperContro" (a DAW auto-map protocol).
 

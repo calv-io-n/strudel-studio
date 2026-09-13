@@ -97,12 +97,12 @@ export class StudioEditor {
       },
     });
     this.view.dispatch({ effects: [compartments.isAutoCompletionEnabled.reconfigure(studioCompletions(callbacks.sounds, callbacks.functions)), StateEffect.appendConfig.of([field, EditorView.theme({
-      '&': { height: '100%', background: 'var(--editor-bg)' , color: 'var(--text)' , fontSize: '14px' },
-      '.cm-scroller': { overflow: 'auto', fontFamily: '"SFMono-Regular", Consolas, "Liberation Mono", monospace', lineHeight: '1.85' },
-      '.cm-content': { padding: '20px 0' }, '.cm-gutters': { background: 'var(--editor-bg)' , color: 'var(--muted)' , border: 'none' },
-      '.cm-lineNumbers .cm-gutterElement': { paddingLeft: '12px', paddingRight: '18px' },
+      '&': { height: '100%', background: 'var(--panel)', color: 'var(--ink)', fontSize: '14px' },
+      '.cm-scroller': { overflow: 'auto', fontFamily: 'var(--font-mono)', lineHeight: '1.85' },
+      '.cm-content': { padding: '26px 0' }, '.cm-gutters': { background: 'var(--panel)', color: 'var(--muted)', border: 'none' },
+      '.cm-lineNumbers .cm-gutterElement': { minWidth: '24px', paddingLeft: '12px', paddingRight: '20px' },
       '.cm-cursor': { borderLeftColor: 'var(--accent)' },
-      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { background: 'var(--selection)' },
+      '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { background: 'var(--sel)' },
     })])] });
     this.view.dispatch({ effects: StateEffect.appendConfig.of(this.destinationField) });
     this.onSelect = callbacks.select;

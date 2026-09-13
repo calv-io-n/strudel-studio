@@ -2,6 +2,7 @@ import './quick-start.css';
 
 /** Instructions use the current control labels; opening help never changes a session. */
 export function installQuickStart() {
+  const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
   const dialog = document.createElement('dialog');
   dialog.id = 'quick-start';
   dialog.setAttribute('aria-labelledby', 'quick-start-title');
@@ -11,10 +12,10 @@ export function installQuickStart() {
     <div class="quick-start-motion"><span>Watch the action, then try it in your session.</span><button type="button" id="quick-start-motion" aria-pressed="false">Pause animations</button></div>
     <nav class="quick-start-nav" aria-label="Quick start topics"><a href="#help-inputs">Connect</a><a href="#help-arrange">Arrange</a><a href="#help-audio">Record audio</a><a href="#help-midi">Record MIDI</a><a href="#help-mapping">Map a knob</a></nav>
     <div class="quick-start-sections">
-      <section id="help-inputs" tabindex="-1"><span class="quick-start-number" aria-hidden="true">01</span><h3>Connect your MIDI keyboard.</h3><p><strong>MIDI keyboard:</strong> open <b>MIDI</b> in the bottom bar, choose <b>Enable MIDI</b>, select your input, then <b>Connect</b>. Play a key to check the activity message.</p><p>Open the <b>MIDI instrument</b> tab to choose its sound and effects. Use <b>Apply instrument</b> after editing the code.</p><p class="quick-start-note">Your sessions are stored in this browser. Use the + beside Sessions to start your own; download a project backup to keep a separate copy.</p></section>
-      <section id="help-arrange" tabindex="-1"><span class="quick-start-number" aria-hidden="true">02</span><h3>Put a pattern on a track.</h3><p><strong>Grab a named pattern tab and drag it down to a track.</strong> The matching colored block is a clip: it tells the composition when to play that pattern.</p><p>Or open the pattern’s <b>•••</b> menu and choose <b>Add to composition</b>. Stop playback before adding or moving clips.</p><p class="quick-start-note">Audio input and MIDI instrument are input editors. To arrange music, use a named pattern or a recorded take. The current timeline starts at cycle 0; one cycle is four beats.</p></section>
-      <section id="help-audio" tabindex="-1"><span class="quick-start-number" aria-hidden="true">03</span><h3>Record your microphone.</h3><ol><li>In <b>Audio input</b>, choose <b>Connect microphone</b> and allow browser access. Select your device and channel, then check the Input meter. Turn on <b>Monitor input</b> if you want to hear it through Studio.</li><li>In the composition, choose a track under <b>Record to</b> and move the playhead to an empty space.</li><li>Choose <b>Record audio input</b>, perform, then stop the recording. Your take is saved onto the timeline.</li></ol><p class="quick-start-note">Monitoring is listening, not recording. Stop turns monitoring off; turn it on again when needed. A muted track or another soloed track can also silence monitoring.</p></section>
-      <section id="help-midi" tabindex="-1"><span class="quick-start-number" aria-hidden="true">04</span><h3>Keep the notes you play.</h3><ol><li>Add a named pattern containing a <code>note(…)</code> phrase to the composition.</li><li>In that pattern’s code, select the note phrase and choose <b>Play MIDI</b> below the editor. The selected pattern supplies the sound and effects.</li><li>Choose <b>Capture notes</b> and play your keyboard. Each loop becomes a take.</li><li>Choose <b>Finish</b>, preview your take, then <b>Keep take</b> to place the result in the composition as editable Strudel code.</li></ol><p class="quick-start-note">Playing the MIDI instrument tab alone does not save notes. MIDI capture keeps notes as code; Record audio input captures your microphone or interface.</p></section>
+      <section id="help-inputs" tabindex="-1"><span class="quick-start-number" aria-hidden="true">01</span><h3>Connect your MIDI keyboard.</h3><p><strong>MIDI keyboard:</strong> press <b>${mod} K</b> and choose <b>MIDI &amp; on-screen controller</b>. Choose <b>Enable MIDI</b>, select your input, then <b>Connect</b>. Play a key to check the activity message.</p><p>Open the <b>MIDI</b> tab at the bottom of the editor to choose its sound and effects. Use <b>Apply instrument</b> after editing the code.</p><p class="quick-start-note">Your sessions are stored in this browser. Use the + beside the session name to start your own; download a project backup to keep a separate copy.</p></section>
+      <section id="help-arrange" tabindex="-1"><span class="quick-start-number" aria-hidden="true">02</span><h3>Put a pattern on a track.</h3><p><strong>Grab a named pattern tab at the bottom of the editor and drag it down to a track.</strong> The matching colored block is a clip: it tells the composition when to play that pattern.</p><p>Or right-click the tab and choose <b>Add to composition</b>. Stop playback before adding or moving clips. Drag across the ruler to loop part of the song.</p><p class="quick-start-note">Audio input and MIDI instrument are input editors. To arrange music, use a named pattern or a recorded take. The current timeline starts at cycle 0; one cycle is four beats.</p></section>
+      <section id="help-audio" tabindex="-1"><span class="quick-start-number" aria-hidden="true">03</span><h3>Record your microphone.</h3><ol><li>Open the <b>Input</b> tab, choose <b>Connect microphone</b> and allow browser access. Pick your device and channel under <b>Settings</b>, then check the level meter. Turn on <b>Monitor input</b> if you want to hear it through Studio.</li><li>Choose <b>● Record</b> in the top bar, pick a track under <b>Record to</b>, and move the playhead to an empty space.</li><li>Choose <b>Record audio input</b>, perform, then stop the recording. Your take is saved onto the timeline.</li></ol><p class="quick-start-note">Monitoring is listening, not recording. Stop turns monitoring off; turn it on again when needed. A muted track or another soloed track can also silence monitoring.</p></section>
+      <section id="help-midi" tabindex="-1"><span class="quick-start-number" aria-hidden="true">04</span><h3>Keep the notes you play.</h3><ol><li>Add a named pattern containing a <code>note(…)</code> phrase to the composition.</li><li>In that pattern’s code, click the note phrase and choose <b>Play MIDI</b>, or open <b>● Record</b>, pick <b>MIDI</b> and choose <b>Play MIDI</b>. The selected pattern supplies the sound and effects.</li><li>Choose <b>Capture notes</b> and play your keyboard. Each loop becomes a take.</li><li>Choose <b>Finish</b>, preview your take, then <b>Keep take</b> to place the result in the composition as editable Strudel code.</li></ol><p class="quick-start-note">Playing the MIDI instrument tab alone does not save notes. MIDI capture keeps notes as code; Record audio input captures your microphone or interface.</p></section>
       <section id="help-mapping" tabindex="-1"><span class="quick-start-number" aria-hidden="true">05</span><h3>Give a knob a job.</h3><p><strong>Add a slider to an effect, then select the slider.</strong> For example:</p><pre><code>.lpf(slider(800, 80, 12000, 10))</code></pre><ol><li>Apply the edited pattern or input effects.</li><li>Select the inline slider and choose <b>MIDI Learn</b>.</li><li>Move the hardware knob or fader you want to bind. Then turn it again to control the effect.</li></ol><p class="quick-start-note">The four slider arguments are value, minimum, maximum, and step. Once mapped, sliders and MIDI controls update live.</p></section>
     </div>`;
   const illustrations = [
@@ -99,7 +100,10 @@ export function installQuickStart() {
     dialog.showModal();
     selectSlide(topic ? slides.findIndex(slide => slide.id === `help-${topic}`) : 0, !!topic);
   };
-  dialog.addEventListener('close', () => { video.pause(); returnFocus?.focus(); });
+  dialog.addEventListener('close', () => {
+    video.pause(); returnFocus?.focus();
+    try { localStorage.setItem('studio.quick-start', 'seen'); } catch { /* optional preference */ }
+  });
   dialog.querySelectorAll<HTMLAnchorElement>('.quick-start-nav a').forEach(link => {
     link.onclick = event => {
       event.preventDefault();
@@ -115,14 +119,14 @@ export function installQuickStart() {
     element.onclick = () => open(element, topic);
     return element;
   };
-  const help = button('Quick start'); help.id = 'quick-start-open';
-  document.querySelector('#sounds-toggle')!.before(help);
   for (const [selector, label, topic] of [
-    ['#audio-toolbar', 'How to record audio', 'audio'],
-    ['#instrument-toolbar', 'How to record MIDI', 'midi'],
-    ['.composition-toolbar', 'How to add a pattern', 'arrange'],
+    ['[data-sheet="record"]', 'How to record audio', 'audio'],
+    ['[data-sheet="transcribe"]', 'How to record MIDI', 'midi'],
+    ['[data-sheet="midi"]', 'How to connect a MIDI keyboard', 'inputs'],
   ]) {
-    const trigger = button(label, topic); trigger.className = 'quick-start-context';
+    const trigger = button(label, topic); trigger.className = 'quick-start-context bare';
     document.querySelector(selector)!.append(trigger);
   }
+  // The command palette opens the guide; focus returns to whatever was focused before.
+  return (topic?: string) => open(document.activeElement instanceof HTMLElement ? document.activeElement : document.body, topic);
 }
