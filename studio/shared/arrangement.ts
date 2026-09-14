@@ -4,19 +4,29 @@ import type { Clip } from './model';
 
 // Strudel's published packages do not include TypeScript declarations.
 export type Pattern = { query(state: any): any[]; queryArc(begin: number, end: number): any[] };
-export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes?: MuteTimeline, excluded: () => string | undefined = () => undefined): Pattern {
+export function ratePattern(pattern: Pattern, rate = 1): Pattern {
+  return new core.Pattern((state: any) => pattern.query(state.setSpan(new core.TimeSpan(Number(state.span.begin) * rate, Number(state.span.end) * rate)).setControls({ studioCycleRate: rate }))
+    .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(Number(span.begin) / rate, Number(span.end) / rate)).withValue((value: any) => {
+      if (!value || typeof value !== 'object') return value;
+      const { cps: _cps, ...rest } = value; return rest;
+    })));
+}
+export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes?: MuteTimeline, excluded: () => string | undefined = () => undefined, rates: Map<string, number> = new Map()): Pattern {
   return new core.Pattern((state: any) => clips.flatMap(clip => {
     if (clip.tabId === excluded()) return [];
     const begin = Math.max(Number(state.span.begin), clip.start);
     const end = Math.min(Number(state.span.end), clip.start + clip.length);
     const pattern = patterns.get(clip.id) ?? patterns.get(clip.tabId);
     const sourceOffset = clip.sourceOffset ?? 0;
+    const rate = clip.takeId ? 1 : rates.get(clip.tabId) ?? 1;
     if (begin >= end || !pattern) return [];
     const offset = state.controls?.studioLoopOffset ?? 0;
-    return (mutes ? mutes.segments(clip.id, begin + offset, end + offset).map(([a, b]) => [a - offset, b - offset]) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(new core.TimeSpan(a - clip.start + sourceOffset, b - clip.start + sourceOffset)).setControls({ studioCycleOffset: clip.start + offset - sourceOffset }))
+    return (mutes ? mutes.segments(clip.id, begin + offset, end + offset).map(([a, b]) => [a - offset, b - offset]) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(new core.TimeSpan((a - clip.start) * rate + sourceOffset, (b - clip.start) * rate + sourceOffset)).setControls({ studioCycleOffset: clip.start + offset - sourceOffset / rate, studioCycleRate: rate }))
       .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(
-        Math.max(clip.start, Number(span.begin) + clip.start - sourceOffset),
-        Math.min(clip.start + clip.length, Number(span.end) + clip.start - sourceOffset),
+        // The queried part already lies inside the clip. Keep the whole onset
+        // before the left boundary so a trim cannot invent a new note attack.
+        (Number(span.begin) - sourceOffset) / rate + clip.start,
+        Math.min(clip.start + clip.length, (Number(span.end) - sourceOffset) / rate + clip.start),
       )).withValue((value: any) => {
         // Per-pattern cps must not take over the composition clock.
         if (!value || typeof value !== 'object') return value;

@@ -407,7 +407,7 @@
         }
       ],
       "sessionId": "Drum-Basics",
-      "version": 6,
+      "version": 7,
       "tabs": [
         {
           "id": "pattern-1",
@@ -721,7 +721,7 @@
           "value": 100
         }
       ],
-      "version": 6,
+      "version": 7,
       "tabs": [
         {
           "id": "neon-rhythm",

@@ -1,3 +1,4 @@
+import type { CaptureView } from '../shared/capture-state';
 import type { AudioInput, Asset, Project } from '../shared/model';
 import { checkTakeCapacity, type TakeIdentity } from '../shared/recorded-take';
 import { AudioTakeCapture } from './audio-take';
@@ -25,6 +26,10 @@ export class TimelineRecording {
   private encoded?: { asset: Asset; blob: Blob }[];
   private listener = (code: string) => this.effects?.apply(code);
   constructor(private engine: Engine, private live: LiveInput, private project: () => Project, private input: () => AudioInput, private commit: (identity: TakeIdentity, audio: { asset: Asset; blob: Blob }[], metaKey: string) => Promise<void>, private changed: () => void) {}
+  get captureView(): CaptureView | undefined {
+    if (!this.meta || this.state === 'idle') return;
+    return { state: this.state, tabId: this.meta.identity.tabId, trackId: this.meta.identity.trackId, clipId: this.meta.identity.clipId, kind: 'new-pattern', start: this.startCycle, end: this.endCycle, label: `${this.meta.identity.name} · ${this.state === 'failed' ? 'Save failed · take retained' : this.state}` };
+  }
   get pending() { return this.state !== 'idle'; }
   get identity() { return this.meta?.identity; }
   get startCycle() { return this.meta?.offset ?? 0; }
@@ -42,6 +47,11 @@ export class TimelineRecording {
     const tail = options.mode === 'wet' ? 3 : 0;
     if ((nextClip - position) * 240 / this.project().bpm <= tail + .1 + (options.countin ? 240 / this.project().bpm : 0)) throw new Error('Choose a longer empty section to record, including the effects tail.');
     const epoch = ++this.epoch;
+    let n = 1; while (this.project().tabs.some(t => t.name === `Audio take ${n}`) || this.project().tracks.some(t => t.name === `Audio take ${n}`)) n++;
+    const identity = { assetId: crypto.randomUUID(), dryAssetId: crypto.randomUUID(), tabId: crypto.randomUUID(), trackId: options.trackId, clipId: crypto.randomUUID(), name: `Audio take ${n}` };
+    this.prefix = `timeline-audio:${this.project().sessionId}:`;
+    const bpm = this.project().bpm;
+    this.meta = { identity, input: structuredClone(this.input()), bpm, offset: this.engine.timelinePosition, rate: 48000, mode: options.mode, latency: options.latency, incomplete: false };
     this.status('preparing', 'Connecting audio input…');
     try {
       const input = this.input(); input.enabled = true;
@@ -57,16 +67,14 @@ export class TimelineRecording {
       await capture.setup();
       if (epoch !== this.epoch) { capture.disconnect(); return; }
       if (options.mode === 'wet') { const dry = new AudioTakeCapture(this.context, this.gate, () => {}, failed); this.dry = dry; await dry.setup(); if (epoch !== this.epoch) { dry.disconnect(); return; } }
-      let n = 1; while (this.project().tabs.some(t => t.name === `Audio take ${n}`) || this.project().tracks.some(t => t.name === `Audio take ${n}`)) n++;
-      const identity = { assetId: crypto.randomUUID(), dryAssetId: crypto.randomUUID(), tabId: crypto.randomUUID(), trackId: options.trackId, clipId: crypto.randomUUID(), name: `Audio take ${n}` };
-      this.prefix = `timeline-audio:${this.project().sessionId}:`;
-      const bpm = this.project().bpm;
-      this.meta = { identity, input: structuredClone(input), bpm, offset: this.engine.timelinePosition, rate: this.context.sampleRate, mode: options.mode, latency: options.latency, incomplete: false };
+      this.meta!.rate = this.context.sampleRate;
+      const bpm = this.meta!.bpm;
       await writePending(this.prefix + 'meta', this.meta);
       if (epoch !== this.epoch) return;
+      if (!await this.engine.countIn.wait(bpm) || epoch !== this.epoch) return;
       await this.engine.beginAudioRecording();
       if (epoch !== this.epoch) return;
-      const wait = (options.countin ? 240 / bpm : 0) + .025;
+      const wait = .025;
       this.at = this.context.currentTime + wait;
       this.meta.offset = this.engine.timelinePosition + wait * bpm / 240;
       // Persist the exact scheduled start before publishing any chunks.
@@ -93,7 +101,7 @@ export class TimelineRecording {
   }
   stop(interrupted = false): Promise<void> {
     if (this.finishing) return this.finishing;
-    if (this.state === 'preparing') { ++this.epoch; if (this.engine.recordingTransport) this.engine.endAudioRecording(); this.live.disconnect(); this.cleanup(); this.meta = undefined; this.status('idle', 'Recording cancelled'); return Promise.resolve(); }
+    if (this.state === 'preparing') { this.engine.countIn.cancel(); ++this.epoch; if (this.engine.recordingTransport) this.engine.endAudioRecording(); this.live.disconnect(); this.cleanup(); this.meta = undefined; this.status('idle', 'Recording cancelled'); return Promise.resolve(); }
     if (this.state !== 'recording') return Promise.resolve();
     this.finishing = this.finish(interrupted).finally(() => { this.finishing = undefined; });
     return this.finishing;

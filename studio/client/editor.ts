@@ -1,5 +1,7 @@
+import { parser } from '@lezer/javascript';
+import { headerEnd, reconcileTempo } from '../shared/tempo';
 import { isolateHistory } from '@codemirror/commands';
-import { StateEffect, StateField } from '@codemirror/state';
+import { StateEffect, StateField, Transaction, EditorState, Compartment } from '@codemirror/state';
 import { Decoration, EditorView, WidgetType, type DecorationSet } from '@codemirror/view';
 import { initEditor, codemirrorSettings, compartments, extensions, activateTheme, updateMiniLocations, highlightMiniLocations } from '@strudel/codemirror';
 import { reconcileSliders, type Slider } from '../shared/sliders';
@@ -14,6 +16,28 @@ export class StudioEditor {
   liveVersions = new Map<string, number>();
   revision = 0;
   private selected?: string;
+  private editLock = new Compartment();
+  lockEditing(locked: boolean) { this.view.dispatch({ effects: this.editLock.reconfigure(EditorState.readOnly.of(locked)) }); }
+  private managedTempo = false;
+  private managing = false;
+  private inputLabels = new Map<string, string>();
+  private pending?: { label: string; append: boolean };
+  private repaint = StateEffect.define<null>();
+  setInputLabels(labels: Map<string, string>) { this.inputLabels = labels; this.view.dispatch({ effects: this.repaint.of(null) }); }
+  setPending(label?: string, append = false) {
+    if (this.pending?.label === label && this.pending?.append === append || !this.pending && !label) return;
+    if (label) this.view.dom.dataset.captureState = label; else delete this.view.dom.dataset.captureState;
+    this.pending = label ? { label, append } : undefined;
+    this.view.dispatch({ effects: this.repaint.of(null) });
+  }
+  syncTempo(bpm: number, override?: number) {
+    this.managedTempo = true;
+    const result = reconcileTempo(this.code, bpm, override);
+    this.managing = true;
+    try { this.view.dispatch({ changes: result.changes, effects: this.repaint.of(null), annotations: Transaction.addToHistory.of(false) }); }
+    finally { this.managing = false; }
+    return result.complex;
+  }
   private changeWidgets = StateEffect.define<Slider[]>();
   private replacing = false;
   private liveWrite = false;
@@ -27,7 +51,7 @@ export class StudioEditor {
       tr.changes.iterChangedRanges((from, to) => {
         if (from < value!.to && to > value!.from || from === to && from > value!.from && from < value!.to) valid = false;
       });
-      return { ...value, valid, from: tr.changes.mapPos(value.from, 1), to: tr.changes.mapPos(value.to, -1) };
+      return { ...value, valid, from: tr.changes.mapPos(value.from, 1), to: tr.changes.mapPos(value.to, value.append ? 1 : -1) };
     },
     provide: field => EditorView.decorations.from(field, value => value && value.to > value.from
       ? Decoration.set([Decoration.mark({ class: value.valid ? 'performance-destination' : 'performance-conflict' }).range(value.from, value.to)]) : Decoration.none),
@@ -37,6 +61,10 @@ export class StudioEditor {
     const destination = destinationFor(this.code, tabId, from, to);
     this.view.dispatch({ effects: this.destinationEffect.of(destination) });
     return destination;
+  }
+  armAppend(tabId: string, soundCode: string) {
+    const destination: Destination = { tabId, from: this.code.length, to: this.code.length, original: '', soundCode, valid: true, append: true };
+    this.view.dispatch({ effects: this.destinationEffect.of(destination) }); return destination;
   }
   restoreDestination(destination: Destination) { this.view.dispatch({ effects: this.destinationEffect.of({ ...destination, from: Math.min(destination.from, this.code.length), to: Math.min(destination.to, this.code.length), valid: destination.valid && destination.from >= 0 && destination.to <= this.code.length && this.code.slice(destination.from, destination.to) === destination.original }) }); }
   get destination() { return this.view.state.field(this.destinationField); }
@@ -49,6 +77,40 @@ export class StudioEditor {
   }
   constructor(root: HTMLElement, project: Tab, callbacks: { change: (live: boolean) => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
     const owner = this;
+    class PendingWidget extends WidgetType {
+      constructor(readonly label: string) { super(); }
+      eq(other: PendingWidget) { return this.label === other.label; }
+      toDOM() { const el = document.createElement('div'); el.className = 'pending-code'; el.setAttribute('role', 'status'); el.textContent = this.label; for (let i = 0; i < 3; i++) { const line = document.createElement('i'); el.append(line); } return el; }
+      ignoreEvent() { return true; }
+    }
+    const cues = (code: string, destination?: Destination | null) => {
+      const ranges = [];
+      const end = headerEnd(code);
+      if (owner.managedTempo && end) ranges.push(Decoration.mark({ class: 'managed-tempo', attributes: { title: 'Controlled by project BPM. Change tempo beside the transport; pattern overrides are in the pattern menu.' } }).range(0, end - 1));
+      parser.parse(code).iterate({ enter(node) {
+        if (node.name !== 'CallExpression') return;
+        const name = node.node.firstChild;
+        if (name?.name !== 'VariableName') return;
+        const kind = code.slice(name.from, name.to);
+        const slider = kind === 'slider' ? owner.sliders.find(s => s.start === node.from) : undefined;
+        if (['setcpm', 'setCpm', 'setcps', 'setCps'].includes(kind) && node.from >= end) {
+          ranges.push(Decoration.mark({ class: 'tempo-conflict', attributes: { title: 'Studio ignores this global clock setter. Use project BPM beside the transport.', 'aria-label': 'Tempo controlled by project BPM' } }).range(name.from, name.to));
+        }
+        if (kind !== 'note' && !slider) return;
+        const assigned = slider ? owner.inputLabels.get(slider.id) : destination?.valid && destination.from === node.from ? 'MIDI notes · connected inputs and on-screen keys' : undefined;
+        ranges.push(Decoration.mark({ class: `input-function${assigned ? ' input-assigned' : ''}`, attributes: { 'data-input-function': kind, tabindex: '0', role: 'button', 'aria-label': `${kind}: ${assigned ?? 'Unassigned input'}; open input controls`, title: assigned ?? `${kind}: input controls` } }).range(name.from, name.to));
+      } });
+      if (owner.pending) {
+        const at = owner.pending.append ? code.length : Math.min(code.length, destination?.to ?? code.length);
+        ranges.push(Decoration.widget({ widget: new PendingWidget(owner.pending.label), side: 1 }).range(at));
+      }
+      return Decoration.set(ranges, true);
+    };
+    const cueField = StateField.define<DecorationSet>({
+      create: state => cues(state.doc.toString(), state.field(owner.destinationField, false)),
+      update: (value, tr) => tr.docChanged || tr.effects.length ? cues(tr.newDoc.toString(), tr.state.field(owner.destinationField, false)) : value,
+      provide: field => EditorView.decorations.from(field),
+    });
     class SliderWidget extends WidgetType {
       constructor(readonly slider: Slider) { super(); }
       eq(other: SliderWidget) { return other.slider.id === this.slider.id && other.slider.value === this.slider.value && other.slider.from === this.slider.from; }
@@ -82,6 +144,12 @@ export class StudioEditor {
       },
       provide: (f) => EditorView.decorations.from(f),
     });
+    const EditorStateFilter = EditorState.transactionFilter.of(tr => {
+      if (!owner.managedTempo || owner.managing || owner.replacing || !tr.docChanged) return tr;
+      const end = headerEnd(tr.startState.doc.toString()); let touches = false;
+      tr.changes.iterChangedRanges((from) => { if (from < end) touches = true; });
+      return touches ? [] : tr;
+    });
     this.sliders = reconcileSliders(project.code, [], undefined, project.anchors);
     this.sliders.forEach((s) => this.values.set(s.id, s.value));
     codemirrorSettings.set({ ...codemirrorSettings.get(), theme: document.documentElement.dataset.appearance === 'dark' ? 'githubDark' : 'githubLight' });
@@ -104,7 +172,7 @@ export class StudioEditor {
       '.cm-cursor': { borderLeftColor: 'var(--accent)' },
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { background: 'var(--sel)' },
     })])] });
-    this.view.dispatch({ effects: StateEffect.appendConfig.of(this.destinationField) });
+    this.view.dispatch({ effects: StateEffect.appendConfig.of([this.destinationField, cueField, EditorStateFilter, this.editLock.of(EditorState.readOnly.of(false))]) });
     this.onSelect = callbacks.select;
   }
   setAppearance(dark: boolean) {

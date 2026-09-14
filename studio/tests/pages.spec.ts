@@ -4,7 +4,7 @@ import { installAudioCapture } from './audio-capture';
 import { encodeWav, decodeWav } from '../shared/wav';
 const forbidden = new WeakMap<Page, string[]>();
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem('studio.quick-start', 'seen'));
+  await page.addInitScript(() => localStorage.setItem('studio.quick-start.opt-out', 'true'));
   const requests: string[] = []; forbidden.set(page, requests);
   page.on('request', request => { const url = new URL(request.url()); if (url.pathname.startsWith('/api/') || /^wss?:$/.test(url.protocol) || ['localhost', '127.0.0.1'].includes(url.hostname) && url.origin !== 'http://127.0.0.1:5185') requests.push(url.href); });
   page.on('websocket', socket => requests.push(socket.url()));
@@ -14,7 +14,11 @@ const wave = Buffer.from(encodeWav(Float32Array.from({ length: 4410 }, (_, i) =>
 async function start(page: Page, route = '/') { await page.goto(route); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); }
 async function records(page: Page, store: string) { return page.evaluate(async store => { const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('strudel-studio'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); }); return new Promise<any[]>((resolve, reject) => { const r = db.transaction(store).objectStore(store).getAll(); r.onsuccess = () => { resolve(r.result); db.close(); }; r.onerror = () => reject(r.error); }); }, store); }
 /** Runs a command palette entry by name, the route to project, export and settings actions. */
-async function command(page: Page, name: string) { await page.keyboard.press('Control+K'); await page.locator('#command-palette input').fill(name); await page.keyboard.press('Enter'); await expect(page.locator('#command-palette')).toBeHidden(); }
+async function command(page: Page, name: string) {
+  if (name === 'Import samples from GitHub or files') { await command(page, 'Open Sample Catalogue'); if (!await page.locator('.import-page-link').isVisible()) await page.locator('#add-sounds summary').click(); await page.locator('.import-page-link').click(); return; }
+  if (name === 'Audio input settings') { await page.locator(await page.locator('#audio-settings').isVisible() ? '#audio-settings' : '#input-alert-settings').click(); return; }
+  if (name === 'Recording settings') { await openRecordBar(page); await page.locator('#record-settings').click(); return; }
+ await page.keyboard.press('Control+K'); await page.locator('#command-palette input').fill(name); await page.keyboard.press('Enter'); await expect(page.locator('#command-palette')).toBeHidden(); }
 async function closeSheet(page: Page) { await page.keyboard.press('Escape'); await expect(page.locator('#sheet')).toBeHidden(); }
 async function openRecordBar(page: Page) { if (await page.locator('#record-bar').isHidden()) await page.locator('#record-toggle').click(); await expect(page.locator('#record-bar')).toBeVisible(); }
 async function playComposition(page: Page) { await page.locator('[data-play-target=composition]').click(); await page.locator('#composition-play').click(); }
@@ -245,7 +249,7 @@ test('quiet float source survives import through full-song encoding below the PC
   await importWave(page, Buffer.from(encodeWav(low, low, 44100, { format: 'float32' }).buffer));
   const id = (await records(page, 'assets'))[0].id;
   await page.getByRole('link', { name: 'Back to Studio', exact: false }).click();
-  await page.locator('#editor .cm-content:visible').fill(`s("studio_${id.replaceAll('-', '')}").gain(1)`);
+  await page.locator('#editor .cm-content:visible').focus(); await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Control+Shift+End'); await page.keyboard.insertText(`s("studio_${id.replaceAll('-', '')}").gain(1)`);
   await command(page, 'Export full song render'); await page.locator('#export-source').selectOption('tab'); await page.locator('#export-cycles').fill('1'); await page.locator('#export-format').selectOption('float32');
   const pending = page.waitForEvent('download'); await page.locator('#render-audio').click(); const file = await pending;
   const audio = decodeWav(await readFile((await file.path())!)); const peak = audio.left.reduce((peak, n) => Math.max(peak, Math.abs(n)), 0);
@@ -272,7 +276,7 @@ test('recording works in an empty timeline and permission denial leaves no take'
 
 test('recording joins playing composition at its playhead and stops before an existing clip', async ({ page }) => {
   await fakeInput(page); await start(page); await playComposition(page); await page.waitForTimeout(600);
-  const before = Number(await page.locator('#composition-position').textContent());
+  const before = (Number((await page.locator('#composition-position').textContent())!.replace('Beat ', '')) - 1) / 4;
   await openRecordBar(page); await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording');
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0], clip = project.clips.find((c: any) => c.takeId);

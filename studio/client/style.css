@@ -568,3 +568,30 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
   #sample-import-page > header { margin-bottom: 36px; }
 }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; } }
+
+/* Input controls and managed timing remain part of the code surface. */
+.managed-tempo { color: var(--muted); background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.input-function { border-radius: 3px; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent); cursor: pointer; }
+.input-function:hover, .input-function:focus { outline: 2px solid var(--accent); outline-offset: 2px; background: var(--sel); }
+.input-function.input-assigned { border-bottom: 2px solid var(--ink); }
+.pending-code { display: inline-block; vertical-align: top; min-width: 230px; margin: 8px 0; padding: 10px 14px; color: var(--muted); font: 12px var(--font-mono); border-left: 2px dashed currentColor; }
+.pending-code i { display: block; width: 200px; height: 8px; margin-top: 8px; background: color-mix(in srgb, var(--ink) 12%, transparent); border-radius: 2px; }
+.pending-code i:nth-child(2) { width: 160px; }
+.pending-code i:nth-child(3) { width: 180px; }
+.clip-resize-left { left: 0; right: auto; }
+.clip.pending-region { pointer-events: none; opacity: .7; border: 2px dashed var(--ink); background: color-mix(in srgb, var(--ink) 10%, var(--panel)); }
+#editor { position: relative; }
+.pending-pattern { position: absolute; inset: 0; z-index: 3; padding: 28px; background: var(--panel); }
+.pending-pattern .pending-code { display: block; margin-top: 24px; }
+.pending-tab { border: 1px dashed var(--muted); color: var(--muted); }
+.quick-start-preference { padding: 12px 24px; border-top: 1px solid var(--line); }
+.quick-start-preference label { display: flex; gap: 8px; align-items: center; }
+.quick-start-preference p:empty { display: none; }
+.cm-editor[data-capture-state] .performance-destination { background: color-mix(in srgb, var(--ink) 8%, transparent); border-bottom: 2px dashed var(--muted); }
+.tempo-conflict { text-decoration: underline dotted; text-underline-offset: 3px; color: var(--muted); }
+.count-in-toggle { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 34px; height: 32px; padding: 5px; color: var(--muted); border-radius: 999px; }
+.count-in-toggle svg { width: 21px; height: 21px; }
+.count-in-toggle[aria-pressed=true] { background: var(--record); border-color: var(--record); color: #fff; }
+.count-in-toggle[aria-pressed=true]:hover:not(:disabled) { background: var(--record-strong); }
+.count-in-toggle:disabled[aria-pressed=true] { opacity: 1; }
+#count-in-beat:not(:empty) { position: absolute; inset: 0; display: grid; place-items: center; border-radius: inherit; background: var(--record); color: #fff; font-weight: 700; font-variant-numeric: tabular-nums; }

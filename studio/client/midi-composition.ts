@@ -1,4 +1,6 @@
-import { CycleTakes, compositionVariation } from '../shared/midi-session';
+import type { CaptureView } from '../shared/capture-state';
+import { beatPosition, beatDuration } from '../shared/tempo';
+import { CycleTakes, sectionVariation } from '../shared/midi-session';
 import { destinationFor, MidiTake, transcribe, transcribeNotes, PendingMidiSchema, type Destination } from '../shared/performance';
 import { ClipSchema, type Clip, type Project } from '../shared/model';
 import type { StudioEditor } from './editor';
@@ -10,6 +12,12 @@ export class MidiComposition {
   owner?: StudioEditor;
   destination?: Destination;
   clip?: Clip;
+  private saving = false;
+  get captureView(): CaptureView | undefined {
+    if (!this.destination || !this.clip || !this.running && !this.pending && !this.saving) return;
+    const state = this.saving ? 'saving' : this.starting ? 'preparing' : this.running ? 'recording' : 'review';
+    return { state, kind: 'phrase', tabId: this.destination.tabId, clipId: this.clip.id, trackId: this.clip.trackId, start: this.begin, end: this.running ? this.begin + Math.min(this.end - this.begin, this.engine.cycle) : this.end, label: state === 'review' ? 'Ready to review' : state === 'saving' ? 'Saving' : state === 'preparing' ? 'Preparing' : 'Recording' };
+  }
   private source = '';
   private failure = '';
   private sourceRevision = 0;
@@ -33,13 +41,13 @@ export class MidiComposition {
   private published?: MidiTake;
   constructor(private engine: Engine, private project: () => Project, private commit: (p: Project) => Promise<void>, private session: () => string, private report: (text: string) => void) {
     this.root.className = 'midi-composition'; this.root.hidden = true; this.root.setAttribute('aria-label', 'MIDI transcription');
-    this.root.innerHTML = `<header><strong>Play MIDI</strong><button data-midi-exit>Leave MIDI</button></header><p data-midi-target></p><p data-midi-sound></p><p data-midi-status role="status"></p><p data-midi-input role="status">Waiting for MIDI</p><progress data-midi-progress value="0" max="1" aria-label="Take cycle progress"></progress><div data-midi-notes class="midi-note-view" aria-label="Played notes"></div><div class="form-row"><button data-midi-live aria-pressed="false">Capture notes</button><button data-midi-transcribed aria-pressed="false">Preview</button><button data-midi-finish>Finish</button><label>Take <select data-midi-takes aria-label="MIDI take"></select></label><button data-midi-original>Original</button><button data-midi-preview>Preview take</button><button data-midi-solo aria-pressed="false">Solo take</button><button data-midi-again>Play again</button><button data-midi-accept class="primary">Keep take</button><button data-midi-discard>Discard</button><button data-midi-undo hidden>Undo acceptance</button></div><div class="form-row"><label>Strudel format <select data-midi-format><option value="notes">Notes · snap to beat</option><option value="timeCat">timeCat · played timing</option></select></label><label data-midi-grid-label>Snap <select data-midi-grid><option value="0.25">1 beat</option><option value="0.125">½ beat</option><option value="0.0625" selected>¼ beat</option><option value="0.03125">⅛ beat</option></select></label></div><div class="performance-diff"><div><h3>Original</h3><pre data-midi-before></pre></div><div><h3>Proposed Strudel · not accepted</h3><pre data-midi-after></pre></div></div>`;
+    this.root.innerHTML = `<header><strong>Record notes</strong><button data-midi-exit>Leave MIDI</button></header><p data-midi-target></p><p data-midi-sound></p><label><input type="checkbox" data-midi-accompaniment> Play composition while recording</label><p data-midi-status role="status"></p><p data-midi-input role="status">Waiting for MIDI</p><progress data-midi-progress value="0" max="1" aria-label="Take cycle progress"></progress><div data-midi-notes class="midi-note-view" aria-label="Played notes"></div><div class="form-row"><button data-midi-live aria-pressed="false">Record notes</button><button data-midi-transcribed aria-pressed="false">Preview</button><button data-midi-finish>Finish</button><label>Take <select data-midi-takes aria-label="MIDI take"></select></label><button data-midi-original>Original</button><button data-midi-preview>Preview take</button><button data-midi-solo aria-pressed="false">Solo take</button><button data-midi-again>Play again</button><button data-midi-accept class="primary">Keep take</button><button data-midi-discard>Discard</button><button data-midi-undo hidden>Undo acceptance</button></div><div class="form-row"><label>Strudel format <select data-midi-format><option value="notes">Notes · snap to beat</option><option value="timeCat">timeCat · played timing</option></select></label><label data-midi-grid-label>Snap <select data-midi-grid><option value="0.25">1 beat</option><option value="0.125">½ beat</option><option value="0.0625" selected>¼ beat</option><option value="0.03125">⅛ beat</option></select></label></div><div class="performance-diff"><div><h3>Original</h3><pre data-midi-before></pre></div><div><h3>Proposed Strudel · not accepted</h3><pre data-midi-after></pre></div></div>`;
     const more = document.createElement('details'); more.className = 'midi-more';
     const summary = document.createElement('summary'); summary.textContent = 'More take controls'; more.append(summary);
     for (const name of ['original', 'preview', 'again']) more.append(this.root.querySelector(`[data-midi-${name}]`)!);
     more.append(this.root.querySelector('[data-midi-takes]')!.parentElement!, this.root.querySelector('[data-midi-solo]')!, this.root.querySelector('[data-midi-format]')!.closest('.form-row')!, this.root.querySelector('.performance-diff')!); this.root.append(more);
     this.range.className = 'midi-loop-range'; this.range.hidden = false;
-    this.range.innerHTML = `<button data-midi-full>Use full composition</button><label>Destination clip <select data-midi-clip aria-label="MIDI destination clip"></select></label><label>Loop start <input data-midi-start type="number" min="0" step="0.25"></label><label>Loop end <input data-midi-end type="number" min="0.25" step="0.25"></label><span data-midi-length></span>`;
+    this.range.innerHTML = `<button data-midi-full>Use full clip</button><label>Destination clip <select data-midi-clip aria-label="MIDI destination clip"></select></label><label>Position (beat) <input data-midi-start type="number" min="1" step="1"></label><label>End (beat) <input data-midi-end type="number" min="2" step="1"></label><span data-midi-length></span>`;
     for (const name of ['format', 'grid']) this.root.querySelector<HTMLSelectElement>(`[data-midi-${name}]`)!.onchange = () => {
       this.format = this.root.querySelector<HTMLSelectElement>('[data-midi-format]')!.value as 'notes' | 'timeCat';
       this.grid = Number(this.root.querySelector<HTMLSelectElement>('[data-midi-grid]')!.value);
@@ -67,20 +75,20 @@ export class MidiComposition {
     this.range.querySelector<HTMLSelectElement>('[data-midi-clip]')!.onchange = () => {
       if (this.pending || this.running) { this.renderRange(); return; }
       const clip = this.project().clips.find(c => c.id === this.range.querySelector<HTMLSelectElement>('[data-midi-clip]')!.value);
-      if (clip) { this.clip = { ...clip }; this.renderRange(); }
+      if (clip) { this.clip = { ...clip }; this.begin = clip.start; this.end = clip.start + clip.length; this.renderRange(); }
     };
     for (const edge of ['start', 'end']) for (const suffix of ['']) {
       this.range.querySelector<HTMLInputElement>(`[data-midi-${edge}${suffix}]`)!.oninput = event => {
         if (this.running || this.pending) { this.renderRange(); return; }
-        const value = Number((event.target as HTMLInputElement).value);
+        const value = (Number((event.target as HTMLInputElement).value) - 1) / 4;
         try { this.setRange(edge === 'start' ? value : this.begin, edge === 'end' ? value : this.end); } catch (error) { this.renderRange(); this.report((error as Error).message); }
       };
     }
   }
-  private action(name: string, run: () => unknown) { this.root.querySelector<HTMLButtonElement>(`[data-midi-${name}]`)!.onclick = async () => { try { await run(); } catch (e) { this.status((e as Error).message); this.report((e as Error).message); } }; }
+  private action(name: string, run: () => unknown) { this.root.querySelector<HTMLButtonElement>(`[data-midi-${name}]`)!.onclick = async () => { try { if (this.saving) return; await run(); } catch (e) { this.status((e as Error).message); this.report((e as Error).message); } }; }
   private status(text: string) { this.root.querySelector('[data-midi-status]')!.textContent = text; }
   get armed() { return !!this.destination; }
-  get running() { return this.starting || !!this.capture?.running; }
+  get running() { return this.saving || this.starting || !!this.capture?.running; }
   get pending() { return !!this.takes.length || !!this.capture?.current.notes.length; }
   arm(owner: StudioEditor, tabId: string, clipId?: string) {
     if (this.pending || this.running) throw new Error('Finish and resolve the current MIDI takes before choosing another note.');
@@ -90,36 +98,37 @@ export class MidiComposition {
     if (!clips.length) throw new Error('Add this tab to the composition, then choose Transcribe on composition on its note.');
     this.close(); this.owner = owner; this.destination = owner.arm(tabId); this.source = owner.code; this.sourceRevision = owner.revision; this.failure = '';
     this.clip = { ...(clips.find(c => c.id === clipId) ?? clips[0]) };
-    if (!this.customRange) { this.begin = 0; this.end = this.engine.arrangementLength; }
+    this.begin = this.clip.start; this.end = this.clip.start + this.clip.length; this.customRange = true;
     this.root.hidden = false; this.range.hidden = false; this.renderRange(); this.paint();
-    this.status('Ready · audition your keyboard, then Capture notes');
+    this.status('Ready · audition your keyboard, then Record notes');
   }
   resetRange() { this.customRange = false; this.begin = 0; this.end = this.engine.arrangementLength || 4; this.renderRange(); }
   get loopRange() { return { begin: this.begin, end: this.end }; }
   setRange(begin: number, end: number) {
     if (this.running || this.pending) throw new Error('Keep or discard the current take before changing its range.');
     if (![begin, end].every(Number.isFinite) || begin % .25 || end % .25 || begin < 0 || end <= begin || end > (this.engine.arrangementLength || 4)) throw new Error('Choose a nonempty range inside the composition.');
+    if (this.clip && (begin < this.clip.start || end > this.clip.start + this.clip.length)) throw new Error('Choose a recording range inside the selected clip. Other placements remain unchanged.');
     this.begin = begin; this.end = end; this.customRange = true; this.renderRange();
   }
   async audition() {
     if (!this.owner || !this.destination) return;
     try { await this.engine.prepareMidi(this.owner, this.destination); } catch (error) { this.failure = `Cannot play the selected IDE instrument: ${(error as Error).message}`; this.status(this.failure); throw new Error(this.failure); }
-    this.auditioning = true; this.status('Play your keyboard · Capture notes when ready');
+    this.auditioning = true; this.status('Play your keyboard · Record notes when ready');
   }
-  refreshRange() { if (!this.customRange && !this.running && !this.pending) { this.begin = 0; this.end = this.engine.arrangementLength || 4; } this.renderRange(); }
+  refreshRange() { if (!this.customRange && !this.running && !this.pending) { this.begin = this.clip?.start ?? 0; this.end = this.clip ? this.clip.start + this.clip.length : this.engine.arrangementLength || 4; } this.renderRange(); }
   private renderRange() {
     const select = this.range.querySelector<HTMLSelectElement>('[data-midi-clip]')!; select.replaceChildren();
     for (const clip of this.project().clips.filter(c => c.tabId === this.clip?.tabId)) {
-      const option = document.createElement('option'); option.value = clip.id; option.textContent = `${this.project().tracks.find(t => t.id === clip.trackId)?.name} · ${clip.start}–${clip.start + clip.length}`; select.append(option);
+      const option = document.createElement('option'); option.value = clip.id; option.textContent = `${this.project().tracks.find(t => t.id === clip.trackId)?.name} · beats ${beatPosition(clip.start)}–${beatPosition(clip.start + clip.length)}`; select.append(option);
     }
     select.value = this.clip?.id ?? '';
     select.parentElement!.hidden = !this.armed;
     for (const edge of ['start', 'end']) for (const suffix of ['']) {
       const input = this.range.querySelector<HTMLInputElement>(`[data-midi-${edge}${suffix}]`)!;
-      input.min = '0'; input.max = String(this.engine.arrangementLength || 4); input.value = String(edge === 'start' ? this.begin : this.end);
+      input.min = String(beatPosition(this.clip?.start ?? 0)); input.max = String(beatPosition(this.clip ? this.clip.start + this.clip.length : this.engine.arrangementLength || 4)); input.value = String(beatPosition(edge === 'start' ? this.begin : this.end));
     }
-    this.range.querySelector('[data-midi-length]')!.textContent = `${this.end - this.begin} cycles selected`;
-    this.root.querySelector('[data-midi-target]')!.textContent = `${this.project().tabs.find(t => t.id === this.clip?.tabId)?.name} · cycles ${this.begin}–${this.end} · IDE sound and modifiers`;
+    this.range.querySelector('[data-midi-length]')!.textContent = `${beatDuration(this.end - this.begin)} beats selected`;
+    this.root.querySelector('[data-midi-target]')!.textContent = `Recording into: ${this.project().tabs.find(t => t.id === this.clip?.tabId)?.name ?? ''} → ${this.destination?.original ?? 'selected phrase'} · Composition placement: ${this.project().tracks.find(t => t.id === this.clip?.trackId)?.name ?? 'none'} · beats ${beatPosition(this.begin)}–${beatPosition(this.end)}. Keep take creates a variation for this clip; other placements stay unchanged.`;
   }
   async start() {
     if (!this.destination || !this.owner || !this.clip) return;
@@ -132,10 +141,10 @@ export class MidiComposition {
     this.auditioning = false; this.starting = true; const epoch = ++this.epoch;
     this.status('Preparing the selected IDE instrument…');
     try {
-      await this.engine.startMidiSection(this.owner, this.destination, this.clip, this.begin, this.end);
+      await this.engine.startMidiSection(this.owner, this.destination, this.clip, this.begin, this.end, this.root.querySelector<HTMLInputElement>('[data-midi-accompaniment]')!.checked);
       if (epoch !== this.epoch) { this.engine.endMidiSection(); return; }
       this.mode = 'live'; this.solo = false;
-      const sound = this.engine.midiValues(60, 100, (this.clip.sourceOffset ?? 0) + this.begin - this.clip.start)[0];
+      const sound = this.engine.midiValues(60, 100, (this.clip.sourceOffset ?? 0) + (this.begin - this.clip.start) * this.engine.patternRate(this.clip.tabId))[0];
       const name = sound?.studioOriginalSound ?? sound?.s;
       this.root.querySelector('[data-midi-sound]')!.textContent = name ? `Instrument: ${this.engine.soundEntries.find(s => s.name === name)?.label ?? name} · from the selected IDE expression` : 'Instrument follows the selected IDE expression';
       this.capture = new CycleTakes(this.destination, this.end - this.begin);
@@ -159,14 +168,14 @@ export class MidiComposition {
     if (!this.armed) return false;
     if (!on) { for (const voice of this.voices.get(key) ?? []) this.engine.performanceAudio.release(voice); this.voices.delete(key); }
     if (!this.capture?.running && this.auditioning) { if (on) { const values = this.engine.midiValues(pitch, velocity, 0); this.voices.set(key, values.map((_: unknown, i: number) => `${key}:${i}`)); await Promise.all(values.map((v: any, i: number) => this.engine.performanceAudio.play(`${key}:${i}`, v, v.note ?? pitch, (v.velocity ?? velocity / 127) * 127))); } this.root.querySelector('[data-midi-input]')!.textContent = `MIDI ${pitch} · ${on ? 'playing' : 'released'} · audition only`; return true; }
-    if (!this.capture?.running) { this.root.querySelector('[data-midi-input]')!.textContent = this.failure || `MIDI ${pitch} received · choose Capture notes to record`; return true; }
+    if (!this.capture?.running) { this.root.querySelector('[data-midi-input]')!.textContent = this.failure || `MIDI ${pitch} received · choose Record notes to record`; return true; }
     if (this.mode !== 'live' || this.engine.midiMode !== 'live') { this.root.querySelector('[data-midi-input]')!.textContent = `MIDI ${pitch} received · Transcribed is playing; switch to Live MIDI to capture`; return true; }
     this.capture.note(key, pitch, velocity, this.engine.cycle, on);
     this.root.querySelector('[data-midi-input]')!.textContent = `${on ? '●' : '○'} MIDI ${pitch} · ${on ? 'playing and transcribing' : 'released'}`;
     this.root.classList.toggle('midi-active', on || this.voices.size > 0);
     this.paint();
     if (on) {
-      const phase = (this.clip!.sourceOffset ?? 0) + this.begin - this.clip!.start + this.engine.cycle % (this.end - this.begin);
+      const phase = (this.clip!.sourceOffset ?? 0) + (this.begin - this.clip!.start + this.engine.cycle % (this.end - this.begin)) * this.engine.patternRate(this.clip!.tabId);
       const values = this.engine.midiValues(pitch, velocity, phase);
       const keys = values.map((_: unknown, i: number) => `${key}:${i}`); this.voices.set(key, keys);
       await Promise.all(values.map((value: any, i: number) => this.engine.performanceAudio.play(keys[i], value, value.note ?? pitch, (value.velocity ?? velocity / 127) * 127)));
@@ -179,12 +188,14 @@ export class MidiComposition {
     clearInterval(this.timer); this.timer = undefined;
     if (this.capture) { this.capture.finish(this.engine.cycle); this.takes = this.capture.completed; this.capture = undefined; this.selected = Math.max(0, this.takes.length - 1); }
     this.engine.performanceAudio.stop(); this.voices.clear(); this.root.classList.remove('midi-active');
-    this.status(this.takes.length ? `${this.takes.length} takes retained · choose one to preview or accept` : 'No notes captured · choose Capture notes to try again');
+    this.status(this.takes.length ? `${this.takes.length} takes retained · choose one to preview or accept` : 'No notes captured · choose Record notes to try again');
     this.paint(); this.persist();
   }
   private code() {
     const take = this.takes[this.selected]; if (!take) return '';
-    return this.format === 'notes' ? transcribeNotes(take.notes, this.end - this.begin, this.grid) : transcribe(take.notes, this.end - this.begin, 0, this.end - this.begin);
+    const code = this.format === 'notes' ? transcribeNotes(take.notes, this.end - this.begin, this.grid) : transcribe(take.notes, this.end - this.begin, 0, this.end - this.begin);
+    const rate = this.engine.patternRate(this.destination!.tabId);
+    return rate === 1 ? code : `(${code}).slow(${rate})`;
   }
   private paint() {
     this.root.querySelector('[data-midi-before]')!.textContent = this.destination?.original ?? '';
@@ -218,7 +229,7 @@ export class MidiComposition {
   }
   private async preview(mode: 'original' | 'take') {
     if (this.running || !this.takes.length) return;
-    if (!this.engine.started) await this.engine.startMidiSection(this.owner!, this.destination!, this.clip!, this.begin, this.end);
+    if (!this.engine.started) await this.engine.startMidiSection(this.owner!, this.destination!, this.clip!, this.begin, this.end, this.root.querySelector<HTMLInputElement>('[data-midi-accompaniment]')!.checked);
     await this.engine.reviewMidi(mode, this.owner!, this.code()); this.mode = mode;
     this.engine.soloMidi(this.solo && mode === 'take');
     this.status(`Previewing ${mode === 'original' ? 'original' : `take ${this.selected + 1}`} · ${this.solo && mode === 'take' ? 'isolated' : 'with composition'} · changes heard after scheduled audio`); this.paint();
@@ -228,12 +239,15 @@ export class MidiComposition {
     if (!proposal) throw new Error('Play through one loop before accepting a transcription.');
     this.finish();
     const before = this.project();
-    const after = compositionVariation(before, this.clip!, this.begin, this.end, this.destination!, this.source, proposal, () => crypto.randomUUID());
-    this.engine.endMidiSection(); await this.commit(after); this.undo = { before, after: this.project() };
+    const after = sectionVariation(before, this.clip!, this.begin, this.end, this.destination!, this.source, proposal, () => crypto.randomUUID());
+    this.engine.endMidiSection(); this.saving = true; this.status('Saving variation…');
+    this.owner!.lockEditing(true);
+    try { await this.commit(after); } finally { this.saving = false; this.owner!.lockEditing(false); }
+    this.undo = { before, after: this.project() };
     this.takes = []; this.clearRecovery(); this.destination = undefined; this.owner?.disarm(); this.range.hidden = false;
     this.root.querySelector<HTMLButtonElement>('[data-midi-undo]')!.hidden = false; this.paint(); this.status('Accepted into the selected timeline section · other clips unchanged');
   }
-  close() { this.finish(); this.engine.endMidiSection(); this.owner?.disarm(); this.owner = undefined; this.destination = undefined; this.clip = undefined; this.root.hidden = true; this.range.hidden = false; this.renderRange(); }
+  close() { this.finish(); this.engine.endMidiSection(); this.owner?.setPending(); this.owner?.disarm(); this.owner = undefined; this.destination = undefined; this.clip = undefined; this.root.hidden = true; this.range.hidden = false; this.renderRange(); }
   private clearRecovery() { try { localStorage.removeItem(this.recoveryKey || `studio.composition-midi:${this.session()}`); } catch { /* retained in memory */ } }
   private persist() {
     if (!this.pending || !this.destination) return;

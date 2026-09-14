@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { parser } from '@lezer/javascript';
 
-export type Destination = { tabId: string; from: number; to: number; original: string; soundCode: string; valid: boolean };
+export type Destination = { tabId: string; from: number; to: number; original: string; soundCode: string; valid: boolean; append?: boolean };
 /** Resolve a complete note expression, including selection of its mini-notation string. */
 export function destinationFor(code: string, tabId: string, from: number, to: number): Destination {
   const tree = parser.parse(code);
@@ -65,7 +65,7 @@ export function transcribe(notes: CapturedNote[], length: number, grid: number, 
 }
 
 export const PendingMidiSchema = z.object({
-  destination: z.object({ tabId: z.string(), from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), original: z.string().max(200000), soundCode: z.string().max(200000), valid: z.boolean() }),
+  destination: z.object({ tabId: z.string(), from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), original: z.string().max(200000), soundCode: z.string().max(200000), valid: z.boolean(), append: z.boolean().optional() }),
   notes: z.array(z.object({ key: z.string(), pitch: z.number().int().min(0).max(127), velocity: z.number().int().min(1).max(127), start: z.number().min(0).max(4096), end: z.number().min(0).max(4096).optional() })).min(1).max(10000),
   length: z.number().positive().max(4096), grid: z.number().min(0).max(1), cps: z.number().positive(), fallback: z.boolean().default(false),
 });

@@ -1,3 +1,4 @@
+import type { CaptureView } from '../shared/capture-state';
 import type { LiveInput } from './live-input';
 import type { AudioInput } from '../shared/model';
 import { saveRecording } from './storage/workspace';
@@ -27,6 +28,13 @@ export class RecordingPanel {
   private busy = false;
   private recoveryPrefix = '';
   private chunkIndex = 0;
+  destination?: { tabId: string; clipId: string; trackId: string };
+  private phase?: CaptureView['state'];
+  private kept?: { key: string; asset: Asset };
+  get captureView(): CaptureView | undefined {
+    if (!this.phase || !this.destination) return;
+    return { ...this.destination, state: this.phase, kind: 'new-pattern', start: this.offset, end: this.offset + (this.capture?.duration ?? 0) * this.bpm / 240, label: `${this.el<HTMLInputElement>('name').value} · ${this.phase === 'review' ? 'Ready to review' : this.phase}` };
+  }
   private pinnedTab = '';
   private recovering = false;
   constructor(private engine: Engine, private prepareInternal: () => Promise<void>, private saved: (asset: Asset) => Promise<void>, private report: (message: string) => void, private session: () => string, private stopInternal: () => void, private live?: LiveInput, private inputConfig?: () => AudioInput, private acceptTake?: (asset: Asset) => Promise<void>) {
@@ -41,12 +49,12 @@ export class RecordingPanel {
     this.el<HTMLSelectElement>('channel').onchange = () => { this.report('Set up source again to use the selected channel.'); };
   }
   private el<T extends HTMLElement = HTMLElement>(name: string) { return this.root.querySelector<T>(`[data-${name}]`)!; }
-  private button(name: string, action: () => unknown | Promise<unknown>) { this.el<HTMLButtonElement>(name).onclick = async () => { if (this.busy) return; this.busy = true; try { await action(); } catch (error) { this.report((error as Error).message); this.status((error as Error).message); } finally { this.busy = false; } }; }
+  private button(name: string, action: () => unknown | Promise<unknown>) { this.el<HTMLButtonElement>(name).onclick = async () => { if (this.busy && !(this.phase === 'preparing' && ['stop', 'discard'].includes(name))) return; this.busy = true; try { await action(); } catch (error) { if (name === 'save' || name === 'record') this.phase = 'failed'; this.report((error as Error).message); this.status((error as Error).message); } finally { this.busy = false; } }; }
   private status(text: string) { this.el('status').textContent = text; }
-  get pending() { return !!(this.capture?.frames || this.capture?.recording); }
+  get pending() { return this.phase === 'preparing' || this.phase === 'saving' || !!(this.capture?.frames || this.capture?.recording); }
   async open(source: 'internal' | 'external') { if (this.pending && source !== this.source) throw new Error('Save or discard the current audio take before switching sources.'); this.pinnedTab = this.engine.destinationTabId; this.source = source; this.el<HTMLSelectElement>('source').value = source; this.el('source').closest('label')!.hidden = true; for (const field of ['device', 'channel', 'monitor', 'latency', 'mode']) this.el(field).closest('label')!.hidden = true; this.el<HTMLInputElement>('jam-end').value = String(this.engine.arrangementLength || 4); this.root.hidden = false; }
   private async setup() {
-    if (this.pending) throw new Error('Save or discard the current take before changing its source.');
+    if (this.capture?.frames || this.capture?.recording) throw new Error('Save or discard the current take before changing its source.');
     this.cleanup();
     if (this.source === 'internal') {
       this.takeInput = undefined; this.mode = 'wet'; this.effectsSnapshot = 'AUDIO'; await this.prepareInternal(); this.context = this.engine.audioContext; this.input = this.engine.performanceAudio.output;
@@ -68,33 +76,38 @@ export class RecordingPanel {
   }
   private async start() {
     if (this.pending) throw new Error('Save or discard the pending take before recording again.');
+    this.phase = 'preparing';
     if (!this.capture || this.source === 'external' && this.mode !== this.el<HTMLSelectElement>('mode').value) await this.setup();
     if (this.takeInput) this.effectsSnapshot = this.takeInput.appliedCode;
     this.incomplete = false; this.bpm = this.engine.started ? this.engine.repl.scheduler.cps * 240 : this.engine.tempo;
-    const countin = this.el<HTMLInputElement>('countin').checked ? 240 / this.bpm : 0;
+    if (!await this.engine.countIn.wait(this.bpm)) return;
+    const countin = 0;
     this.offset = (this.engine.started ? this.engine.timelinePosition : this.engine.transport.position) + countin * this.bpm / 240;
     const cycles = Number(this.el<HTMLInputElement>('cycles').value);
     if (!Number.isFinite(cycles) || cycles < 0 || cycles > 4096) throw new Error('Choose a valid capture length.');
     this.recoveryPrefix = `audio:${this.session()}:`; this.chunkIndex = 0;
     await removePending(this.recoveryPrefix);
-    await writePending(`${this.recoveryPrefix}meta`, { source: this.source, bpm: this.bpm, offset: this.offset, rate: this.context!.sampleRate, tabId: this.pinnedTab, mode: this.mode, effectsCode: this.effectsSnapshot, input: this.takeInput });
+    await writePending(`${this.recoveryPrefix}meta`, { source: this.source, bpm: this.bpm, offset: this.offset, rate: this.context!.sampleRate, tabId: this.pinnedTab, destination: this.destination, mode: this.mode, effectsCode: this.effectsSnapshot, input: this.takeInput });
     const at = this.context!.currentTime + countin + .025; this.offset += .025 * this.bpm / 240;
     const duration = cycles ? cycles * 240 / this.bpm : 900;
+    this.phase = 'recording';
     this.capture!.start(at, this.recoveryPrefix, duration); this.dryCapture?.start(at, this.recoveryPrefix + 'dry:', duration);
     this.timer = setTimeout(() => void this.stop(), Math.min(900, (cycles ? cycles * 240 / this.bpm : 900) + countin) * 1000);
     this.status(countin ? 'Count-in, then recording · Audio take' : 'Recording · Audio take');
   }
   async stop(global = false) {
+    if (this.phase === 'preparing') { this.engine.countIn.cancel(); this.phase = undefined; this.cleanup(); return; }
     if (!this.capture?.recording && !this.capture?.frames) return;
     clearTimeout(this.timer); if (this.source === 'internal') this.stopInternal();
-    if (this.source === 'internal' && !global) { this.status('Finishing effect tail…'); this.tailTimer = setTimeout(() => void this.finish(), 3000); }
+    if (this.source === 'internal' && !global) { this.phase = 'finishing'; this.status('Finishing effect tail…'); this.tailTimer = setTimeout(() => void this.finish(), 3000); }
     else await this.finish();
   }
   private async finish() {
+    this.phase = 'finishing';
     clearTimeout(this.timer); clearTimeout(this.tailTimer);
     if (this.capture?.recording && this.source === 'internal') this.stopInternal();
     await Promise.all([this.capture?.stop(), this.dryCapture?.stop()]); this.incomplete ||= !!this.capture?.failed || !!this.dryCapture?.failed;
-    if (this.capture?.frames) { this.el<HTMLInputElement>('trim-end').value = this.capture.duration.toFixed(3); await this.preview(); this.status(this.incomplete ? 'Incomplete take retained for review' : 'Take retained for review'); }
+    if (this.capture?.frames) { this.el<HTMLInputElement>('trim-end').value = this.capture.duration.toFixed(3); await this.preview(); this.phase = 'review'; this.status(this.incomplete ? 'Incomplete take retained for review' : 'Take retained for review'); }
   }
   private async preview() {
     if (!this.capture?.frames || this.capture.recording) throw new Error('Stop a nonempty recording before previewing.');
@@ -104,21 +117,23 @@ export class RecordingPanel {
     this.objectURL = URL.createObjectURL(new Blob([await this.capture.wav(start, end)], { type: 'audio/wav' })); this.el<HTMLAudioElement>('preview').src = this.objectURL;
   }
   private async save() {
-    await this.preview();
+    await this.preview(); this.phase = 'saving';
     const start = Number(this.el<HTMLInputElement>('trim-start').value), end = Math.min(Number(this.el<HTMLInputElement>('trim-end').value), this.capture!.duration);
-    const metadata = { label: this.el<HTMLInputElement>('name').value, recording: { source: this.source, bpm: this.bpm, offsetCycles: this.offset + start * this.bpm / 240, duration: this.capture!.duration, trimStart: start, trimEnd: end, incomplete: this.incomplete, inputId: this.takeInput?.id, trackId: this.takeInput?.trackId, mode: this.mode, effectsCode: this.effectsSnapshot, rate: this.context!.sampleRate, frames: Math.floor((end - start) * this.context!.sampleRate), latencySeconds: Number(this.el<HTMLInputElement>('latency').value) } };
+    const metadata = { label: this.el<HTMLInputElement>('name').value, recording: { source: this.source, bpm: this.bpm, offsetCycles: this.offset + start * this.bpm / 240, duration: this.capture!.duration, trimStart: start, trimEnd: end, incomplete: this.incomplete, inputId: this.takeInput?.id, trackId: this.destination?.trackId ?? this.takeInput?.trackId, mode: this.mode, effectsCode: this.effectsSnapshot, rate: this.context!.sampleRate, frames: Math.floor((end - start) * this.context!.sampleRate), latencySeconds: Number(this.el<HTMLInputElement>('latency').value) } };
     const dry = this.dryCapture ? await saveRecording({ ...metadata, label: metadata.label + ' dry', recording: { ...metadata.recording, mode: 'dry' } }, new Blob([await this.dryCapture.wav(start, end)], { type: 'audio/wav' })) : undefined;
     if (dry) await this.saved(dry);
-    const result = await saveRecording({ ...metadata, recording: { ...metadata.recording, dryAssetId: dry?.id } }, new Blob([await this.capture!.wav(start, end)], { type: 'audio/wav' }));
+    const key = JSON.stringify(metadata);
+    const result = this.kept?.key === key ? this.kept.asset : await saveRecording({ ...metadata, recording: { ...metadata.recording, dryAssetId: dry?.id } }, new Blob([await this.capture!.wav(start, end)], { type: 'audio/wav' }));
+    this.kept = { key, asset: result };
     await this.saved(result); if (this.el<HTMLInputElement>('insert').checked) await this.acceptTake?.(result); this.discard(); this.status('Saved to the sound library');
   }
   async restore() {
-    const prefix = `audio:${this.session()}:`; const meta = await readPending<{ source: 'internal' | 'external'; bpm: number; offset: number; rate: number; tabId: string; mode?: 'dry' | 'wet'; effectsCode?: string; input?: AudioInput }>(prefix + 'meta');
+    const prefix = `audio:${this.session()}:`; const meta = await readPending<{ source: 'internal' | 'external'; bpm: number; offset: number; rate: number; tabId: string; destination?: { tabId: string; clipId: string; trackId: string }; mode?: 'dry' | 'wet'; effectsCode?: string; input?: AudioInput }>(prefix + 'meta');
     if (!meta) return; const chunks = await readPendingPrefix<{ left: Float32Array<ArrayBuffer>; right: Float32Array<ArrayBuffer> }>(prefix + 'chunk:'); if (!chunks.length) return;
-    this.source = meta.source; this.bpm = meta.bpm; this.offset = meta.offset; this.pinnedTab = meta.tabId; this.recoveryPrefix = prefix; this.incomplete = true;
+    this.source = meta.source; this.bpm = meta.bpm; this.offset = meta.offset; this.pinnedTab = meta.tabId; this.destination = meta.destination; this.phase = 'review'; this.recoveryPrefix = prefix; this.incomplete = true;
     this.context = new AudioContext({ sampleRate: meta.rate }); this.capture = new AudioTakeCapture(this.context, this.context.createGain(), () => {}); await this.capture.restore(prefix, chunks.filter(c => !(c instanceof Blob))); this.mode = meta.mode ?? 'dry'; this.effectsSnapshot = meta.effectsCode ?? 'AUDIO'; this.takeInput = meta.input; if (this.mode === 'wet') { this.dryCapture = new AudioTakeCapture(this.context, this.context.createGain(), () => {}); await this.dryCapture.restore(prefix + 'dry:'); }
     this.root.hidden = false; this.el<HTMLSelectElement>('source').value = meta.source; this.el<HTMLInputElement>('trim-end').value = this.capture.duration.toFixed(3); await this.preview(); this.status('Recovered audio take · review incomplete capture before saving');
   }
-  discard() { if (this.recoveryPrefix) void removePending(this.recoveryPrefix).catch(() => {}); this.recoveryPrefix = ''; clearTimeout(this.timer); clearTimeout(this.tailTimer); this.cleanup(); this.el<HTMLAudioElement>('preview').removeAttribute('src'); if (this.objectURL) URL.revokeObjectURL(this.objectURL); this.objectURL = undefined; this.el<HTMLInputElement>('trim-start').value = '0'; this.status('Take discarded'); }
+  discard() { if (this.phase === 'preparing') this.engine.countIn.cancel(); this.phase = undefined; this.kept = undefined; if (this.recoveryPrefix) void removePending(this.recoveryPrefix).catch(() => {}); this.recoveryPrefix = ''; clearTimeout(this.timer); clearTimeout(this.tailTimer); this.cleanup(); this.el<HTMLAudioElement>('preview').removeAttribute('src'); if (this.objectURL) URL.revokeObjectURL(this.objectURL); this.objectURL = undefined; this.el<HTMLInputElement>('trim-start').value = '0'; this.status('Take discarded'); }
   private cleanup() { this.dryCapture?.disconnect(); this.dryCapture = undefined; this.capture?.disconnect(); this.capture = undefined; this.stream?.getTracks().forEach(track => track.stop()); this.stream = undefined; this.monitor?.disconnect(); this.monitor = undefined; if (this.context && this.context !== this.engine.audioContext) void this.context.close(); this.context = undefined; }
 }
