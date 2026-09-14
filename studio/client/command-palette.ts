@@ -1,4 +1,4 @@
-export type Command = { name: string; run: () => unknown; hint?: string; color?: string; keywords?: string; disabled?: string };
+export type Command = { name: string; run: () => unknown; hint?: string; color?: string; keywords?: string; disabled?: string; defaultResult?: boolean };
 
 const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
@@ -14,7 +14,7 @@ export class CommandPalette {
   constructor(private commands: () => Command[]) {
     this.dialog.id = 'command-palette'; this.dialog.className = 'command-palette';
     this.dialog.setAttribute('aria-label', 'Command palette');
-    this.dialog.innerHTML = `<div class="palette-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="text" role="combobox" aria-expanded="true" aria-controls="palette-results" aria-autocomplete="list" aria-label="Search commands" placeholder="Search patterns, sounds, actions…" autocomplete="off" spellcheck="false"><button type="button" class="bare palette-escape" data-close aria-label="Close command palette">esc</button></div><div id="palette-results" role="listbox" aria-label="Commands"></div><p class="palette-empty" role="status" hidden></p>`;
+    this.dialog.innerHTML = `<div class="palette-search"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input type="text" role="combobox" aria-expanded="true" aria-controls="palette-results" aria-autocomplete="list" aria-label="Search commands" placeholder="Open closed patterns or find project actions…" autocomplete="off" spellcheck="false"><button type="button" class="bare palette-escape" data-close aria-label="Close command palette">esc</button></div><div id="palette-results" role="listbox" aria-label="Commands"></div><p class="palette-empty" role="status" hidden></p>`;
     this.input = this.dialog.querySelector('input')!;
     this.list = this.dialog.querySelector('[role=listbox]')!;
     this.empty = this.dialog.querySelector('.palette-empty')!;
@@ -49,9 +49,10 @@ export class CommandPalette {
   }
   private render() {
     const query = this.input.value.trim().toLowerCase(), terms = query.split(/\s+/).filter(Boolean);
-    const matches = this.commands().filter(command => { const text = `${command.name} ${command.keywords ?? ''}`.toLowerCase(); return terms.every(term => text.includes(term)); });
+    const matches = this.commands().filter(command => query || command.defaultResult).filter(command => { const text = `${command.name} ${command.keywords ?? ''}`.toLowerCase(); return terms.every(term => text.includes(term)); });
     // Names that start with the query outrank keyword matches; the sort is stable within each rank.
     this.results = matches.sort((a, b) => Number(!a.name.toLowerCase().startsWith(query)) - Number(!b.name.toLowerCase().startsWith(query)));
+    if (!query) { const patterns = this.results.filter(c => c.hint === 'Closed').slice(0, 5); this.results = [...patterns, ...this.results.filter(c => c.hint !== 'Closed')]; }
     this.active = Math.min(this.active, Math.max(0, this.results.length - 1));
     this.list.innerHTML = this.results.map((command, index) => `<div role="option" id="palette-option-${index}" data-index="${index}" aria-selected="false" aria-disabled="${!!command.disabled}"><i class="palette-dot"${command.color ? ` data-color="${escape(command.color)}"` : ''} aria-hidden="true"></i><span class="palette-name">${escape(command.name)}</span><small>${escape(command.disabled || command.hint || '')}</small></div>`).join('');
     this.empty.hidden = this.results.length > 0;

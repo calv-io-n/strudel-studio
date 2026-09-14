@@ -24,3 +24,5 @@ Architecture decision records document intentional changes from the [target desi
 | [0007](0007-browser-only-pages.md) | Accepted | Replace the local server with static hosting, browser storage, Web MIDI, and a small starter collection |
 
 | [0008](0008-browser-audio-pipeline.md) | Accepted | Opt-in catalogue, OPFS audio, track-routed input/takes, and precision-preserving snapshot rendering |
+
+| [0009](0009-launch-timing-and-capture.md) | Accepted | Project clock, source-window trimming, explicit capture destinations and reversible Quick Start opt-out |

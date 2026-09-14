@@ -15,6 +15,7 @@ const browser = await chromium.launch({ executablePath: process.env.STUDIO_CHROM
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   const page = await context.newPage();
+  await page.addInitScript(() => localStorage.setItem('studio.quick-start.opt-out', 'true'));
   await page.goto(baseURL);
   await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
   await page.locator('#add-session').click();

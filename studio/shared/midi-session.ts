@@ -1,3 +1,4 @@
+import { tempoRate } from './tempo';
 import { MidiTake, type Destination, type CapturedNote } from './performance';
 import { ProjectSchema, type Project, type Clip } from './model';
 
@@ -45,12 +46,12 @@ export function sectionVariation(project: Project, clip: Clip, begin: number, en
   const tab = project.tabs.find(t => t.id === clip.tabId);
   if (!tab || tab.code !== source || source.slice(destination.from, destination.to) !== destination.original) throw new Error('The source changed. Keep the take and select its destination again.');
   if (!proposal.trim() || begin < clip.start || end > clip.start + clip.length || end <= begin) throw new Error('Choose a nonempty section inside this clip.');
-  const offset = (clip.sourceOffset ?? 0) + begin - clip.start;
+  const offset = (clip.sourceOffset ?? 0) + (begin - clip.start) * tempoRate(tab, project.bpm);
   const variation = { ...tab, id: uuid(), name: `${tab.name} · MIDI`, anchors: [], code: source.slice(0, destination.from) + `(${proposal}).late(${offset})` + source.slice(destination.to) };
   const parts: Clip[] = [];
   if (begin > clip.start) parts.push({ ...clip, id: uuid(), length: begin - clip.start });
   parts.push({ ...clip, tabId: variation.id, start: begin, length: end - begin, sourceOffset: offset });
-  if (end < clip.start + clip.length) parts.push({ ...clip, id: uuid(), start: end, length: clip.start + clip.length - end, sourceOffset: (clip.sourceOffset ?? 0) + end - clip.start });
+  if (end < clip.start + clip.length) parts.push({ ...clip, id: uuid(), start: end, length: clip.start + clip.length - end, sourceOffset: (clip.sourceOffset ?? 0) + (end - clip.start) * tempoRate(tab, project.bpm) });
   return ProjectSchema.parse({ ...project, tabs: [...project.tabs, variation], clips: project.clips.flatMap(c => c.id === clip.id ? parts : [c]) });
 }
 export type StoredTake = { notes: CapturedNote[] };
@@ -61,7 +62,7 @@ export function compositionVariation(project: Project, clip: Clip, begin: number
   const tab = project.tabs.find(t => t.id === clip.tabId);
   if (!tab || tab.code !== source || source.slice(destination.from, destination.to) !== destination.original) throw new Error('The source changed. Select its destination again before accepting.');
   if (!proposal.trim() || begin < 0 || end <= begin) throw new Error('Choose a nonempty loop.');
-  const offset = (clip.sourceOffset ?? 0) + begin - clip.start;
+  const offset = (clip.sourceOffset ?? 0) + (begin - clip.start) * tempoRate(tab, project.bpm);
   const marked = source.slice(0, destination.to) + '.set({studioMidiTarget: true})' + source.slice(destination.to);
   const backing = { ...tab, id: uuid(), name: `${tab.name} · backing`, anchors: [], code: marked + '\nall(p => p.filterValues(v => !v.studioMidiTarget))' };
   const melody = { ...tab, id: uuid(), name: `${tab.name} · MIDI`, anchors: [], code: source.slice(0, destination.from) + `(${proposal}).late(${offset}).set({studioMidiTarget: true})` + source.slice(destination.to) + `\nall(p => p.filterValues(v => v.studioMidiTarget).early(${offset}))` };

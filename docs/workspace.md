@@ -7,36 +7,38 @@ Studio saves projects and sounds in this browser. See [setup and migration](setu
 - **Top bar:** the session picker and **+** to add a session, the project name, and the transport. The transport has a **Tab | Composition** target switch, **Play**, **Stop** and **● Record**. After that come **Search** (Ctrl+K, or Cmd+K on macOS) and the moon/sun appearance toggle.
 - **Editor:** the rest of the page. When a pattern has typed edits that haven't been applied, an **Unapplied edits · Apply** pill floats in the lower right.
 - **Bottom bar:** the pattern tabs, with **+** for a new pattern, and the **Input** and **MIDI** tabs with their activity meters. It also shows playback status and save state with **Save**, and has a **Composition** toggle that opens the timeline drawer.
-- **Command palette:** press Ctrl+K anywhere, or click **Search**. Most actions live here: go to a pattern, rename, recolor, duplicate, close or delete it, import or export pattern files, open the Sample Catalogue, import samples, export audio, back up and restore projects, manage sessions, reopen the quick start, and open settings sheets. Type to filter, use the arrow keys to choose, press Enter to run, and press Escape to close.
-- **Settings sheets:** **MIDI**, **Audio input**, **Record**, **Play MIDI** and **Export** open as a sheet on the right. Press Escape or click outside the sheet to return to the editor.
+- **Command palette:** press Ctrl+K anywhere, or click **Search**. Search opens closed patterns, imports or exports pattern files, opens the Sample Catalogue, exports audio, backs up and restores projects, manages session copies, and reopens the quick start and MIDI connection settings. Open patterns stay in the tab strip; their actions are in the tab menu. Type to filter, use the arrow keys to choose, press Enter to run, and press Escape to close.
+- **Settings sheets:** **MIDI**, **Audio input**, **Record**, **Record notes** and **Export** open as a sheet on the right. Press Escape or click outside the sheet to return to the editor.
 - **Appearance:** light is the default. The choice applies to the whole workspace and editor and is remembered in this browser.
-- **Quick start:** the guide opens on the first visit in a browser. Reopen it any time with **Quick start guide** in the command palette.
+- **Quick start:** the guide opens on each page load until you check **Don’t show this again**. Closing it does not opt out. Reopen it with **Quick start guide** in Search; uncheck the preference to restore automatic opening.
 
 ## Patterns and playback
 
-- Write in named pattern tabs. **+** asks for a name and one of eight colors. Right-click a tab for Color, Rename, Duplicate, Add to composition, Close or Delete; the command palette offers the same actions for the open pattern.
-- Choose **Tab** or **Composition** in the top bar, then press **Play**. Stop silences playback, previews and held notes.
-- Typed code changes wait for **Apply** (Ctrl+Enter). MIDI and inline sliders affect the sound immediately. Code-defined tempo changes take effect on the next Play.
+- Write in named pattern tabs. **+** asks for a name and one of eight colors. Right-click a tab for Color, Rename, Duplicate, Pattern tempo, Add to composition, Close or Delete. Double-click a tab or focus it and press F2 to rename.
+- Choose **Tab** or **Composition** in the top bar, then press **Play**. The metronome icon beside Record enables a four-beat count-in: muted means off, red means enabled. It counts 4–3–2–1 with audible clicks at project BPM before playback or recording. Stop cancels the countdown; the preference is remembered in this browser. Stop silences playback, previews and held notes.
+- Typed code changes wait for **Apply** (Ctrl+Enter). MIDI and inline sliders affect the sound immediately. The top-bar BPM is the project clock. Change it while stopped; every pattern’s protected tempo header updates without replacing its body. Old standalone tempo setters are preserved as comments. Embedded setters are marked and cannot change the clock.
 
 ## Composition
 
-Open the drawer with **Composition** in the bottom bar. Drag a pattern tab onto a track, or right-click the tab and choose **Add to composition**. New clips are four cycles long. Tab colors carry through to every clip made from that pattern, including duplicates.
+Open the drawer with **Composition** in the bottom bar. Drag a pattern tab onto a track, or right-click the tab and choose **Add to composition**. New clips are 16 beats (four cycles) long. Tab colors carry through to every clip made from that pattern, including duplicates.
 
 Projects start with two tracks. **Add track** adds a new track and selects it, so later additions land there, up to 16 tracks. The track **•••** menu renames or removes a track; removing a track that has clips asks for confirmation first. A project always keeps at least one track. Track headers stay pinned to the left edge when you scroll sideways, and the track area scrolls vertically.
 
-Choose **1 cycle**, **½ cycle** or **¼ cycle** snapping.
+Choose **4 beats**, **2 beats** or **1 beat** snapping. One cycle remains four beats in Strudel code.
 - **Dragging a tab** opens Composition and shows a colored label that follows the pointer. The destination track highlights when you can drop there.
 - **Moving or resizing a clip** shows a preview, and edges snap to nearby clips. Overlapping placements are rejected. Clips keep your original grab offset while moving. Escape cancels any drag.
-- **From the keyboard:** focus a clip, then use Left/Right to move it by the grid, Up/Down to change tracks, and Shift+Left/Right to resize. Click a clip to edit its numbers in quarter-cycle steps.
+- **From the keyboard:** focus a clip, then use Left/Right to move it by the grid, Up/Down to change tracks, and Shift+Left/Right to trim the right edge and Alt+Left/Right to trim the left edge. Both edges also have drag handles. Click a clip to edit its beat position and duration; position 1 is the beginning of the song. Advanced source offset remains in source cycles.
 - **Changing the grid** leaves existing timing intact.
 
-**Looping:** while playback is stopped, drag across the ruler to select a range. The drawer then shows **Looping cycles…**, and playback repeats that range. **Clear selection** turns the loop off and resets the range to the whole song. Clicking the ruler without dragging moves the playhead. The range handles and the playhead can also be moved with the arrow keys. **Return to range start** and **Loop the selected range** are in the command palette.
+**Looping:** while playback is stopped, drag across the ruler to select a range. The drawer then shows **Looping beats…**, and playback repeats that range. **Clear selection** turns the loop off and resets the range to the whole song. Clicking the ruler without dragging moves the playhead. The range handles and the playhead can also be moved with the arrow keys. **Return to range start** and **Loop the selected range** are in the command palette.
 
 **Mute:** use a track's **Mute** button or a clip's right-click **Mute/Unmute** action. Track mute silences the track's clips without changing their own mute settings. During composition playback, changes take effect at the next safe cycle boundary shown in the toolbar, and notes or effect tails that are already sounding can finish. Mutes never apply unfinished code edits, affect tab playback, or shorten the arrangement. Stop clears pending changes; the next Play uses the saved settings.
 
 **Solo:** isolates one track immediately while stopped, or at the next safe cycle boundary during playback. Click another track's Solo to switch; click the active Solo again to restore the previous mix. Solo respects both track mutes and clip mutes, so unmute a soloed track to hear it. Solo is saved with the session, included in WAV exports, and cleared if the soloed track is removed.
 
-Structural edits require stopped playback. Each clip plays its source pattern from cycle zero. All tracks share the composition tempo of four beats per cycle, and playback ends at the last clip, including muted clips. Right-click a clip for Edit, Duplicate, Open source pattern and Remove.
+Structural edits require stopped playback. A new clip begins at source cycle zero. Moving preserves its source offset; trimming the left edge advances its source offset while keeping the right edge fixed. Resizing changes the source window, including repeating or evolving material. All tracks share the project clock of four beats per cycle, and playback ends at the last clip, including muted clips. Right-click a clip for Edit, Duplicate, Open source pattern and Remove.
+
+**Pattern tempo:** a tab’s **Pattern tempo…** menu accepts a BPM or `project` to inherit. An override belongs to the source pattern and affects every placement, tab playback and rendering. Duplicate a pattern for an independent rate. An 84 BPM pattern in a 168 BPM project advances half a source cycle per project cycle. This changes event timing, including sample triggers; it does not stretch recorded audio or change a sample’s pitch. Recorded-take patterns retain their natural speed and cannot have overrides.
 
 ## MIDI
 
@@ -48,11 +50,11 @@ Open **MIDI & on-screen controller** from the command palette to connect externa
 - Your input selection doesn't change when you switch projects. Selected devices reconnect when you replug them, and reloading resumes them when browser permission was already granted.
 - Browsers without Web MIDI can still use the on-screen controller.
 
-The same sheet contains the on-screen controller: browser knobs, sliders, pads and keys. Under **Mappings, sound slots & diagnostics** you'll find your mappings, sound slots and a MIDI event monitor. To map a control, select an inline slider in the editor, choose **MIDI Learn**, then move a physical or on-screen control. Unassigned keyboard notes play a simple synth. There is no Python bridge or OS loopback route.
+The same sheet contains the on-screen controller: browser knobs, sliders, pads and keys. Under **Mappings, sound slots & diagnostics** you'll find your mappings, sound slots and a MIDI event monitor. To map a control, click the underlined `slider` function name in the editor, choose **Bind MIDI control**, then move a physical or on-screen control. Unassigned keyboard notes play a simple synth. There is no Python bridge or OS loopback route.
 
 ## Sounds
 
-The bundled collection contains six original CC0 drum sounds. Add more through **Import samples from GitHub or files…** in the command palette, using public GitHub links or file uploads.
+The bundled collection contains six original CC0 drum sounds. Add more through **Add sounds** in the Sample Catalogue, using public GitHub links or file uploads.
 
 **Open Sample Catalogue** in the command palette opens the sound library as a sheet; clicking a sound name in your code opens it too. Each sound row has these actions:
 - **Insert**, or **Swap** when you opened the library from a sound name. Insert adds the new phrase on its own line after the statement at the caret, so it never splits an expression. Inserting doesn't start playback or apply a running draft.
@@ -83,14 +85,14 @@ Imported and recorded sounds are stored as browser-local audio files. AI generat
 - effects presets
 - **Test vocal effects**, which applies the current chain to a recorded take without changing it
 
-**MIDI** capture turns what you play into Strudel code:
-1. Click a `note(…)` phrase in a pattern, then choose **Play MIDI** from the record bar or the phrase's menu.
-2. The **Play MIDI** sheet opens. If the pattern is on the composition, each loop of the selected range becomes a take. Otherwise, a single phrase is captured.
-3. **Preview** a take, compare **Original** with **Proposed**, and choose **Notes** (snapped to the beat) or **timeCat** (played timing). **Keep take** writes the result into the composition as editable code; **Discard** leaves the code unchanged.
+**MIDI** has separate audition and capture actions:
+1. Click the underlined `note` function name (or focus it and press Enter) to inspect its source, **Test MIDI**, or **Record notes**. Opening the menu does not start audio or recording. **Test MIDI** auditions without creating a take.
+2. **Record notes** explicitly chooses **Update pattern phrase** (affects every use of that source) or **Create variation for this clip** (choose its placement). The destination stays fixed when switching tabs. With no phrase selected, a new phrase can be appended without replacing existing code.
+3. Choose whether to play composition accompaniment. Recording alone does not implicitly enable it. Record, finish, compare the original and proposal, then accept or discard. Pattern acceptance replaces that phrase; clip acceptance creates a separate pattern and changes only the chosen clip window.
 
-**Jam with composition** repeats the displayed range while temporarily leaving out the destination tab. **Record highlighted sound** captures the audio actually played, including its effects.
+Gray code and timeline placeholders indicate preparing, recording, finishing, review and saving. They are temporary UI, never saved code. Existing phrases remain highlighted while a take is pending. **Record highlighted sound** captures the played audio, including effects, into a new audio pattern on the destination track shown before recording. Failed saves retain work for retry; discard removes pending feedback.
 
-MIDI takes, import reviews and interrupted audio recordings can be recovered in the browser. Recovered work stays stopped and needs explicit review; recovered MIDI takes reopen the Play MIDI sheet. Browser storage limits can prevent recovery, and Studio reports when that happens.
+MIDI takes, import reviews and interrupted audio recordings can be recovered in the browser. Recovered work stays stopped and needs explicit review; recovered MIDI takes reopen the Record notes sheet. Browser storage limits can prevent recovery, and Studio reports when that happens.
 
 ## Projects
 
@@ -100,7 +102,7 @@ Use **+** beside the session picker to create a named session. Press **Ctrl+S** 
 - **What's saved:** every tab, clip, mapping, slot and controller value.
 - **Session commands:** the command palette has **Save session as copy**, **Reload saved session** and **Delete session…**.
 
-Older single-pattern and two-lane projects migrate to format v5 when opened. Their code and MIDI mappings are preserved, and the stored records are updated on the next save. Closing a tab hides it from the tab strip; deleting a pattern removes its code, clips and mappings after confirmation.
+Older single-pattern and two-lane projects migrate to format v7 when opened. Their code and MIDI mappings are preserved, and the stored records are updated on the next save. Closing a tab hides it from the tab strip; deleting a pattern removes its code, clips and mappings after confirmation.
 
 ## Audio export
 
@@ -112,7 +114,7 @@ Run **Export full song render…** from the command palette, choose **Full compo
 
 ## Import samples and back up projects
 
-Run **Import samples from GitHub or files…** from the command palette, or follow the import link under **Add sounds** in the library. On the import page:
+Open **Sample Catalogue** from Search and follow the import link under **Add sounds**. On the import page:
 - **From GitHub:** paste a link to a public repository, folder or audio file, find samples, select which to download, and import them after review.
 - **From your device:** upload audio files, a folder or a ZIP pack.
 

@@ -1,3 +1,4 @@
+import { tempoRate } from '../shared/tempo';
 import { isClipMuted } from '../shared/mix';
 import * as core from '@strudel/core';
 import * as mini from '@strudel/mini';
@@ -5,7 +6,7 @@ import * as tonal from '@strudel/tonal';
 import * as audio from '@strudel/webaudio';
 import * as draw from '@strudel/draw';
 import { transpiler } from '@strudel/transpiler';
-import { arrangement, type Pattern } from '../shared/arrangement';
+import { ratePattern, arrangement, type Pattern } from '../shared/arrangement';
 import { ProjectSchema, type Asset } from '../shared/model';
 import { slotName } from '../shared/slots';
 import { RenderOptionsSchema, renderMemory, assertRenderBudget } from '../shared/render-options';
@@ -43,7 +44,7 @@ window.addEventListener('message', async event => {
       },
     });
     const compiler = core.repl({ transpiler, getTime: () => 0, beforeEval: async () => {
-      if (target === 'composition') await core.evalScope({ setCpm: () => core.silence, setcpm: () => core.silence, setCps: () => core.silence, setcps: () => core.silence });
+      await core.evalScope({ setCpm: () => core.silence, setcpm: () => core.silence, setCps: () => core.silence, setcps: () => core.silence });
     } });
     const patterns = new Map<string, Pattern>(), clips = project.clips.map(c => ({ ...c, muted: isClipMuted(c, project.tracks, project.soloTrackId) }));
     const ids = target === 'composition' ? [...new Set(clips.filter(c => !c.muted && !c.takeId).map(c => c.tabId))] : [target];
@@ -52,11 +53,11 @@ window.addEventListener('message', async event => {
       const tab = project.tabs.find(tab => tab.id === id)!;
       if (/\b(?:Math\s*\.\s*random|Date|fetch|WebSocket|navigator|MIDI|AUDIO)\b/.test(tab.code.replace(/\/\/[^\n]*/g, ''))) throw new Error(`${tab.name}: capture live/external state before rendering. Nondeterministic JavaScript is unsupported.`);
       send({ type: 'progress', text: `Preparing ${tab.name}…` });
-      compiler.scheduler.setCps(target === 'composition' ? cps : .5);
+      compiler.scheduler.setCps(cps);
       await compiler.evaluate(tab.code.trim() || 'silence', false);
       if (compiler.state.evalError) throw new Error(`${tab.name}: ${compiler.state.evalError.message}`);
       patterns.set(id, compiler.state.pattern);
-      if (target !== 'composition') cps = compiler.scheduler.cps;
+
     }
     const end = target === 'composition' ? Math.max(...clips.map(c => c.start + c.length)) : cycles;
     const seconds = end / cps + options.tail;
@@ -69,7 +70,7 @@ window.addEventListener('message', async event => {
       const snapshot = snapshots.get(clip.takeId!); if (!snapshot) throw new Error(`Take ${clip.takeId} is missing. Restore its backup.`);
       await prepareTake(snapshot.asset, project, offline, snapshot.blob); patterns.set(clip.id, takePattern(clip, snapshot.asset, cps)); takeVoices++;
     }
-    const pattern = target === 'composition' ? arrangement(clips, patterns) : patterns.get(target)!;
+    const pattern = target === 'composition' ? arrangement(clips, patterns, undefined, undefined, new Map(project.tabs.map(t => [t.id, tempoRate(t, project.bpm)]))) : ratePattern(patterns.get(target)!, tempoRate(project.tabs.find(t => t.id === target)!, project.bpm));
     const windows: { value: any; at: number; duration: number }[][] = [];
     const loaded = new Set<string>(); let count = 0;
     // Query exactly once. Playback consumes this frozen event schedule, including random choices.

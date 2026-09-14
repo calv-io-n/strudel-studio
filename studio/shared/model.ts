@@ -77,11 +77,11 @@ export const ProjectV2Schema = LegacyProjectSchema.omit({ code: true, anchors: t
 });
 export const palette = ['blue', 'cyan', 'teal', 'green', 'amber', 'orange', 'rose', 'violet'] as const;
 export const defaultTracks = () => [1, 2].map(n => ({ id: `track-${n}`, name: `Track ${n}`, muted: false }));
-export const TabSchema = OldTabSchema.extend({ color: z.enum(palette), audioAssetId: z.string().uuid().optional() });
+export const TabSchema = OldTabSchema.extend({ color: z.enum(palette), audioAssetId: z.string().uuid().optional(), tempoBpm: z.number().min(20).max(300).optional() });
 export type Tab = z.infer<typeof TabSchema>;
 export const TrackSchema = z.object({ id: tabId, name: z.string().trim().min(1).max(80), muted: z.boolean() });
 const cycle = z.number().min(0).max(4096).multipleOf(.25);
-export const ClipSchema = z.object({ id: tabId, tabId, trackId: tabId, start: cycle, length: cycle.min(.25), sourceOffset: cycle.optional(), takeId: z.string().uuid().optional(), takeLeadSeconds: z.number().nonnegative().optional(), takeOffsetSeconds: z.number().nonnegative().optional(), muted: z.boolean() });
+export const ClipSchema = z.object({ id: tabId, tabId, trackId: tabId, start: cycle, length: cycle.min(.25), sourceOffset: z.number().min(0).max(4096).optional(), takeId: z.string().uuid().optional(), takeLeadSeconds: z.number().nonnegative().optional(), takeOffsetSeconds: z.number().nonnegative().optional(), muted: z.boolean() });
 export type Clip = z.infer<typeof ClipSchema>;
 export const ProjectV3Schema = LegacyProjectSchema.omit({ code: true, anchors: true, version: true }).extend({
   sessionId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/).refine(name => name !== 'recovery').optional(),
@@ -110,7 +110,12 @@ export const ProjectV6Schema = z.object({ ...ProjectV5Schema.shape, version: z.l
   if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
   if (p.audioInput && !p.tracks.some(t => t.id === p.audioInput!.trackId)) ctx.addIssue({ code: 'custom', message: 'Audio input references a missing track' });
 });
-export type Project = z.infer<typeof ProjectV6Schema>;
+export const ProjectV7Schema = z.object({ ...ProjectV6Schema.shape, version: z.literal(7) }).superRefine((p, ctx) => {
+  const result = ProjectV6Schema.safeParse({ ...p, version: 6 });
+  if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+  if (p.tabs.some(t => t.audioAssetId && t.tempoBpm !== undefined)) ctx.addIssue({ code: 'custom', message: 'Recorded audio keeps its natural rate; remove its pattern tempo override.' });
+});
+export type Project = z.infer<typeof ProjectV7Schema>;
 
 const migrateV2 = (p: z.infer<typeof ProjectV2Schema>) => ({ ...p, version: 3 as const, tracks: defaultTracks(), snap: 1 as const,
   tabs: p.tabs.map((t, i) => ({ ...t, color: palette[i % palette.length] })),
@@ -121,11 +126,16 @@ const OlderProjectSchema = z.union([ProjectV3Schema, ProjectV2Schema.transform(m
   bindings: p.bindings.map(b => b.target.kind === 'slider' ? { ...b, target: { ...b.target, tabId: 'pattern-1' } } : b),
 }))]).pipe(ProjectV3Schema);
 const PreviousProjectSchema = z.union([ProjectV5Schema, ProjectV4Schema.transform(p => ({ ...p, version: 5 as const })), OlderProjectSchema.transform(p => ({ ...p, version: 5 as const, assetIds: [] as string[] }))]);
-export const ProjectSchema = z.union([ProjectV6Schema, PreviousProjectSchema.transform(p => ({ ...p, version: 6 as const }))]);
-export const PROJECT_FORMAT = 6;
+export const ProjectSchema = z.union([ProjectV7Schema, z.union([ProjectV6Schema, PreviousProjectSchema]).transform(p => ({ ...p, version: 7 as const }))]).transform((p, ctx) => {
+  const result = ProjectV7Schema.safeParse(p);
+  if (result.success) return result.data;
+  for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+  return z.NEVER;
+});
+export const PROJECT_FORMAT = 7;
 /** Why a project payload was rejected, with field paths from the schema that matches its declared version instead of the union's generic message. */
 export function describeProjectIssues(value: unknown) {
-  const schema = (value as { version?: unknown } | null)?.version === 6 ? ProjectV6Schema : (value as { version?: unknown } | null)?.version === 4 ? ProjectV4Schema : ProjectV5Schema;
+  const schema = (value as { version?: unknown } | null)?.version === 7 ? ProjectV7Schema : (value as { version?: unknown } | null)?.version === 6 ? ProjectV6Schema : (value as { version?: unknown } | null)?.version === 4 ? ProjectV4Schema : ProjectV5Schema;
   const result = schema.safeParse(value);
   if (result.success) return 'Project format rejected';
   const seen = new Set<string>();
@@ -144,7 +154,7 @@ export type Job = { id: string; state: 'running' | 'complete' | 'failed'; asset?
 
 export const defaultCode = `// Select an inline slider, then choose MIDI Learn.\nsetCpm(120/4)\n\n$beat: note("c2*4").s("triangle")\n  .decay(0.12).sustain(0)\n  .gain(slider(0.45, 0, 1, 0.01))\n\n$bass: note("<a2 f2 c3 g2>")\n  .s("sawtooth")\n  .lpf(slider(900, 100, 6000, 10))\n  .gain(0.18)\n\n// Open Sample library to import and insert a sample.\n`;
 export function newProject(): Project {
-  return { version: 6, assetIds: [], tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
+  return { version: 7, assetIds: [], tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
     profiles: [ { id: 'virtual', name: 'Virtual controller', port: 'studio:virtual', enabled: true },
       { id: 'external', name: 'External MIDI input', port: 'studio:input', enabled: true } ],
     slots: [{ name: 'bass', assets: [], active: null }],
