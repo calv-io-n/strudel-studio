@@ -1,3 +1,5 @@
+import { nextMetronomeMode, savedMetronomeMode, type MetronomeMode } from './count-in';
+import { registerOverlay } from './overlay';
 import { paintCaptureFeedback } from './capture-feedback';
 import type { CaptureView } from '../shared/capture-state';
 import { ChangeSet } from '@codemirror/state';
@@ -63,7 +65,7 @@ app.innerHTML = `
     <button id="stop" class="bare" aria-label="Stop playback">Stop</button><button id="composition-stop" class="bare" aria-label="Stop playback" hidden>Stop</button>
     <span class="divider" aria-hidden="true"></span>
     <label class="inline tempo" title="Project tempo · four beats per cycle"><input id="bpm" type="number" min="20" max="300" value="120" aria-label="Tempo in BPM">BPM</label>
-    <button id="count-in" class="bare count-in-toggle" aria-label="Four-beat count-in" aria-pressed="false" title="Four-beat count-in before playback or recording"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h6l5 18H4L8 3Z"/><path d="m11 17 7-12M8 17h7M9 6h4"/><path d="m15 8 3 2"/></svg><span id="count-in-beat" aria-hidden="true"></span></button>
+    <button id="count-in" class="bare count-in-toggle" aria-label="Metronome" aria-pressed="false" title="Four-beat count-in before playback or recording"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h6l5 18H4L8 3Z"/><path d="m11 17 7-12M8 17h7M9 6h4"/><path d="m15 8 3 2"/></svg><span id="count-in-beat" aria-hidden="true"></span><span id="metronome-loop" aria-hidden="true" hidden>↻</span></button>
     <button id="record-toggle" class="record-toggle pill" aria-pressed="false" aria-controls="record-bar">Record</button>
   </div>
   <button id="palette-open" class="bare search-button" aria-haspopup="dialog" aria-controls="command-palette"><span>Search</span><kbd>${mod} K</kbd></button>
@@ -71,13 +73,12 @@ app.innerHTML = `
 </header>
 <div id="record-bar" aria-label="Record" hidden>
   <div class="record-options">
-    <span class="record-label">Capture</span>
     <div class="chips" role="group" aria-label="Capture source"><button data-capture="audio" aria-pressed="true">Audio input</button><button data-capture="midi" aria-pressed="false">MIDI</button></div>
     <label class="inline record-track">Record to <select id="record-track" aria-label="Recording track"></select></label>
-    <span id="midi-record-hint" class="hint" hidden>Click a note(…) phrase in a pattern, then Record notes · notes become Strudel code</span>
+    <span id="midi-record-hint" class="hint" hidden>Choose a note() phrase, then press Record</span>
   </div>
   <div class="record-actions">
-    <button id="audio-record" class="record-button">Record audio input</button><button id="midi-record" class="record-button" hidden>Record notes</button>
+    <button id="audio-record" class="record-button">Record audio input</button>
     <output id="record-status" role="status" aria-live="polite"></output>
     <button id="record-retry" hidden>Retry save</button><button id="record-download" hidden>Download recording</button><button id="record-discard" hidden>Discard recording…</button>
     <button id="record-settings" class="bare">Settings</button><button id="record-close" class="bare icon" aria-label="Close record bar">✕</button>
@@ -85,6 +86,7 @@ app.innerHTML = `
 </div>
 <main class="workspace">
   <section class="editor-panel">
+    <div id="midi-learning" class="alert" hidden><span class="alert-dot" aria-hidden="true"></span><span id="learn-status" role="status"></span><button id="cancel-learn" class="alert-action" hidden>Cancel learning</button></div>
     <div id="input-alert" class="alert" hidden><span class="alert-dot" aria-hidden="true"></span><span id="input-alert-text" role="status"></span><button id="audio-connect" class="alert-action">Connect microphone</button><button id="audio-cancel" class="alert-action" hidden>Cancel</button><button id="midi-enable" class="alert-action" hidden>Enable MIDI</button><button id="input-alert-settings" class="bare">Settings</button></div>
     <div id="audio-toolbar" class="input-bar" hidden>
       <span class="input-source"><span class="live-dot" aria-hidden="true"></span><span id="audio-source-label">Default input</span></span>
@@ -100,7 +102,7 @@ app.innerHTML = `
       <span class="toolbar-end"><button id="instrument-stop" class="bare">Stop instrument</button><button id="instrument-apply" class="primary">Apply instrument</button></span>
       <p class="instrument-status"><span id="midi-assignment" role="status"></span><span id="instrument-state" role="status"></span><span id="preset-learn-status" role="status"></span></p>
     </div>
-    <div id="mapping-context" hidden><button id="mapping-close" class="bare">Close mapping</button><section class="mapping-setup" aria-label="Slider mapping"><label for="slider-target">Inline slider</label><select id="slider-target"><option value="">Select a slider…</option></select><p id="slider-hint" class="hint"></p><button id="learn-slider" class="primary">MIDI Learn</button><button id="cancel-learn" hidden>Cancel learning</button><div id="selected-bindings"></div><p id="learn-status" class="hint" role="status">Select a slider, then move a knob or fader.</p><details><summary>Enter mapping manually</summary><form id="manual-map"><label>Device profile<select id="manual-profile"></select></label><div class="form-row"><label>Channel<input id="manual-channel" type="number" min="1" max="16" value="1" required></label><label>CC number<input id="manual-number" type="number" min="0" max="127" value="20" required></label></div><button type="submit">Bind slider</button></form></details></section></div>
+
     <div id="editor"></div>
     <div id="empty-editor" hidden><p>No open patterns</p><button id="open-patterns">Open a pattern</button></div>
     <div id="apply-pill" role="status" hidden><span class="dirty-dot" aria-hidden="true"></span>Unapplied edits<button id="evaluate" aria-label="Apply changes" hidden>Apply <kbd>${mod} ↵</kbd></button><button id="audio-apply" hidden>Apply effects</button></div>
@@ -165,10 +167,6 @@ app.innerHTML = `
       <section class="sheet-section"><h2>Capture</h2><div class="field-grid"><label>Capture <select id="record-mode"><option value="wet">With vocal effects</option><option value="dry">Dry · editable effects</option></select></label><label>Latency compensation (seconds)<input id="record-latency" type="number" min="-2" max="2" step="0.001" value="0"></label><label class="check"><input id="record-countin" type="checkbox"> Four-beat count-in</label></div></section>
       <p class="hint">Choose a track under <b>Record to</b> in the record bar, then record. Stopping saves the take with your applied effects and drops a clip on that track. <button type="button" class="link" id="record-audio-settings">Audio input settings</button> control the device and monitoring.</p>
     </section>
-    <section data-sheet="transcribe" data-title="Record notes" data-subtitle="Play a part in and transcribe it to Strudel" hidden>
-      <p id="transcribe-empty" class="hint">Click a <code>note(…)</code> phrase in a pattern, then choose <b>Record notes</b>. Choose whether to update the source phrase or create a variation for one clip.</p>
-      <div id="transcribe-content"></div>
-    </section>
     <section data-sheet="export" data-title="Export" data-subtitle="Full song render to stereo WAV" hidden><div id="export-content"></div></section>
   </div>
 </aside>
@@ -194,8 +192,7 @@ app.innerHTML = `
 <input type="file" id="import-file" accept=".strudel,.str,.js" hidden><input id="backup-file" type="file" accept=".zip" hidden>`;
 
 const libraryBackdrop = $('.library-backdrop');
-libraryBackdrop.onclick = () => setSounds(false);
-$('#mapping-close').onclick = () => { $('#mapping-context').hidden = true; };
+registerOverlay($('#sounds-panel'), () => setSounds(false));
 /** Regions a modal sheet or the sound library makes inert; dialogs and notices stay outside them. */
 const workspaceRegions = () => ['.topbar', '#record-bar', '.workspace', '.drawer-bar', '#drawer'].map(selector => $<HTMLElement>(selector));
 const sheets = new Sheets($('#sheet'), $('#sheet-backdrop'), workspaceRegions, id => sheetOpened(id));
@@ -353,7 +350,7 @@ function openMidiInstrument() {
   if (!$('#sounds-panel').hidden) setSounds(false);
   sheets.close(false);
   audioOpen = false; instrumentOpen = true; editor = getEditor(MIDI_EDITOR); selectedSlider = undefined;
-  $('#mapping-context').hidden = true; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
+  learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
   renderTabs(); renderSliders(); renderBindings(); saveWorkspace(); editor.view.requestMeasure(); editor.view.focus();
 }
 
@@ -369,7 +366,7 @@ function getEditor(id = project.activeTabId) {
     instance = new StudioEditor(root, tab, {
       sounds: () => engine.soundEntries, functions: () => id === AUDIO_EDITOR ? ['AUDIO', 'gain', 'pan', 'lpf', 'hpf', 'delay', 'delaytime', 'delayfeedback', 'room', 'slider'] : id === MIDI_EDITOR ? [...engine.functionNames, 'MIDI'] : engine.functionNames,
       change: (live) => { for (const slider of instance?.sliders ?? []) engine.liveEffects.update(slider.id, instance!.values.get(slider.id) ?? slider.value); if (id === MIDI_EDITOR || id === AUDIO_EDITOR) { const config = id === AUDIO_EDITOR ? project.audioInput! : instrumentFor(project); config.code = instance!.code; config.anchors = instance!.anchors; const updates = new Map<string, number>(); for (const [key, version] of instance!.liveVersions) if (version !== liveVersions.get(key)) { liveVersions.set(key, version); updates.set(key, instance!.values.get(key)!); } updateAppliedInstrumentSliders(config, updates); if (id === AUDIO_EDITOR && updates.size) { try { liveInput.apply(config.appliedCode); } catch (error) { notice((error as Error).message, true); } } if (!live) paintMidiAssignment(); } if (!live) { if (id === activeEditorId()) renderSliders(); renderBindings(); renderTransport(); } dirty(live); },
-      select: (sliderId) => { selectedSlider = sliderId; $('#slider-target').value = sliderId; $('#mapping-context').hidden = false; $('#slider-hint').textContent = effectBehavior(instance!.sliders.find(s => s.id === sliderId)?.label ?? ''); renderBindings(); },
+      select: (sliderId) => { selectedSlider = sliderId; renderBindings(); },
       evaluate: () => void guard(() => id === AUDIO_EDITOR ? applyAudioInput() : id === MIDI_EDITOR ? applyMidiInstrument() : engine.started ? engine.apply() : startPlayback())(), stop: () => stopPlayback(),
     });
     editors.set(id, instance);
@@ -443,14 +440,21 @@ function renderRecording() {
   $('#composition-content').classList.toggle('capturing-audio', pending);
   // A pending take keeps the record bar open on the audio controls that can stop or recover it.
   const audio = captureMode === 'audio' || pending, midiArmed = midiComposition.armed || !!performancePanel.take;
-  $('#record-bar').hidden = !recordBarOpen && !pending && recording?.state !== 'failed';
+  $('#record-bar').hidden = !recordBarOpen && !pending && !performancePanel.running && !performancePanel.take?.notes.length && !midiComposition.pending && recording?.state !== 'failed';
   $('#record-toggle').setAttribute('aria-pressed', String(!$('#record-bar').hidden));
   $('#record-toggle').classList.toggle('recording', recording?.state === 'recording');
   document.querySelectorAll<HTMLButtonElement>('[data-capture]').forEach(button => { button.setAttribute('aria-pressed', String((button.dataset.capture === 'audio') === audio)); button.disabled = pending; });
   $('#audio-record').hidden = $('#record-status').hidden = $('.record-track').hidden = !audio;
-  $('#midi-record').hidden = $('#midi-record-hint').hidden = audio;
-  $('#midi-record').textContent = midiArmed ? 'Review recording destination' : 'Record notes';
-  $('#transcribe-empty').hidden = midiArmed;
+  $('#record-bar').dataset.mode = audio ? 'audio' : 'midi';
+  $('#midi-record-hint').hidden = audio;
+  $('#record-settings').hidden = !audio;
+  $('#record-bar .chips').hidden = !audio && midiArmed;
+  $('#record-toggle').textContent = performancePanel.running ? (engine.countIn.remaining ? 'Cancel' : 'Stop') : 'Record';
+  $('#record-toggle').disabled = !audio && !!performancePanel.take?.notes.length && !performancePanel.running;
+  performancePanel.root.hidden = audio || !performancePanel.owner && !performancePanel.take;
+  $('#midi-record-hint').textContent = performancePanel.owner ? `${project.tabs.find(t => t.id === performancePanel.owner?.destination?.tabId)?.name ?? 'Missing pattern'} · ${performancePanel.accompaniment === 'pattern' ? 'With pattern' : 'Solo MIDI'}` : 'Select a note() phrase to record MIDI';
+  $('#record-toggle').classList.toggle('recording', recording?.state === 'recording' || performancePanel.take?.state === 'capturing');
+  document.querySelectorAll<HTMLButtonElement>('[data-capture]').forEach(b => { b.disabled ||= performancePanel.running || !!performancePanel.take?.notes.length || midiComposition.pending; });
 }
 
 const takeView = document.createElement('section'); takeView.id = 'recorded-take-view'; takeView.hidden = true;
@@ -466,7 +470,7 @@ function stopTakePreview() {
 }
 async function previewRecordedAudio(id: string, testEffects = false) {
   if (timelineRecording?.pending) throw new Error('Finish recording before previewing another take.');
-  stopTakePreview(); const epoch = previewEpochAudio;
+  engine.stop(); stopTakePreview(); const epoch = previewEpochAudio;
   const asset = await workspace.asset(id);
   const dryId = testEffects ? asset.recording?.dryAssetId : undefined;
   await engine.unlock(); const context = engine.audioContext;
@@ -489,9 +493,9 @@ function renderTakeView() {
   $('#take-info').textContent = `${(asset?.duration ?? 0).toFixed(1)} seconds · ${asset?.recording?.mode === 'wet' ? 'Recorded with vocal effects' : 'Editable input effects'}${asset?.recording?.incomplete ? ' · Interrupted recording' : ''}`;
   $('#editor').hidden = !takeCodeOpen.has(tab.id);
   $('#take-code').textContent = takeCodeOpen.has(tab.id) ? 'Hide code' : 'Show code'; $('#take-code').setAttribute('aria-expanded', String(takeCodeOpen.has(tab.id)));
-  $('#take-play').onclick = guard(() => previewRecordedAudio(id!));
+  $('#take-play').onclick = guard(() => { $('#play-target').value = 'tab'; return startPlayback(); });
 }
-$('#take-stop').onclick = stopTakePreview;
+$('#take-stop').onclick = stopPlayback;
 $('#take-rename').onclick = guard(async () => { await renameTab(project.activeTabId); renderTakeView(); });
 $('#take-code').onclick = () => { const id = project.activeTabId; if (takeCodeOpen.has(id)) takeCodeOpen.delete(id); else takeCodeOpen.add(id); renderTakeView(); editor.view.requestMeasure(); };
 $('#audio-test-play').onclick = guard(() => { const id = $('#audio-test-take').value; if (!id) throw new Error('Choose a recording to test.'); return previewRecordedAudio(id, true); });
@@ -572,7 +576,7 @@ $('#learn-midi-preset').onclick = guard(async () => {
 });
 $('#cancel-preset-learn').onclick = () => {
   learning = undefined; $('#cancel-preset-learn').hidden = true;
-  $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
+  $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
   $('#preset-learn-status').textContent = 'Mapping cancelled.';
 };
 let pendingMidiPreset: MidiPreset | undefined;
@@ -591,7 +595,7 @@ async function recallMidiPreset(id: string) {
   } finally { recallingMidiPreset = false; pendingMidiPreset = undefined; }
 }
 const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine, () => selectedProjectName || project.name, () => persistSession(), commitPatternTake);
-$('#transcribe-content').append(performancePanel.root);
+$('#record-bar').append(performancePanel.root);
 const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { project.assetIds = [...new Set([...project.assetIds, asset.id])]; assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => performancePanel.stop(), liveInput, ensureAudioInput, async asset => {
   const recording = asset.recording!, destination = recordingPanel.destination;
   if (!destination) throw new Error('Choose a recording destination before placing the retained audio.');
@@ -635,11 +639,12 @@ async function updateStorageUsage() {
   const estimate = await navigator.storage?.estimate();
   $('#storage-usage').textContent = estimate ? `${((estimate.usage ?? 0) / 1e6).toFixed(1)} MB used · ${((estimate.quota ?? 0) / 1e6).toFixed(0)} MB available quota` : 'Storage usage is unavailable in this browser.';
 }
+let focusGitHubImport = false;
 function routePage() {
   const importing = location.hash === '#/samples/import';
   if (importing) { setSounds(false); sheets.close(false); }
   importPage.hidden = !importing; app.hidden = importing;
-  if (importing) { void updateStorageUsage().catch(() => {}); importPage.querySelector('h1')!.setAttribute('tabindex', '-1'); importPage.querySelector('h1')!.focus(); }
+  if (importing) { void updateStorageUsage().catch(() => {}); importPage.querySelector('h1')!.setAttribute('tabindex', '-1'); if (focusGitHubImport) document.querySelector<HTMLElement>('#github-import-column input')?.focus(); else importPage.querySelector('h1')!.focus(); focusGitHubImport = false; }
 }
 window.addEventListener('hashchange', routePage);
 $('#persist-storage').onclick = guard(async () => { const kept = await navigator.storage?.persist?.(); notice(kept ? 'Persistent storage granted. Keep project backups too.' : 'The browser did not grant persistent storage. Project backups are still available.'); await updateStorageUsage(); });
@@ -648,16 +653,23 @@ const recordButton = document.createElement('button'); recordButton.textContent 
 recordButton.onclick = () => { setSounds(false); openRecordBar('audio'); }; $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
 recordSelected.onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish recording first.'); performancePanel.stop(); await persistSession(); recordingPanel.destination = { tabId: crypto.randomUUID(), clipId: crypto.randomUUID(), trackId: $('#record-track').value || project.tracks[0].id }; await recordingPanel.open('internal'); let summary = recordingPanel.root.querySelector<HTMLElement>('[data-audio-destination]'); if (!summary) { summary = document.createElement('p'); summary.dataset.audioDestination = ''; recordingPanel.root.prepend(summary); } summary.textContent = `Recording into: new audio pattern → ${project.tracks.find(t => t.id === recordingPanel.destination!.trackId)?.name}. The highlighted phrase stays unchanged.`; setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; });
-performancePanel.root.querySelector('[data-actions]')!.append(recordSelected);
-$('#midi-record').onclick = guard(() => midiComposition.armed || performancePanel.take ? openSheet('transcribe') : playMidi());
+$('#sound-import').append(recordSelected);
+const recordMidi = guard(async () => {
+  if (performancePanel.running) { performancePanel.globalStop(); renderTransport(); return; }
+  if (!performancePanel.take) throw new Error('Click note() and choose Record MIDI on pattern or Record MIDI solo first.');
+  await performancePanel.start(); renderTransport();
+});
 let selectedMidiClip: string | undefined;
 const midiComposition = new MidiComposition(engine, () => snapshot(), async next => {
   const saved = await commitCaptureProject(next);
   for (const tab of saved.tabs) if (!project.tabs.some(t => t.id === tab.id)) openTabs.add(tab.id);
   project = saved; renderTabs(); renderComposition(); renderTransport(); cacheDraft();
 }, () => selectedProjectName || project.name, message => notice(message, true));
-$('#transcribe-content').prepend(midiComposition.root, midiComposition.range);
-const compositionRecord = document.createElement('button'); compositionRecord.textContent = 'Record phrase audio'; compositionRecord.onclick = guard(async () => { if (midiComposition.pending || midiComposition.running) throw new Error('Keep or discard the current take first.'); midiComposition.close(); performancePanel.arm(); await performancePanel.prepare(); recordSelected.click(); }); midiComposition.root.querySelector('.midi-more')!.append(compositionRecord);
+$('#record-bar').append(midiComposition.root);
+// The existing ruler remains the composition range control.
+// Legacy clip takes remain reviewable in the shared bar; new phrase captures use PerformancePanel.
+midiComposition.root.dataset.legacyReview = 'true';
+
 async function commitCaptureProject(next: Project) {
   clearTimeout(saveTimer); await saveChain.catch(() => {});
   const task = saveSession(normalizeProjectTempo(next), acceptedProject);
@@ -679,35 +691,11 @@ async function commitPatternTake(owner: StudioEditor, code: string) {
   try { const saved = await commitCaptureProject(next); owner.acceptTake(code); project = saved; renderTabs(); renderComposition(); cacheDraft(); }
   finally { owner.lockEditing(false); }
 }
-async function armCompositionMidi() {
-  if (performancePanel.take?.notes.length || recordingPanel.pending) throw new Error('Resolve the pending performance take first.');
-  performancePanel.close();
-  const clips = project.clips.filter(c => c.tabId === project.activeTabId);
-  if (clips.length > 1 && !clips.some(c => c.id === selectedMidiClip)) {
-    const dialog = document.createElement('dialog'); dialog.innerHTML = '<h2>Choose a destination</h2>' + clips.map(c => `<button data-destination-clip="${c.id}">${escape(project.tracks.find(t => t.id === c.trackId)?.name)} · beats ${beatPosition(c.start)}–${beatPosition(c.start + c.length)}</button>`).join('') + '<button data-cancel>Cancel</button>'; document.body.append(dialog);
-    const choice = await new Promise<string | undefined>(resolve => { dialog.onclick = e => { const el = e.target as HTMLElement; if (el.dataset.destinationClip) { selectedMidiClip = el.dataset.destinationClip; dialog.close('chosen'); } else if (el.hasAttribute('data-cancel')) dialog.close(); }; dialog.onclose = () => resolve(dialog.returnValue === 'chosen' ? selectedMidiClip : undefined); dialog.showModal(); }); dialog.remove(); if (!choice) return;
-  }
-  midiComposition.arm(editor, project.activeTabId, selectedMidiClip);
-  setDrawer('composition'); renderTransport(); openSheet('transcribe');
-}
-async function playMidi() {
-  if (!openTabs.has(project.activeTabId)) throw new Error('Open a pattern and select a note phrase first.');
-  if (midiComposition.pending || midiComposition.running || performancePanel.take?.notes.length) throw new Error('Keep or discard the current take first.');
-  const owner = editor, tabId = project.activeTabId;
-  try { owner.arm(tabId); }
-  catch { midiComposition.close(); performancePanel.arm(true, `.s(${JSON.stringify(project.midiSound ?? 'triangle')})`); openSheet('transcribe'); return; }
-  const clips = project.clips.filter(c => c.tabId === tabId);
-  if (!clips.length) { midiComposition.close(); performancePanel.arm(); openSheet('transcribe'); return; }
-  const dialog = document.createElement('dialog'); dialog.setAttribute('aria-label', 'Recording destination');
-  dialog.innerHTML = '<h2>Recording into</h2><p data-source></p><button data-pattern>Update pattern phrase</button><button data-placement>Create variation for this clip</button><p>A pattern edit updates every placement. A clip variation preserves the source and other placements. Accompaniment is a separate choice.</p><button data-cancel>Cancel</button>';
-  dialog.querySelector('[data-source]')!.textContent = `${project.tabs.find(t => t.id === tabId)!.name} → ${owner.destination!.original}`;
-  document.body.append(dialog);
-  const choice = await new Promise<string>(resolve => { dialog.onclick = e => { const target = e.target as HTMLElement; if (target.hasAttribute('data-pattern')) dialog.close('pattern'); if (target.hasAttribute('data-placement')) dialog.close('clip'); if (target.hasAttribute('data-cancel')) dialog.close(''); }; dialog.onclose = () => resolve(dialog.returnValue); dialog.showModal(); });
-  dialog.remove();
-  if (!choice) return;
-  if (owner !== editor || tabId !== project.activeTabId) throw new Error('Select the destination again.');
-  if (choice === 'clip') await armCompositionMidi();
-  else { midiComposition.close(); performancePanel.arm(); openSheet('transcribe'); }
+async function armPatternMidi(accompaniment: 'pattern' | 'solo') {
+  if (midiComposition.pending || midiComposition.running || performancePanel.take?.notes.length || timelineRecording?.pending) throw new Error('Keep or discard the current take first.');
+  midiComposition.close();
+  performancePanel.arm(); performancePanel.accompaniment = accompaniment;
+  $('#play-target').value = 'tab'; openRecordBar('midi'); renderTransport();
 }
 async function testMidi() {
   if (midiComposition.running || midiComposition.pending) throw new Error('Resolve the current take before testing another phrase.');
@@ -737,7 +725,8 @@ function expressionActions(pos: number, x: number, y: number) {
     editor.view.dispatch({ selection: { anchor: pos } });
     contextMenu.open([
       { label: 'Test MIDI', run: guard(testMidi) },
-      { label: 'Record notes', run: guard(playMidi) },
+      { label: 'Record MIDI on pattern', run: guard(() => armPatternMidi('pattern')) },
+      { label: 'Record MIDI solo', run: guard(() => armPatternMidi('solo')) },
       { label: assigned ? 'Source: connected MIDI inputs and on-screen keys' : 'Source: unassigned', disabled: 'MIDI notes only', run: () => {} },
       { label: 'Unbind MIDI notes', disabled: assigned ? undefined : 'No phrase assigned', run: guard(() => { midiComposition.close(); performancePanel.close(); editor.disarm(); }) },
     ], x, y, () => editor.view.contentDOM); return true;
@@ -846,7 +835,13 @@ function renderTransport() {
   paintMidiAssignment();
   const countdown = engine.countIn.remaining;
   $('#count-in').setAttribute('aria-pressed', String(engine.countIn.enabled));
-  $('#count-in').disabled = !!countdown || (engine.busy || !!countdown) || engine.started || !!timelineRecording?.pending || recordingPanel.pending || midiComposition.running || performancePanel.take?.state === 'capturing';
+  const metronomeLabel = engine.countIn.mode === 'off' ? 'Off' : engine.countIn.mode === 'count-in' ? 'Count-in only' : 'Continuous metronome';
+  $('#count-in').title = `${metronomeLabel} · click to cycle Off → Count-in only → Continuous`;
+  $('#count-in').dataset.mode = engine.countIn.mode;
+  $('#count-in').setAttribute('aria-description', metronomeLabel);
+  $('#count-in').disabled = !!countdown || engine.busy;
+  $('#metronome-loop').hidden = engine.countIn.mode !== 'continuous';
+  engine.countIn.sync(engine.started || performancePanel.take?.state === 'capturing' || timelineRecording?.state === 'recording' || recordingPanel.captureView?.state === 'recording', project.bpm);
   $('#count-in-beat').textContent = countdown ? String(countdown) : '';
   const playing = engine.started, target = $('#play-target').value === 'composition' ? 'composition' : 'tab';
   document.querySelectorAll<HTMLButtonElement>('[data-play-target]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.playTarget === target)); button.disabled = playing || (engine.busy || !!countdown) || performancePanel.take?.state === 'capturing' || midiComposition.running || midiComposition.pending; });
@@ -892,20 +887,14 @@ function renderInputAlert() {
   tabs.dataset.audio = !live ? 'off' : timelineRecording?.state === 'recording' ? 'recording' : 'live';
   tabs.dataset.midi = !bridge.ready ? 'off' : midiReady ? 'ready' : 'idle';
 }
-function renderSliders() {
-  $('#slider-target').innerHTML = '<option value="">Select a slider…</option>' + editor.sliders.map((s, i) => `<option value="${s.id}">${i + 1}. ${escape(s.label)} · ${s.min}–${s.max}</option>`).join('');
-  if (selectedSlider && editor.sliders.some((s) => s.id === selectedSlider)) $('#slider-target').value = selectedSlider;
-  else selectedSlider = undefined;
-}
+function renderSliders() { if (!editor.sliders.some(s => s.id === selectedSlider)) selectedSlider = undefined; }
 function renderBindings() {
   for (const [id, owner] of editors) owner.setInputLabels(new Map(project.bindings.flatMap(b => b.target.kind === 'slider' && b.target.tabId === id ? [[b.target.sliderId, `${b.kind.toUpperCase()} ${b.number} · channel ${b.channel}`] as [string, string]] : [])));
   $('#mapping-count').textContent = String(project.bindings.length);
   $('#bindings').innerHTML = project.bindings.length ? project.bindings.map((b) => {
     const missing = b.target.kind === 'slider' && !getEditor(b.target.tabId).sliders.some((s) => s.id === (b.target as { sliderId: string }).sliderId);
     return `<div data-binding="${escape(b.id)}" class="binding ${missing ? 'missing' : ''}"><div><strong>${escape(targetLabel(b.target))}</strong><span>${escape(project.profiles.find((p) => p.id === b.profileId)?.name ?? 'Missing device')} · CH ${b.channel} · ${b.kind.toUpperCase()} ${b.number}${b.pickup ? ' · pickup' : ''}${b.target.kind === 'slider' ? ' · ' + escape(effectBehavior(getEditor(b.target.tabId).sliders.find(s => s.id === (b.target as { sliderId: string }).sliderId)?.label ?? '')) : ''}</span></div><button data-remove-binding="${b.id}" aria-label="Remove binding">×</button></div>`;
-  }).join('') : '<p class="empty small">No mappings yet.<br>Select an inline slider to get started.</p>';
-  const selected = project.bindings.filter(b => b.target.kind === 'slider' && b.target.tabId === activeEditorId() && b.target.sliderId === selectedSlider);
-  $('#selected-bindings').replaceChildren(...selected.map(b => $('#bindings').querySelector(`[data-binding="${CSS.escape(b.id)}"]`)!.cloneNode(true)));
+  }).join('') : '<p class="empty small">No mappings yet.<br>Click slider() and choose Bind MIDI control to get started.</p>';
 
 }
 function renderProfiles() {
@@ -921,7 +910,6 @@ function renderProfiles() {
   if (bridge.ports.includes(available) && !devicePorts.includes(available)) $('#available-ports').value = available;
   $('#available-ports').disabled = !bridge.ready;
   $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value;
-  $('#manual-profile').innerHTML = project.profiles.map(p => `<option value="${p.id}">${escape(p.name)}</option>`).join('');
   renderRoute();
 }
 function renderRoute() {
@@ -989,13 +977,13 @@ function renderAll() { renderTabs(); renderComposition(); renderSliders(); rende
 function beginLearn(target: Target) {
   learning = target;
   $('#learn-status').textContent = target.kind === 'slider' ? 'Listening… move the knob or fader you want to bind.' : 'Listening… press the key or pad you want to bind.';
-  $('#cancel-learn').hidden = false; $('#drawer-learning').hidden = false;
+  $('#midi-learning').hidden = false; $('#cancel-learn').hidden = false; $('#drawer-learning').hidden = false;
 }
 function bind(target: Target, profileId: string, channel: number, kind: 'cc' | 'note', number: number) {
   project.bindings = project.bindings.filter((b) => !(b.profileId === profileId && b.channel === channel && b.kind === kind && b.number === number));
   project.bindings.push({ id: crypto.randomUUID(), profileId, channel, kind, number, target, pickup: kind === 'cc' && profileId !== 'virtual', enabled: true });
   if (target.kind === 'midi-preset') { $('#preset-learn-status').textContent = `Mapped ${targetLabel(target)} to channel ${channel}, key ${number}.`; $('#cancel-preset-learn').hidden = true; }
-  learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = `Connected ${kind.toUpperCase()} ${number} to ${targetLabel(target)}.`;
+  learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = `Connected ${kind.toUpperCase()} ${number} to ${targetLabel(target)}.`;
   pickup.reset(); renderBindings(); dirty();
 }
 function receipt(event: MidiEvent, binding: Binding, status: string, value?: number) {
@@ -1050,7 +1038,6 @@ async function receive(event: MidiEvent) {
     return;
   }
   if (midi.kind === 'note' && libraryMidi && !$('#sounds-panel').hidden) { await libraryNote(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on); return; }
-  if (midi.kind === 'note' && await midiComposition.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
   if (midi.kind === 'note' && await performancePanel.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
   if (learning && ((learning.kind === 'slider' && midi.kind === 'cc') || (learning.kind !== 'slider' && midi.on))) {
     bind(learning, profile.id, midi.channel, midi.kind, midi.number); return;
@@ -1091,14 +1078,8 @@ $('#play').onclick = guard(() => { $('#play-target').value = 'tab'; return start
 $('#evaluate').onclick = guard(() => engine.apply());
 $('#stop').onclick = stopPlayback;
 $('#project-name').oninput = () => dirty();
-$('#slider-target').onchange = () => { selectedSlider = $('#slider-target').value || undefined; if (selectedSlider) editor.select(selectedSlider); };
-$('#learn-slider').onclick = guard(() => { if (!selectedSlider) throw new Error('Select an inline slider first.'); beginLearn({ kind: 'slider', sliderId: selectedSlider, tabId: activeEditorId() }); });
-$('#cancel-learn').onclick = () => { learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = 'Learning cancelled.'; };
+$('#cancel-learn').onclick = () => { learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = 'Learning cancelled.'; };
 $('#drawer-cancel-learn').onclick = () => $('#cancel-learn').click();
-$('#manual-map').onsubmit = (e) => { e.preventDefault(); void guard(() => {
-  if (!selectedSlider) throw new Error('Select an inline slider first.');
-  bind({ kind: 'slider', sliderId: selectedSlider, tabId: activeEditorId() }, $('#manual-profile').value, Number($('#manual-channel').value), 'cc', Number($('#manual-number').value));
-})(); };
 $('#route').onchange = renderRoute;
 $('#reconnect').onclick = $('#midi-enable').onclick = guard(() => browserMidi.enable());
 $('#available-ports').onchange = () => { $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value; };
@@ -1117,7 +1098,7 @@ $('#profiles').onclick = e => {
   })();
 };
 const removeBinding = (e: MouseEvent) => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-remove-binding]')?.dataset.removeBinding; if (id) { project.bindings = project.bindings.filter((b) => b.id !== id); renderBindings(); dirty(); } };
-$('#bindings').onclick = removeBinding; $('#selected-bindings').onclick = removeBinding;
+$('#bindings').onclick = removeBinding;
 $('#refresh-assets').onclick = guard(async () => { assets = await workspace.assets(); await engine.registerAssets(assets); renderAssets(); renderSlots(); });
 async function renameSound(id: string) {
   const asset = assetById(id);
@@ -1194,11 +1175,12 @@ let selectedProjectName = '';
 let refreshingProjects: Promise<void> | undefined;
 function refreshProjects() {
   refreshingProjects ??= (async () => {
-    const names = (await workspace.projects()).filter(name => name !== 'recovery' && name !== '_recovery').sort();
+    const projects = (await workspace.all<Project>('projects')).filter(p => !['recovery', '_recovery'].includes(p.sessionId!)).sort((a, b) => a.sessionId!.localeCompare(b.sessionId!));
+    const names = projects.map(p => p.sessionId!);
     const select = $('#saved-projects') as unknown as HTMLSelectElement;
     const current = select.value || selectedProjectName;
-    if (JSON.stringify(Array.from(select.options).slice(1).map(option => option.value)) !== JSON.stringify(names)) {
-      select.innerHTML = '<option value="">Sessions…</option>' + names.map(name => `<option value="${escape(name)}">${escape(name.replace(/[-_]/g, ' '))}</option>`).join('');
+    if (JSON.stringify(Array.from(select.options).slice(1).map(option => [option.value, option.text])) !== JSON.stringify(projects.map(p => [p.sessionId, p.name]))) {
+      select.innerHTML = '<option value="">Sessions…</option>' + projects.map(p => `<option value="${escape(p.sessionId!)}">${escape(p.name)}</option>`).join('');
     }
     select.value = names.includes(current) ? current : '';
   })().finally(() => { refreshingProjects = undefined; });
@@ -1241,8 +1223,8 @@ async function loadProject(next: Project, markDirty = true, expectedRevision?: n
   acceptedProject = accepted; releaseNotes(); engine.restore(validated);
   editors.forEach(e => e.view.destroy()); editors.clear(); $('#editor').replaceChildren();
   project = validated; selectedProjectName = validated.sessionId || ''; if (selectedProjectName) sessionStorage.setItem('studio.session', selectedProjectName); editor = getEditor(); midiComposition.resetRange(); restoreWorkspace();
-  selectedSlider = undefined; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
-  $('#project-name').value = project.name; $('#mapping-context').hidden = true; pickup.reset(); ensureDeviceProfiles(); renderAll(); if (markDirty) dirty(); return true;
+  selectedSlider = undefined; learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
+  $('#project-name').value = project.name; pickup.reset(); ensureDeviceProfiles(); renderAll(); if (markDirty) dirty(); return true;
 }
 $('#saved-projects').onchange = guard(async () => {
   const name = $('#saved-projects').value; if (!name || name === selectedProjectName) return;
@@ -1263,16 +1245,17 @@ function settleSlots(stopped = !engine.started) {
   if (committed.length) { for (const { name, asset } of committed) { const slot = project.slots.find((s) => s.name === name); if (slot) slot.active = asset; } renderSlots(); dirty(); }
 }
 
-function startPlayback() { return engine.evaluate(true, project.activeTabId, true); }
+function startPlayback() { stopTakePreview(); if (engine.started && engine.diagnostics.target !== project.activeTabId) engine.stop(); return engine.evaluate(true, project.activeTabId, true); }
 function stopPlayback() { engine.countIn.cancel(); stopTakePreview(); if (timelineRecording?.pending) { void timelineRecording.stop(); return; } liveInput.stop(); renderAudioInput(); midiComposition.finish(); document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
-function setCountIn(enabled: boolean) {
-  engine.countIn.enabled = enabled;
+function setCountIn(mode: MetronomeMode) {
+  engine.countIn.mode = mode;
+  const enabled = mode !== 'off';
   document.querySelectorAll<HTMLInputElement>('#record-countin, [data-countin]').forEach(input => { input.checked = enabled; });
-  try { localStorage.setItem('studio.count-in', String(enabled)); } catch { /* still works for this launch */ }
+  try { localStorage.setItem('studio.count-in', mode); } catch { /* still works for this launch */ }
   renderTransport();
 }
-$('#count-in').onclick = () => setCountIn(!engine.countIn.enabled);
-document.addEventListener('change', event => { const input = event.target as HTMLInputElement; if (input.matches('#record-countin, [data-countin]')) setCountIn(input.checked); });
+$('#count-in').onclick = () => setCountIn(nextMetronomeMode(engine.countIn.mode));
+document.addEventListener('change', event => { const input = event.target as HTMLInputElement; if (input.matches('#record-countin, [data-countin]')) setCountIn(input.checked ? 'count-in' : 'off'); });
 $('#play-target').onchange = renderTransport;
 $('#dark-mode').checked = document.documentElement.dataset.appearance === 'dark';
 $('#dark-mode').onchange = () => {
@@ -1302,7 +1285,7 @@ function renderTabs() {
   }).join('');
   editors.forEach((instance, id) => { const root = instance.view.dom.parentElement!; root.hidden = id === AUDIO_EDITOR ? !audioOpen : audioOpen || (id === MIDI_EDITOR ? !instrumentOpen : instrumentOpen || id !== project.activeTabId || !openTabs.has(id)); root.id = id === AUDIO_EDITOR ? 'editor-audio-input' : id === MIDI_EDITOR ? 'editor-midi-instrument' : `editor-${id}`; root.setAttribute('role', 'tabpanel'); root.setAttribute('aria-labelledby', id === AUDIO_EDITOR ? 'tab-audio-input' : id === MIDI_EDITOR ? 'tab-midi-instrument' : `tab-${id}`); });
   $('#editor').hidden = !audioOpen && !instrumentOpen && !visible.length; $('#empty-editor').hidden = audioOpen || instrumentOpen || !!visible.length; $('#instrument-toolbar').hidden = !instrumentOpen;
-  $('#midi-record').disabled = audioOpen || instrumentOpen || !visible.length; $('#play').disabled = audioOpen || instrumentOpen || !visible.length || engine.busy || engine.started;
+  $('#play').disabled = audioOpen || instrumentOpen || !visible.length || engine.busy || engine.started;
   renderInputAlert(); renderTakeView();
 }
 $('#open-patterns').onclick = () => commandPalette.show('Open ');function closeTab(id: string) {
@@ -1315,7 +1298,7 @@ function switchTab(id: string) {
   stopTakePreview();
   instrumentOpen = false; audioOpen = false;
   openTabs.add(id); project.activeTabId = id; editor = getEditor(id); selectedSlider = undefined;
-  $('#mapping-context').hidden = true; learning = undefined; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
+  learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true;
   renderTabs(); renderSliders(); renderBindings(); dirty(); saveWorkspace(); editor.view.requestMeasure();
 }
 function syncProjectTempo() {
@@ -1343,9 +1326,9 @@ function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start
   const tab: Tab = { id: crypto.randomUUID(), name: name.slice(0, 80) || 'Pattern', code, anchors: [], color };
   project.tabs.push(tab); switchTab(tab.id);
 }
-$('#tabs').ondblclick = e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) void guard(() => renameTab(id))(); };
+let lastTabClick: { id: string; at: number } | undefined;
 $('#tabs').addEventListener('keydown', e => { if (e.key !== 'F2') return; const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) { e.preventDefault(); void guard(() => renameTab(id))(); } });
-$('#tabs').onclick = e => { const close = (e.target as HTMLElement).closest<HTMLElement>('[data-close-tab]')?.dataset.closeTab; if (close) { closeTab(close); return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) switchTab(id); };
+$('#tabs').onclick = e => { const close = (e.target as HTMLElement).closest<HTMLElement>('[data-close-tab]')?.dataset.closeTab; if (close) { closeTab(close); return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) { const repeated = e.detail > 0 && lastTabClick?.id === id && performance.now() - lastTabClick.at < 400; lastTabClick = { id, at: performance.now() }; if (repeated) { lastTabClick = undefined; void guard(() => renameTab(id))(); } else if (project.activeTabId !== id || instrumentOpen || audioOpen) switchTab(id); } };
 $('#input-tabs').onclick = e => { if ((e.target as HTMLElement).closest('[data-audio-tab]')) openAudioInput(); if ((e.target as HTMLElement).closest('[data-instrument-tab]')) openMidiInstrument(); };
 $('#tabs').onkeydown = $('#input-tabs').onkeydown = e => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
@@ -1419,7 +1402,6 @@ function setSounds(open: boolean) {
 
   if (open) {
     void catalogue.refresh().catch(error => notice(error.message, true));
-    $('#mapping-context').hidden = true;
     if (!selectedSound) selectedSound = engine.soundEntries.find(s => s.name === 'triangle')?.name;
     renderAssets(); $('#sound-search').focus();
   } else {
@@ -1439,13 +1421,6 @@ $('#sounds-panel').addEventListener('keydown', e => {
   else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
 });
 
-document.addEventListener('keydown', e => {
-  if (e.key !== 'Escape') return;
-  $('#mapping-context').hidden = true;
-  if (document.querySelector('dialog[open]')) return;
-  if (sheets.current) sheets.close(); else if (!$('#sounds-panel').hidden) setSounds(false);
-  if (!$('#new-pattern').hidden) { openNewPattern(false); $('#new-tab').focus(); }
-});
 const catalogue = new Catalogue(async () => { assets = await workspace.assets(); await engine.registerAssets(assets); renderAssets(); await refreshProjects(); });
 $('#library-scroll').prepend(catalogue.root);
 const openExport = setupExport($('#export-content'), snapshot, () => assets);
@@ -1474,7 +1449,7 @@ $('#drawer-resize').onpointerdown = e => {
   handle.onpointerup = handle.onpointercancel = () => { handle.onpointermove = null; setDrawer(drawerView); };
 };
 $('#drawer-resize').onkeydown = e => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); resizeDrawer(drawerHeight + (e.key === 'ArrowUp' ? 20 : -20)); setDrawer(drawerView); } };
-$('#composition-play').onclick = guard(() => { $('#play-target').value = 'composition'; return engine.playComposition(true); });
+$('#composition-play').onclick = guard(() => { $('#play-target').value = 'composition'; stopTakePreview(); if (engine.started && engine.diagnostics.target !== 'composition') engine.stop(); return engine.playComposition(true); });
 $('#composition-stop').onclick = stopPlayback;
 function toggleLoop() { if (engine.started) throw new Error('Stop playback to change the loop.'); engine.transport.loop = !engine.transport.loop; renderTransport(); }
 $('#clear-loop').onclick = guard(() => {
@@ -1696,23 +1671,23 @@ function sheetOpened(id: string) {
 }
 function openRecordBar(mode: 'audio' | 'midi') {
   recordBarOpen = true; if (!timelineRecording?.pending) captureMode = mode;
-  renderRecording(); $(captureMode === 'audio' ? '#audio-record' : '#midi-record').focus();
+  renderRecording(); $(captureMode === 'audio' ? '#audio-record' : '#record-toggle').focus();
 }
-$('#record-toggle').onclick = () => { if ($('#record-bar').hidden) openRecordBar(captureMode); else { recordBarOpen = false; renderRecording(); } };
-$('#record-close').onclick = () => { recordBarOpen = false; renderRecording(); $('#record-toggle').focus(); };
+$('#record-toggle').onclick = () => { if (captureMode === 'midi' && performancePanel.take) { void recordMidi(); return; } if ($('#record-bar').hidden) openRecordBar(captureMode); else { recordBarOpen = false; renderRecording(); } };
+$('#record-close').onclick = guard(() => { if (captureMode === 'midi') { performancePanel.close(); captureMode = 'audio'; } recordBarOpen = false; renderRecording(); $('#record-toggle').focus(); });
 document.querySelectorAll<HTMLElement>('[data-capture]').forEach(button => button.onclick = () => { captureMode = button.dataset.capture === 'midi' ? 'midi' : 'audio'; renderRecording(); });
-$('#record-settings').onclick = () => openSheet(captureMode === 'audio' ? 'record' : 'transcribe');
+$('#record-settings').onclick = () => openSheet('record');
 $('#record-audio-settings').onclick = $('#audio-settings').onclick = () => openSheet('audio');
 $('#input-alert-settings').onclick = () => openSheet(audioOpen ? 'audio' : 'midi');
 $('#audio-edit-effects').onclick = openAudioInput;
 
 let newPatternColor: Tab['color'] = palette[0];
+let newPatternHasDraft = false;
 function paintSwatches() { $('#new-pattern').querySelectorAll<HTMLElement>('[data-color]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.color === newPatternColor))); }
 function openNewPattern(open = true) {
   $('#new-pattern').hidden = !open; $('#new-tab').setAttribute('aria-expanded', String(open));
   if (!open) return;
-  newPatternColor = palette[project.tabs.length % palette.length];
-  $('#new-pattern-name').value = ''; $('#new-pattern-name').setAttribute('placeholder', `Pattern ${project.tabs.length + 1}`);
+  if (!newPatternHasDraft) { newPatternColor = palette[project.tabs.length % palette.length]; $('#new-pattern-name').value = ''; newPatternHasDraft = true; } $('#new-pattern-name').setAttribute('placeholder', `Pattern ${project.tabs.length + 1}`);
   paintSwatches(); $('#new-pattern-name').focus();
 }
 $('#new-tab').onclick = () => openNewPattern($('#new-pattern').hidden === true);
@@ -1721,8 +1696,8 @@ $('#new-pattern').onclick = event => {
   if (color) { newPatternColor = color as Tab['color']; paintSwatches(); }
   if (target.closest('[data-cancel]')) { openNewPattern(false); $('#new-tab').focus(); }
 };
-$('#new-pattern').onsubmit = event => { event.preventDefault(); void guard(() => { createTab($('#new-pattern-name').value.trim() || undefined, undefined, newPatternColor); openNewPattern(false); editor.view.focus(); })(); };
-document.addEventListener('pointerdown', event => { if (!$('#new-pattern').hidden && !(event.target as HTMLElement).closest('.new-pattern')) openNewPattern(false); });
+$('#new-pattern').onsubmit = event => { event.preventDefault(); void guard(() => { createTab($('#new-pattern-name').value.trim() || undefined, undefined, newPatternColor); newPatternHasDraft = false; openNewPattern(false); editor.view.focus(); })(); };
+registerOverlay($('#new-pattern'), () => { openNewPattern(false); $('#new-tab').focus(); });
 
 const commandPalette = new CommandPalette(commands);
 $('#palette-open').onclick = () => commandPalette.show();
@@ -1740,22 +1715,25 @@ function commands(): Command[] {
   const pattern = !audioOpen && !instrumentOpen && tab && openTabs.has(tab.id) ? tab : undefined;
   const expanded = document.body.dataset.expanded;
   return [
-    ...project.tabs.filter(t => !openTabs.has(t.id)).map(t => command(`Open ${t.name}`, () => { switchTab(t.id); editor.view.focus(); }, { color: t.color, hint: 'Closed', keywords: 'pattern file open', defaultResult: true })),
+    ...project.tabs.filter(t => !openTabs.has(t.id)).map(t => command(`Open ${t.name}`, () => { switchTab(t.id); editor.view.focus(); }, { color: t.color, hint: 'Closed', keywords: 'pattern file open', defaultResult: true, pattern: true })),
+    command('Open pattern tab', () => commandPalette.show('', true), { defaultResult: true, priority: 0, keywords: 'closed files tabs' }),
+    command('Import GitHub Samples', () => { focusGitHubImport = true; if (location.hash === '#/samples/import') routePage(); else location.hash = '/samples/import'; }, { defaultResult: true, priority: 7, keywords: 'repository repo pack sounds import' }),
+    command('Audio input', () => openSheet('audio'), { defaultResult: true, priority: 3, keywords: 'microphone device settings', hint: typeof navigator.mediaDevices?.getUserMedia === 'function' ? undefined : 'Microphone requires a supported browser and secure connection' }),
     command('Export pattern code', exportCode, { keywords: 'download strudel file save', disabled: !pattern ? 'Open a pattern first' : undefined }),
-    command('Import .strudel file…', () => $('#import-file').click(), { keywords: 'pattern open load file', defaultResult: true }),
-    command('MIDI & on-screen controller', () => openSheet('midi'), { keywords: 'devices enable keyboard controller mappings learn knobs pads slots', defaultResult: true }),
+    command('Import .strudel file…', () => $('#import-file').click(), { keywords: 'pattern open load file', defaultResult: true, priority: 6 }),
+    command('MIDI & on-screen controller', () => openSheet('midi'), { keywords: 'devices enable keyboard controller mappings learn knobs pads slots', defaultResult: true, priority: 2 }),
     command(expanded === 'editor' ? 'Restore editor and composition' : 'Expand editor', () => toggleExpanded('editor'), { keywords: 'focus full height split' }),
     command(expanded === 'composition' ? 'Restore composition and editor' : 'Expand composition', () => toggleExpanded('composition'), { keywords: 'timeline full height split' }),
     command('Return to range start', () => engine.seek(midiComposition.loopRange.begin), { keywords: 'rewind playhead', disabled: takePending }),
     command(engine.transport.loop ? 'Turn loop off' : 'Loop the selected range', toggleLoop, { keywords: 'repeat arrangement', disabled: stopped || takePending }),
-    command('Open Sample Catalogue', openLibrary, { keywords: 'sounds library samples packs insert' }),
-    command('Export full song render…', () => openSheet('export'), { keywords: 'wav audio bounce download' }),
+    command('Open Sample Catalogue', openLibrary, { keywords: 'sounds library samples packs insert', defaultResult: true, priority: 1 }),
+    command('Export full song render…', () => openSheet('export'), { keywords: 'wav audio bounce download', defaultResult: true, priority: 4 }),
     command('Save session as copy', saveCopy, { keywords: 'project duplicate' }),
     command('Reload saved session', reloadSession, { keywords: 'project revert' }),
     command('Delete session…', deleteSession, { keywords: 'project remove' }),
     command('Download project backup', downloadBackup, { keywords: 'zip export session' }),
     command('Restore project backup…', () => $('#backup-file').click(), { keywords: 'zip import session' }),
-    command('Quick start guide', () => openQuickStart(), { keywords: 'help tutorial how', defaultResult: true }),
+    command('Quick start guide', () => openQuickStart(), { keywords: 'help tutorial how', defaultResult: true, priority: 5 }),
     command('Source code', () => window.open('https://github.com/calv-io-n/strudel', '_blank', 'noopener,noreferrer'), { keywords: 'github repository' }),
     command('License · AGPL-3.0-or-later', () => window.open('https://github.com/calv-io-n/strudel/blob/master/LICENSE', '_blank', 'noopener,noreferrer'), { keywords: 'legal' }),
   ];
@@ -1789,8 +1767,8 @@ async function boot() {
   restoreWorkspace(); renderAll(); await refreshProjects(); await refreshMidiPresets(); await refreshAudioPresets(); connectMidiEvents(); booted = true; routePage();
   // One automatic opening per page load, after recovery has initialized.
   let optedOut = false; try { optedOut = guideOptedOut(localStorage); } catch { /* Show help when storage is unavailable. */ }
-  try { setCountIn(localStorage.getItem('studio.count-in') === 'true'); } catch { /* default off */ }
-  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); if (midiComposition.pending || performancePanel.take?.notes.length) openSheet('transcribe'); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
+  try { setCountIn(savedMetronomeMode(localStorage.getItem('studio.count-in'))); } catch { /* default off */ }
+  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); if (midiComposition.pending || performancePanel.take?.notes.length) openRecordBar('midi'); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
   renderComposition();
   if (!optedOut) openQuickStart();
   setInterval(() => {

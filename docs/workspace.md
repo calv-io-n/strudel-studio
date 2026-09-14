@@ -7,15 +7,15 @@ Studio saves projects and sounds in this browser. See [setup and migration](setu
 - **Top bar:** the session picker and **+** to add a session, the project name, and the transport. The transport has a **Tab | Composition** target switch, **Play**, **Stop** and **● Record**. After that come **Search** (Ctrl+K, or Cmd+K on macOS) and the moon/sun appearance toggle.
 - **Editor:** the rest of the page. When a pattern has typed edits that haven't been applied, an **Unapplied edits · Apply** pill floats in the lower right.
 - **Bottom bar:** the pattern tabs, with **+** for a new pattern, and the **Input** and **MIDI** tabs with their activity meters. It also shows playback status and save state with **Save**, and has a **Composition** toggle that opens the timeline drawer.
-- **Command palette:** press Ctrl+K anywhere, or click **Search**. Search opens closed patterns, imports or exports pattern files, opens the Sample Catalogue, exports audio, backs up and restores projects, manages session copies, and reopens the quick start and MIDI connection settings. Open patterns stay in the tab strip; their actions are in the tab menu. Type to filter, use the arrow keys to choose, press Enter to run, and press Escape to close.
-- **Settings sheets:** **MIDI**, **Audio input**, **Record**, **Record notes** and **Export** open as a sheet on the right. Press Escape or click outside the sheet to return to the editor.
+- **Command palette:** press Ctrl+K anywhere, or click **Search**. The empty search pins Open pattern tab, Open Sample Catalogue, MIDI & on-screen controller, Audio input, Export full song render, Quick start guide, Import .strudel file, and Import GitHub Samples. The GitHub import entry opens the existing repository-import page directly. Other project actions remain searchable. Open pattern tab lists only closed patterns; it explains when all are open. Open patterns stay in the tab strip; their actions are in the tab menu. Type to filter, use the arrow keys to choose, press Enter to run, and press Escape to close.
+- **Settings sheets:** **MIDI**, **Audio input**, **Record** and **Export** open as a sheet on the right. Press Escape or click outside the sheet to return to the editor.
 - **Appearance:** light is the default. The choice applies to the whole workspace and editor and is remembered in this browser.
 - **Quick start:** the guide opens on each page load until you check **Don’t show this again**. Closing it does not opt out. Reopen it with **Quick start guide** in Search; uncheck the preference to restore automatic opening.
 
 ## Patterns and playback
 
 - Write in named pattern tabs. **+** asks for a name and one of eight colors. Right-click a tab for Color, Rename, Duplicate, Pattern tempo, Add to composition, Close or Delete. Double-click a tab or focus it and press F2 to rename.
-- Choose **Tab** or **Composition** in the top bar, then press **Play**. The metronome icon beside Record enables a four-beat count-in: muted means off, red means enabled. It counts 4–3–2–1 with audible clicks at project BPM before playback or recording. Stop cancels the countdown; the preference is remembered in this browser. Stop silences playback, previews and held notes.
+- Choose **Tab** or **Composition** in the top bar, then press **Play**. Click the metronome icon beside Record to cycle Off (gray) → Count-in only (yellow) → Continuous (yellow with a loop badge) → Off. Both enabled modes count 4–3–2–1 before playback or recording; Continuous keeps clicking at project BPM throughout playback and capture. You can change modes during playback. Stop cancels clicks and the countdown; the preference is remembered in this browser. Metronome clicks go to speakers rather than the internal recording bus. Stop silences playback, previews and held notes.
 - Typed code changes wait for **Apply** (Ctrl+Enter). MIDI and inline sliders affect the sound immediately. The top-bar BPM is the project clock. Change it while stopped; every pattern’s protected tempo header updates without replacing its body. Old standalone tempo setters are preserved as comments. Embedded setters are marked and cannot change the clock.
 
 ## Composition
@@ -66,11 +66,13 @@ Assigning a sample to a pad or sound slot is available under the selected sound'
 
 Type inside `s("…")` or `sound("…")` to find sounds by name or label. Use the arrow keys and **Tab** to complete, **Ctrl+Space** to open suggestions, and **Escape** to dismiss them. Typing after a dot suggests effects such as reverb and filters. Saved sound labels can be renamed in the library.
 
+Recorded-take tabs play the recording once at its natural duration. Effects edited through **Show code** apply to tab playback, composition clips and exports; clip timing and trims remain intact. **Play recording** uses the shared transport, so it cannot overlap a separate tab preview.
+
 Imported and recorded sounds are stored as browser-local audio files. AI generation is not part of this version.
 
 ## Recording
 
-**● Record** in the top bar opens the record bar. Choose **Audio input** or **MIDI** under **Capture**.
+**● Record** in the top bar opens the record bar. Choose **Audio input** or **MIDI**.
 
 **Audio input:**
 1. Pick a track under **Record to**, then choose **Record audio input**.
@@ -86,13 +88,13 @@ Imported and recorded sounds are stored as browser-local audio files. AI generat
 - **Test vocal effects**, which applies the current chain to a recorded take without changing it
 
 **MIDI** has separate audition and capture actions:
-1. Click the underlined `note` function name (or focus it and press Enter) to inspect its source, **Test MIDI**, or **Record notes**. Opening the menu does not start audio or recording. **Test MIDI** auditions without creating a take.
-2. **Record notes** explicitly chooses **Update pattern phrase** (affects every use of that source) or **Create variation for this clip** (choose its placement). The destination stays fixed when switching tabs. With no phrase selected, a new phrase can be appended without replacing existing code.
-3. Choose whether to play composition accompaniment. Recording alone does not implicitly enable it. Record, finish, compare the original and proposal, then accept or discard. Pattern acceptance replaces that phrase; clip acceptance creates a separate pattern and changes only the chosen clip window.
+1. Click the outlined `note()` function name (or focus it and press Enter). **Test MIDI** auditions that instrument without creating a take or changing code.
+2. **Record MIDI on pattern** arms the clicked phrase and plays its entire owning tab as accompaniment when recording starts. **Record MIDI solo** arms the same destination without pattern or composition accompaniment. Both open the existing top Record bar in Tab/MIDI mode; neither starts recording yet.
+3. Press the top **Record** button when ready. The enabled metronome counts in first. Incoming notes appear inline beside the highlighted phrase. Press the top **Stop**, preview, then **Keep take** or **Discard** in the same bar. Keep take edits the source and therefore all its placements; switching tabs never redirects the take. There is no MIDI settings form or duplicate count-in: the metronome beside Record handles the lead-in. Stop determines the phrase length, rounded up to a beat. The compact bar shows only the destination/accompaniment and, after Stop, Preview, Keep take and Discard. If recovery loses its destination, Use selected phrase appears to repair it.
 
 Gray code and timeline placeholders indicate preparing, recording, finishing, review and saving. They are temporary UI, never saved code. Existing phrases remain highlighted while a take is pending. **Record highlighted sound** captures the played audio, including effects, into a new audio pattern on the destination track shown before recording. Failed saves retain work for retry; discard removes pending feedback.
 
-MIDI takes, import reviews and interrupted audio recordings can be recovered in the browser. Recovered work stays stopped and needs explicit review; recovered MIDI takes reopen the Record notes sheet. Browser storage limits can prevent recovery, and Studio reports when that happens.
+MIDI takes, import reviews and interrupted audio recordings can be recovered in the browser. Recovered work stays stopped and needs explicit review; recovered MIDI takes reopen the shared Record bar. Older clip-targeted takes remain reviewable there and keep their original clip-variation destination. Browser storage limits can prevent recovery, and Studio reports when that happens.
 
 ## Projects
 
@@ -126,3 +128,13 @@ Imports support WAV, MP3, OGG and FLAC wherever the browser can decode them. The
 - **Restore project backup…** creates a new session and leaves your existing sessions untouched.
 - **Size limit:** backups are limited to 256 MB; if a project exceeds that, export smaller selections.
 - **Missing audio:** sounds whose audio is missing from the library offer **Recover sound** for re-importing the original file.
+
+## Follow-up interaction details
+
+Sliders change values directly with pointer or keyboard. Use the `slider()` function-name menu to bind, inspect, or unbind a MIDI control; the compact listening status has Cancel learning. Opening device settings remains a separate deliberate action.
+
+Outside clicks/taps and Escape dismiss only the top transient surface. Gestures begun inside do not dismiss it on release outside, and modal dismissal does not click through. Uncommitted dialog fields are retained for reopening within the page; dismissal does not save edits or accept/discard takes. The timeline and Record bar are persistent workspace controls. See [overlay audit](overlay-audit.md).
+
+The built-in session is **DEMO: Neon Drive**. Its storage ID remains `Neon-Drive`; the update changes only the default display name, preserving music and user-renamed sessions.
+
+Quick Start pairs focused actual-app videos with its existing illustrations and written instructions. Videos play deliberately, stay muted, and pause on topic changes or closing help. Capture recipes and virtual-MIDI fixture details are in [tutorial media](tutorial-media.md).

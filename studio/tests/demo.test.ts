@@ -30,7 +30,7 @@ test('demo installation is atomic, repeatable, and preserves existing projects a
   const results = await Promise.all([installNeonDrive(directory), installNeonDrive(directory)]);
   assert.equal(results.filter(result => result.created).length, 1);
   const file = results[0].file;
-  assert.equal(ProjectSchema.parse(JSON.parse(await readFile(file, 'utf8'))).name, 'Neon Drive');
+  assert.equal(ProjectSchema.parse(JSON.parse(await readFile(file, 'utf8'))).name, 'DEMO: Neon Drive');
   await writeFile(file, 'user edited project');
   assert.equal((await installNeonDrive(directory)).created, false);
   assert.equal(await readFile(file, 'utf8'), 'user edited project');

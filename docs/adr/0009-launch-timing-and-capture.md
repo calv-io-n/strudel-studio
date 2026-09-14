@@ -20,7 +20,10 @@ For a repeating one-cycle phrase, extending a clip reveals further repetitions. 
 
 Interactive `note` and literal `slider` names have keyboard-focusable cues. Their compact menus inspect existing sources, explicitly start MIDI testing or recording, bind a control, or unbind. Opening a menu has no audio or capture side effect.
 
-Test MIDI creates no take. Record notes explicitly chooses source-phrase replacement or a variation for a selected clip, with accompaniment selected separately. Each take owns stable destination IDs. Pending phrase, appended-code, new-pattern and timeline feedback reflects the real capture lifecycle and never becomes saved placeholder code. Acceptance saves the proposed project before publishing its code or placement changes. Failure keeps the take available; cancel/discard removes its feedback. Restored destinations whose original expression no longer matches require explicit retargeting.
+Follow-up #44 supersedes the initial destination wizard: Test MIDI creates no take. Record MIDI on pattern and Record MIDI solo arm the clicked source phrase in the shared top Record bar. The former accompanies with the entire owning tab, the latter with no pattern/composition; pressing the top Record button starts the shared count-in/capture. Stop, review, Keep take and Discard stay in that bar. The standalone transcription sheet is removed. Legacy clip-targeted recoveries retain their acceptance semantics in a compatibility review section of the bar.
+
+Each take owns stable destination IDs. Pending phrase, appended-code, new-pattern and timeline feedback reflects the real capture lifecycle and never becomes saved placeholder code. Acceptance saves before publishing. Failure retains the take; changed destinations require explicit retargeting. Slider value manipulation never opens mapping UI; the function-name menu owns intentional binding.
+
 
 ## Action inventory
 
@@ -38,7 +41,7 @@ Test MIDI creates no take. Record notes explicitly chooses source-phrase replace
 | Session copy/reload/delete, MIDI connection settings, Quick Start | Search |
 | Expand editor/composition, range start and loop toggle | Search; these have no equivalent labeled workspace action |
 
-Search's initial list is bounded and prioritizes closed patterns. It does not duplicate visible patterns or local tab/clip/settings controls. Palette-only functions remain reachable.
+Follow-up #49 pins essential entry points in Search even when available elsewhere: closed-pattern selection, catalogue, MIDI settings, audio settings, full-song render, Quick Start, Strudel-file import, and the subsequently requested Import GitHub Samples shortcut. Existing defaults follow this stable group; unrelated tab/clip management stays local.
 
 ## Quick Start
 
@@ -46,4 +49,6 @@ The existing guide opens once per page load unless its explicit opt-out is true.
 
 ## Transport count-in
 
-A metronome toggle beside Record provides a shared four-beat lead-in for tab playback, composition playback, microphone/audio takes, and MIDI takes. Off is muted; enabled uses the Record color. Clicks and the 4–3–2–1 display follow the project BPM. Normal playback compiles first, then counts in before starting its scheduler. Recording starts after the count-in, so the lead-in is not saved as an extra cycle. Stop cancels scheduled clicks and the pending start. The browser remembers the preference; existing count-in checkboxes reflect the same setting.
+A metronome toggle beside Record provides a shared four-beat lead-in for tab playback, composition playback, microphone/audio takes, and MIDI takes. Off is neutral gray; enabled is gold in both themes (follow-up #46). Clicks and the 4–3–2–1 display follow the project BPM. Normal playback compiles first, then counts in before starting its scheduler. Recording starts after the count-in, so the lead-in is not saved as an extra cycle. Stop cancels scheduled clicks and the pending start. The browser remembers the preference; existing count-in checkboxes reflect the same setting.
+
+The subsequent three-state request extends the toggle to Off → Count-in only → Continuous → Off. Continuous has a yellow loop badge, shares the four-beat lead-in, and schedules speaker-only clicks while transport or capture is active. Stop silences the clock without resetting its mode. Stored boolean preferences migrate to Off/Count-in only; no project format migration is needed.

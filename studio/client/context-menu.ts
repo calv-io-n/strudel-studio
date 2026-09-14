@@ -1,3 +1,4 @@
+import { registerOverlay } from './overlay';
 export type MenuAction = { label: string; run: () => unknown; disabled?: string };
 
 /** One transient menu; item actions retain their target rather than reading selection. */
@@ -9,9 +10,7 @@ export class ContextMenu {
     this.root.className = 'context-menu'; this.root.hidden = true;
     this.root.setAttribute('role', 'menu'); this.root.setAttribute('aria-label', 'Context actions');
     document.body.append(this.root);
-    document.addEventListener('pointerdown', event => {
-      if (!this.root.contains(event.target as Node)) this.close(false);
-    }, true);
+    registerOverlay(this.root, () => this.close());
     window.addEventListener('resize', () => this.close());
     window.addEventListener('blur', () => this.close(false));
     document.addEventListener('scroll', event => {

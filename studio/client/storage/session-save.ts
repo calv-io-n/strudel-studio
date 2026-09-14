@@ -17,6 +17,11 @@ export async function prepareSessionSave(value: Project, base?: Project): Promis
   const raw = candidate.sessionId ? await read<Project>('projects', candidate.sessionId) : undefined;
   const current = raw ? parseProject(raw) : undefined;
   if (current && sameSession(candidate, current)) return { kind: 'unchanged', project: current };
+  // The starter's display-only rename is not a conflicting musical edit in an older open tab.
+  if (current?.sessionId === 'Neon-Drive' && current.name === 'DEMO: Neon Drive' && base?.sessionId === current.sessionId && base.name === 'Neon Drive') {
+    base = { ...base, name: current.name };
+    if (candidate.name === 'Neon Drive') candidate.name = current.name;
+  }
   const validBase = base?.sessionId === candidate.sessionId ? base : undefined;
   if (current && validBase && sameSession(candidate, validBase)) return { kind: 'refreshed', project: current };
   const canUpdate = current && (validBase ? sameSession(current, validBase) : (current.revision ?? 0) === (candidate.revision ?? 0));

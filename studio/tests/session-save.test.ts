@@ -52,3 +52,12 @@ test('materialized editor defaults are not mistaken for unsaved edits', () => {
   const p = newProject();
   assert.ok(sameSession(p, { ...p, midiInstrument: defaultInstrument(), appliedPatterns: {}, appliedPatternAnchors: {} }));
 });
+
+test('starter display rename preserves edits from an older open tab', async () => {
+  const base = { ...newProject(), sessionId: 'Neon-Drive', name: 'Neon Drive', revision: 1 };
+  await write([{ collection: 'projects', key: base.sessionId, value: { ...base, name: 'DEMO: Neon Drive', revision: 2 } }]);
+  const candidate = structuredClone(base); candidate.tabs[0].code += '\n// Still composing';
+  const saved = await saveSession(candidate, base);
+  assert.equal(saved.kind, 'saved'); assert.equal(saved.project.sessionId, 'Neon-Drive');
+  assert.equal(saved.project.name, 'DEMO: Neon Drive'); assert.match(saved.project.tabs[0].code, /Still composing/);
+});

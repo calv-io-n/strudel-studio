@@ -32,7 +32,7 @@ try {
   const track = Buffer.from('00ff510307a12000903c6460803c000090406460804000009043646080430000ff2f00', 'hex');
   const header = Buffer.from('4d546864000000060000000100604d54726b00000000', 'hex'); header.writeUInt32BE(track.length, 18); await writeFile(`${output}/notes.mid`, Buffer.concat([header, track]));
   await page.addInitScript(() => localStorage.setItem('studio.quick-start.opt-out', 'true'));
-  await page.goto('http://127.0.0.1:5192'); await expect(page.locator('#saved-projects')).not.toHaveValue('');
+  await page.goto(process.env.STUDIO_VERIFY_URL ?? 'http://127.0.0.1:5193'); await expect(page.locator('#saved-projects')).not.toHaveValue('');
   const devices = await page.evaluate(async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     const audio = (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === 'audioinput').map(d => ({ label: d.label, deviceId: d.deviceId }));
@@ -54,20 +54,21 @@ try {
   await expect(page.locator('#available-ports')).toContainText('Midi Through');
   const midiPort = await page.locator('#available-ports option').filter({ hasText: 'Midi Through' }).first().textContent(); await page.locator('#available-ports').selectOption(midiPort!); await page.locator('#add-profile').click(); await expect(page.locator('.device-connection')).toContainText('Connected'); await page.keyboard.press('Escape');
   await step('Native MIDI to pattern', async () => {
-    await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record notes', exact: true }).click();
-    await page.locator('.performance-options summary').click(); await page.locator('[data-length]').fill('4'); await page.locator('[data-transcribe]').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await sendMidi();
-    await page.locator('.performance-panel [data-stop]').click(); await expect(page.locator('[data-proposed]')).toContainText('note(60)'); await page.locator('.performance-panel [data-accept]').click();
+    await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click();
+    await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await sendMidi();
+    await page.locator('#stop').click(); await expect(page.locator('.performance-panel [data-state]')).toContainText('3 notes'); await page.locator('.performance-panel [data-accept]').click(); await expect(page.locator('.performance-panel')).toBeHidden();
     await page.keyboard.press('Escape'); await render('tab', 'midi-pattern');
   });
   await page.getByRole('tab', { name: 'Pattern 1', exact: true }).click({ button: 'right' }); await page.getByRole('menuitem', { name: 'Add to composition', exact: true }).click(); await page.locator('#clip-dialog button[value=save]').click();
-  await step('Native MIDI to composition variation', async () => {
-    await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record notes', exact: true }).click(); await page.getByRole('button', { name: 'Create variation for this clip', exact: true }).click();
-    await page.locator('[data-midi-live]').click(); await expect(page.locator('[data-midi-status]')).toContainText('Playing'); await sendMidi(); await page.locator('[data-midi-finish]').click(); await page.locator('[data-midi-accept]').click(); await expect(page.locator('[data-midi-status]')).toContainText('Accepted'); await page.keyboard.press('Escape');
+  await step('Native MIDI with pattern accompaniment updates its composition source', async () => {
+    await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').last().click(); await page.getByRole('menuitem', { name: 'Record MIDI on pattern', exact: true }).click();
+    await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await sendMidi(); await page.locator('#stop').click();
+    await page.locator('.performance-panel [data-accept]').click(); await expect(page.locator('.performance-panel')).toBeHidden();
     await render('composition', 'midi-composition');
   });
   await step('Native microphone to audio pattern and composition', async () => {
     await page.locator('#seek-handle').focus(); await page.keyboard.press('Home');
-    await page.locator('#record-toggle').click(); await page.locator('[data-capture=audio]').click(); await page.locator('#record-track').selectOption({ label: 'Track 2' });
+    if (!await page.locator('#record-bar').isVisible()) await page.locator('#record-toggle').click(); await page.locator('[data-capture=audio]').click(); await page.locator('#record-track').selectOption({ label: 'Track 2' });
     await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording', { timeout: 15000 }); console.log('Microphone recording now: make a brief test sound during the next 10 seconds.'); await page.waitForTimeout(10000); await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
     await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
     const project = (await records('projects')).find(p => p.sessionId === session), take = project.tabs.find((t: any) => t.audioAssetId);
