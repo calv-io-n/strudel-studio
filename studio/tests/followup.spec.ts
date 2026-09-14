@@ -54,6 +54,122 @@ test('slider values and function-name binding remain separate and mappings survi
   await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser'); await page.reload(); await expect(fn).toHaveClass(/input-assigned/);
   await fn.click(); await page.getByRole('menuitem', { name: 'Unbind MIDI control', exact: true }).click(); await expect(fn).not.toHaveClass(/input-assigned/);
 });
+test('two hardware knobs keep independent slider bindings and visible values', async ({ page }) => {
+  await page.addInitScript(() => {
+    const input: any = { id: 'two-knobs', name: 'Two knobs', state: 'connected', onmidimessage: null };
+    Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => ({ inputs: new Map([['two-knobs', input]]), onstatechange: null }) });
+    (window as any).turnKnob = (cc: number, value: number) => input.onmidimessage?.({ data: new Uint8Array([176, cc, value]), timeStamp: performance.now() });
+  });
+  await boot(page); await command(page, 'MIDI & on-screen controller');
+  await page.locator('#midi-settings-connection [data-midi-enable]').click(); await page.keyboard.press('Escape');
+  const content = page.locator('.tab-editor:not([hidden]) .cm-content');
+  await content.focus(); await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Control+Shift+End');
+  await page.keyboard.insertText('note("c3").s("triangle").gain(slider(0.5, 0, 1, 0.01)).lpf(slider(1000, 100, 5000, 50))');
+  const functions = page.locator('.tab-editor:not([hidden]) [data-input-function=slider]');
+  for (let i = 0; i < 2; i++) {
+    await functions.nth(i).click(); await page.getByRole('menuitem', { name: 'Bind MIDI control', exact: true }).click();
+    await page.evaluate(i => (window as any).turnKnob(20 + i, 0), i);
+    if (i === 0) {
+      await page.evaluate(() => { (window as any).turnKnob(20, 0); (window as any).turnKnob(20, 127); });
+      await expect(page.locator('.tab-editor:not([hidden]) .inline-slider').first()).toHaveValue('1');
+    }
+  }
+  const sliders = page.locator('.tab-editor:not([hidden]) .inline-slider');
+  // Learning the second knob must not make the already-working first knob wait for pickup again.
+  await page.evaluate(() => (window as any).turnKnob(20, 100));
+  await expect(sliders.nth(0)).toHaveValue('0.79');
+  await page.evaluate(() => { for (const value of [0, 127, 0]) { (window as any).turnKnob(20, value); (window as any).turnKnob(21, value); } });
+  await expect(sliders.nth(0)).toHaveValue('0'); await expect(sliders.nth(1)).toHaveValue('100');
+  await page.evaluate(() => { (window as any).turnKnob(20, 64); (window as any).turnKnob(21, 100); });
+  await expect(sliders.nth(0)).toHaveValue('0.5'); await expect(sliders.nth(1)).toHaveValue('3950');
+  await expect(functions.nth(0)).toHaveAttribute('aria-label', /CC 20/); await expect(functions.nth(1)).toHaveAttribute('aria-label', /CC 21/);
+});
+
+test('MIDI instrument gain and filter knobs update both sliders and a held note', async ({ page }) => {
+  await installAudioCapture(page);
+  await page.addInitScript(() => {
+    const input: any = { id: 'instrument-knobs', name: 'Instrument knobs', state: 'connected', onmidimessage: null };
+    Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => ({ inputs: new Map([['instrument-knobs', input]]), onstatechange: null }) });
+    (window as any).instrumentMessage = (bytes: number[]) => input.onmidimessage?.({ data: new Uint8Array(bytes), timeStamp: performance.now() });
+  });
+  await boot(page); await page.getByRole('tab', { name: 'MIDI instrument', exact: true }).click();
+  const content = page.locator('#editor-midi-instrument .cm-content');
+  await content.fill('MIDI.s("sawtooth").gain(slider(0.5, 0, 1, 0.01)).lpf(slider(1000, 100, 5000, 50))');
+  await page.locator('#instrument-apply').click();
+  await page.locator('#midi-editor-connection [data-midi-enable]').click();
+  const functions = page.locator('#editor-midi-instrument [data-input-function=slider]');
+  for (let i = 0; i < 2; i++) {
+    await functions.nth(i).click(); await page.getByRole('menuitem', { name: 'Bind MIDI control', exact: true }).click();
+    await page.evaluate(i => (window as any).instrumentMessage([176, 20 + i, 0]), i);
+  }
+  const sliders = page.locator('#editor-midi-instrument .inline-slider');
+  await page.evaluate(() => { for (const value of [0, 127]) for (const cc of [20, 21]) (window as any).instrumentMessage([176, cc, value]); });
+  await expect(sliders.nth(0)).toHaveValue('1'); await expect(sliders.nth(1)).toHaveValue('5000');
+  await page.evaluate(() => (window as any).instrumentMessage([144, 48, 100]));
+  const level = async () => {
+    await page.waitForTimeout(180); await page.evaluate(() => window.neonCapture.start()); await page.waitForTimeout(250);
+    return (await page.evaluate(() => window.neonCapture.finish())).peak;
+  };
+  const bright = await level(); expect(bright).toBeGreaterThan(.01);
+  await page.evaluate(() => (window as any).instrumentMessage([176, 21, 0]));
+  await expect(sliders.nth(1)).toHaveValue('100');
+  const filtered = await level(); expect(filtered).toBeLessThan(bright * .8);
+  await page.evaluate(() => (window as any).instrumentMessage([176, 20, 0]));
+  await expect(sliders.nth(0)).toHaveValue('0'); expect(await level()).toBeLessThan(.001);
+  await page.evaluate(() => (window as any).instrumentMessage([128, 48, 0]));
+});
+
+test('supersaw gain and filter mappings follow slow stepped knob sweeps', async ({ page }) => {
+  await page.addInitScript(() => {
+    const input: any = { id: 'axiom', name: 'AXIOM MINI air 32', state: 'connected', onmidimessage: null };
+    Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => ({ inputs: new Map([['axiom', input]]), onstatechange: null }) });
+    (window as any).turn = (cc: number, value: number) => input.onmidimessage?.({ data: new Uint8Array([176, cc, value]), timeStamp: performance.now() });
+  });
+  await boot(page); await page.getByRole('tab', { name: 'MIDI instrument', exact: true }).click();
+  const content = page.locator('#editor-midi-instrument .cm-content');
+  await content.fill('MIDI.s("supersaw").orbit(8).gain(slider(0.95, 0.25, 2, 0.1)).delay(0.1).lpf(slider(500, 0, 3000, 25)).ribbon(1,2)');
+  await page.locator('#instrument-apply').click(); await expect(page.locator('#instrument-state')).toHaveText('Ready for MIDI');
+  await page.locator('#midi-editor-connection [data-midi-enable]').click();
+  const functions = page.locator('#editor-midi-instrument [data-input-function=slider]');
+  for (let i = 0; i < 2; i++) {
+    await functions.nth(i).click(); await page.getByRole('menuitem', { name: 'Bind MIDI control', exact: true }).click();
+    await page.evaluate(i => (window as any).turn(20 + i, 0), i);
+  }
+  const sliders = page.locator('#editor-midi-instrument .inline-slider');
+  await page.evaluate(() => { for (const v of [0, 127, 0]) for (const cc of [20, 21]) (window as any).turn(cc, v); });
+  await expect(sliders.nth(0)).toHaveValue('0.25'); await expect(sliders.nth(1)).toHaveValue('0');
+  for (const v of [1, 2, 3, 4, 5, 6, 7, 8, 32, 64, 96, 127, 126, 100, 64, 8, 0]) {
+    await page.evaluate(v => { (window as any).turn(20, v); (window as any).turn(21, v); }, v);
+    await expect(sliders.nth(0)).toHaveValue(String(Number((.25 + Math.min(17, Math.round(v / 127 * 1.75 / .1)) * .1).toFixed(8))));
+    await expect(sliders.nth(1)).toHaveValue(String(Math.round(v / 127 * 3000 / 25) * 25));
+  }
+  await expect(content).toContainText('gain(slider(0.25, 0.25, 2, 0.1))');
+  await expect(content).toContainText('lpf(slider(0, 0, 3000, 25))');
+});
+
+for (const height of [900, 700]) test(`long code keeps Composition at its dragged height in a ${height}px viewport`, async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height }); await boot(page);
+  const drawer = page.locator('#drawer'), handle = page.getByRole('separator', { name: 'Resize composition' });
+  await expect(drawer).toBeVisible();
+  const before = (await drawer.boundingBox())!.height;
+  const content = page.locator('.tab-editor:not([hidden]) .cm-content');
+  await content.fill('silence\n' + Array.from({ length: 400 }, (_, i) => `// Recorded note ${i}`).join('\n'));
+  await expect.poll(async () => (await drawer.boundingBox())!.height).toBeCloseTo(before, 0);
+  const grip = (await handle.boundingBox())!;
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2); await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2, height / 2, { steps: 8 }); await page.mouse.up();
+  const resized = (await drawer.boundingBox())!.height;
+  expect(resized).toBeGreaterThan(before + 20);
+  expect((await drawer.boundingBox())!.y).toBeCloseTo(height / 2, -1);
+  await content.focus(); await page.keyboard.press('Control+End'); await page.keyboard.insertText('\n// Another recorded note');
+  await expect.poll(async () => (await drawer.boundingBox())!.height).toBeCloseTo(resized, 0);
+  const bounds = (await drawer.boundingBox())!; expect(bounds.y + bounds.height).toBeLessThanOrEqual(height + 1);
+  const scroller = page.locator('.tab-editor:not([hidden]) .cm-scroller');
+  expect(await scroller.evaluate(el => el.scrollHeight > el.clientHeight && el.scrollTop > 0)).toBe(true);
+  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
+  await page.reload(); await expect.poll(async () => (await drawer.boundingBox())?.height).toBeCloseTo(resized, 0);
+});
+
 test('metronome stays gold in both themes and neutral when switched off', async ({ page }) => {
   await boot(page); const toggle = page.locator('#count-in'); await toggle.click(); await page.mouse.move(0, 0); await expect(toggle).toHaveCSS('color', 'rgb(145, 99, 0)');
   await page.locator('#dark-mode').check(); await expect(toggle).toHaveCSS('color', 'rgb(239, 195, 74)'); await toggle.click(); await expect(page.locator('#metronome-loop')).toBeVisible(); await expect(toggle).toHaveAttribute('data-mode', 'continuous'); await toggle.click(); await expect(toggle).toHaveCSS('color', 'rgb(154, 166, 183)');

@@ -1,4 +1,3 @@
-import { encodeAudio } from './encode';
 import { pendingKeys, readPending, writePending } from './recovery';
 type Chunk = { left: Float32Array<ArrayBuffer>; right: Float32Array<ArrayBuffer> };
 const processor = `class TakeCapture extends AudioWorkletProcessor {
@@ -31,7 +30,7 @@ export class AudioTakeCapture {
       if (data.type === 'level') this.meter(data.peak);
       if (data.type === 'stopped') { this.recording = false; this.stopped?.(); }
       if (data.type === 'audio') {
-        if (this.unsaved.size >= 128 || this.frames * 8 + data.left.byteLength * 2 > 256_000_000) { this.fail('Capture reached its memory limit. The incomplete take is retained.'); return; }
+        if (this.unsaved.size >= 128) { this.fail('Capture reached its memory limit. The incomplete take is retained.'); return; }
         const key = `${this.prefix}chunk:${String(this.chunks.length).padStart(8, '0')}`;
         this.chunks.push({ key, frames: data.left.length }); this.frames += data.left.length; this.unsaved.set(key, data);
         this.writes = this.writes.then(async () => {
@@ -69,17 +68,13 @@ export class AudioTakeCapture {
     await this.writes;
     const from = Math.max(0, Math.floor(start * this.context.sampleRate)), to = Math.min(this.frames, Math.floor(end * this.context.sampleRate));
     if (to <= from) throw new Error('Choose a nonempty audio range.');
-    const left = new Float32Array(to - from), right = new Float32Array(to - from); let cursor = 0;
-    for (const entry of this.chunks) {
-      const a = Math.max(0, from - cursor), b = Math.min(entry.frames, to - cursor);
-      if (b > a) {
-        let chunk = this.unsaved.get(entry.key);
-        if (!chunk) { const blob = await readPending<Blob>(entry.key); if (!(blob instanceof Blob)) throw new Error('Capture chunk is missing.'); const bytes = await blob.arrayBuffer(); chunk = { left: new Float32Array(bytes, 0, entry.frames), right: new Float32Array(bytes, entry.frames * 4, entry.frames) }; }
-        left.set(chunk.left.subarray(a, b), cursor + a - from); right.set(chunk.right.subarray(a, b), cursor + a - from);
-      }
-      cursor += entry.frames;
-    }
-    return (await encodeAudio(left, right, this.context.sampleRate, { format: 'float32' })).buffer;
+    return new Promise<Blob>((resolve, reject) => {
+      const worker = new Worker(new URL('./take-wav-worker.ts', import.meta.url), { type: 'module' });
+      worker.onerror = event => { worker.terminate(); reject(new Error(event.message)); };
+      worker.onmessage = ({ data }) => { worker.terminate(); if (data.error) reject(new Error(data.error)); else resolve(data.blob); };
+      worker.postMessage({ chunks: this.chunks, unsaved: [...this.unsaved], from, to, rate: this.context.sampleRate });
+    });
   }
+
   disconnect() { try { if (this.node) this.source.disconnect(this.node); } catch { /* source gone */ } this.node?.disconnect(); this.node?.port.close(); }
 }

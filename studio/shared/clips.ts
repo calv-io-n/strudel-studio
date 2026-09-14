@@ -1,8 +1,7 @@
 import type { Clip } from './model';
 
 export function canPlace(clips: Clip[], clip: Clip) {
-  return Number.isFinite(clip.sourceOffset ?? 0) && (clip.sourceOffset ?? 0) >= 0 && (clip.sourceOffset ?? 0) <= 4096 && Number.isInteger(clip.start * 4) && clip.start >= 0 && clip.start <= 4096 && Number.isInteger(clip.length * 4) && clip.length >= .25 && clip.length <= 4096 &&
-    !clips.some(other => other.id !== clip.id && other.trackId === clip.trackId && clip.start < other.start + other.length && other.start < clip.start + clip.length);
+  return Number.isFinite(clip.sourceOffset ?? 0) && (clip.sourceOffset ?? 0) >= 0 && (clip.sourceOffset ?? 0) <= 4096 && Number.isInteger(clip.start * 4) && clip.start >= 0 && clip.start <= 4096 && Number.isInteger(clip.length * 4) && clip.length >= .25 && clip.length <= 4096 && clip.start + clip.length <= 4096;
 }
 
 export function duplicatePlacement(clips: Clip[], original: Clip, id: string): Clip | undefined {

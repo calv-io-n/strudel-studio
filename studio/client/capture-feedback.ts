@@ -1,3 +1,5 @@
+import { EditorView } from '@codemirror/view';
+import { EditorState } from '@codemirror/state';
 import type { CaptureView } from '../shared/capture-state';
 import type { StudioEditor } from './editor';
 
@@ -10,9 +12,17 @@ export function paintCaptureFeedback(views: CaptureView[], editors: Map<string, 
     owner.setPending(view?.label, view?.kind === 'append', view?.code, view?.state);
   }
   const ids = new Set(views.map(v => v.tabId));
-  document.querySelectorAll<HTMLElement>('[data-pending-for]').forEach(el => { if (!ids.has(el.dataset.pendingFor!)) el.remove(); });
+  document.querySelectorAll<HTMLElement>('[data-pending-for]').forEach(el => {
+    if (!ids.has(el.dataset.pendingFor!)) {
+      (el as any).review?.destroy();
+      if (el.dataset.pendingRegion && el.parentElement) el.parentElement.style.minHeight = '';
+      el.remove();
+    }
+  });
   document.querySelectorAll<HTMLElement>('[data-pending-region]').forEach(el => {
-    if (!views.some(v => v.tabId === el.dataset.pendingRegion && v.trackId === el.parentElement?.dataset.trackId)) el.remove();
+    if (!views.some(v => v.tabId === el.dataset.pendingRegion && v.trackId === el.parentElement?.dataset.trackId)) {
+      el.parentElement!.style.minHeight = ''; el.remove();
+    }
   });
   for (const view of views) {
     if (view.kind === 'new-pattern') {
@@ -21,7 +31,7 @@ export function paintCaptureFeedback(views: CaptureView[], editors: Map<string, 
       if (!panel) {
         panel = document.createElement('section'); panel.className = 'pending-pattern'; panel.hidden = true; panel.dataset.pendingPanel = panel.dataset.pendingFor = view.tabId;
         const close = document.createElement('button'); close.textContent = 'Return to pattern'; close.onclick = () => { panel!.hidden = true; tab?.focus(); };
-        const skeleton = document.createElement('div'); skeleton.className = 'pending-code'; skeleton.innerHTML = '<span role="status"></span><i></i><i></i><i></i>';
+        const skeleton = document.createElement('div'); skeleton.className = 'pending-code'; skeleton.innerHTML = '<span role="status"></span>';
         panel.append(close, skeleton); document.querySelector('.editor-panel')!.append(panel);
       }
       if (!tab) {
@@ -31,11 +41,22 @@ export function paintCaptureFeedback(views: CaptureView[], editors: Map<string, 
       }
       if (tab.textContent !== view.label) tab.textContent = view.label;
       const label = panel.querySelector('span')!; if (label.textContent !== view.label) label.textContent = view.label;
+      const code = views.filter(v => v.tabId === view.tabId).map(v => v.code ?? '').join('\n');
+      if ((panel as any).reviewCode !== code) {
+        (panel as any).review?.destroy(); panel.querySelector('.pending-review')?.remove();
+        (panel as any).reviewCode = code;
+        if (code) {
+          const root = document.createElement('div'); root.className = 'pending-review'; panel.append(root);
+          (panel as any).review = new EditorView({ doc: code, extensions: [EditorState.readOnly.of(true), EditorView.editable.of(false), EditorView.theme({ '&': { maxHeight: '320px' }, '.cm-scroller': { overflow: 'auto' } })], parent: root });
+        }
+      }
     }
     if (!view.trackId || view.start === undefined) continue;
     const lane = document.querySelector<HTMLElement>(`[data-track-id="${view.trackId}"]`); if (!lane) continue;
     let region = lane.querySelector<HTMLElement>(`[data-pending-region="${view.tabId}"]`);
     if (!region) { region = document.createElement('div'); region.className = 'clip pending-region'; region.dataset.pendingRegion = region.dataset.pendingFor = view.tabId; if (view.kind === 'new-pattern') region.id = 'recording-clip'; lane.append(region); }
+    const rows = view.kind === 'new-pattern' ? Math.max(1, Math.ceil((parseFloat(lane.style.height) || 60) / 60)) : 0;
+    if (rows) { region.style.top = `${4 + rows * 60}px`; lane.style.minHeight = `${(rows + 1) * 60}px`; }
     region.style.left = `${view.start * 64}px`; region.style.width = `${Math.max(.25, (view.end ?? view.start) - view.start) * 64}px`;
     if (region.textContent !== view.label) region.textContent = view.label;
   }

@@ -1,5 +1,6 @@
+import { writePending, readPending } from './recovery';
 import { MidiConnections } from './midi-connections';
-import { recordingTarget, validateRecordingTarget, retainPatternOutput, type RecordingTarget } from '../shared/recording-target';
+import { recordingTarget, validateRecordingTarget, retainPatternOutput, placeNewPattern, type RecordingTarget } from '../shared/recording-target';
 import { nextMetronomeMode, savedMetronomeMode, type MetronomeMode } from './count-in';
 import { registerOverlay } from './overlay';
 import { paintCaptureFeedback } from './capture-feedback';
@@ -10,7 +11,7 @@ import { normalizeProjectTempo, normalizeTabTempo, standaloneCode, tempoRate, be
 import { installQuickStart } from './quick-start';
 import { saveSession } from './storage/session-save';
 import { SessionDrafts } from './session-draft';
-import { AUDIO_EDITOR, defaultAudioCode, compileAudioEffects } from '../shared/audio-input';
+import { AUDIO_EDITOR, defaultAudioCode, compileAudioEffects, type AudioEffects } from '../shared/audio-input';
 import { TimelineRecording } from './timeline-recording';
 import { commitRecordedTake } from './storage/recorded-take';
 import { takeEffects } from './take-playback';
@@ -63,8 +64,8 @@ app.innerHTML = `
   <div class="transport">
     <div class="segmented" role="group" aria-label="Playback target"><button data-play-target="tab" aria-pressed="true">Tab</button><button data-play-target="composition" aria-pressed="false">Composition</button></div>
     <select id="play-target" aria-label="Playback target" hidden><option value="tab">Current tab</option><option value="composition">Composition</option></select>
-    <button id="play" class="primary pill" aria-label="Play pattern">Play</button><button id="composition-play" class="primary pill" aria-label="Play composition" hidden>Play</button>
-    <button id="stop" class="bare" aria-label="Stop playback">Stop</button><button id="composition-stop" class="bare" aria-label="Stop playback" hidden>Stop</button>
+    <button id="skip-beginning" class="bare icon" aria-label="Skip to beginning" title="Stop and return to the beginning"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M5 5h2v14H5zM19 5v14L8 12z"/></svg></button><button id="play" class="primary pill" aria-label="Play pattern">Play</button><button id="composition-play" class="primary pill" aria-label="Play composition" hidden>Play</button>
+    <button id="composition-loop" class="bare" aria-label="Loop composition range" aria-pressed="false">Loop</button><button id="stop" class="bare" aria-label="Stop playback">Stop</button><button id="composition-stop" class="bare" aria-label="Stop playback" hidden>Stop</button>
     <span class="divider" aria-hidden="true"></span>
     <label class="inline tempo" title="Project tempo · four beats per cycle"><input id="bpm" type="number" min="20" max="300" value="120" aria-label="Tempo in BPM">BPM</label>
     <button id="count-in" class="bare count-in-toggle" aria-label="Metronome" aria-pressed="false" title="Four-beat count-in before playback or recording"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h6l5 18H4L8 3Z"/><path d="m11 17 7-12M8 17h7M9 6h4"/><path d="m15 8 3 2"/></svg><span id="count-in-beat" aria-hidden="true"></span><span id="metronome-loop" aria-hidden="true" hidden>↻</span></button>
@@ -76,7 +77,9 @@ app.innerHTML = `
 <div id="record-bar" aria-label="Record" hidden>
   <div class="record-options">
     <div class="chips" role="group" aria-label="Capture source"><button data-capture="audio" aria-pressed="true">Audio input</button><button data-capture="midi" aria-pressed="false">MIDI</button></div>
-    <label class="inline record-track"><span id="record-source-label">Record to</span> <select id="record-track" aria-label="Recording track"></select></label>
+    <label id="midi-quantization-field" class="inline" hidden title="Snap recorded note starts and ends to the nearest grid position. Live playing stays immediate.">Quantize MIDI <select id="midi-quantization" aria-label="MIDI quantization"><option value="0">Off</option><option value="0.25">1/4 · one per beat</option><option value="0.125">1/8 · two per beat</option><option value="0.0625" selected>1/16 · four per beat</option><option value="0.03125">1/32 · eight per beat</option></select></label>
+    <label id="midi-normalize-velocity-field" class="inline" hidden title="Give every recorded MIDI note the same velocity (100 of 127). Live playing keeps your original dynamics."><input id="midi-normalize-velocity" type="checkbox">Normalize velocity</label>
+    <label class="record-destination">Destination <select id="record-destination" aria-label="Recording destination"><option value="new">New pattern</option><option value="existing">Existing pattern</option></select></label><label class="inline record-track"><span id="record-source-label">Record to</span> <select id="record-track" aria-label="Recording track"></select></label>
     <button id="record-return" class="bare" hidden>Recording destination</button><button id="record-audio-return" class="bare" hidden>Audio section</button><button id="record-clear-note" class="bare" hidden>Append MIDI instead</button><span id="midi-record-hint" class="hint" hidden>Choose a note() phrase, then press Record</span>
   </div>
   <div class="record-actions">
@@ -199,6 +202,7 @@ const sheets = new Sheets($('#sheet'), $('#sheet-backdrop'), workspaceRegions, i
 let recordBarOpen = false;
 let recordAudioEnabled = true, recordMidiEnabled = false;
 let activeRecordingTarget: RecordingTarget | undefined;
+let proposedRecordingTarget: RecordingTarget | undefined;
 let preparingShared = false, sharedEpoch = 0;
 let sharedTimer: ReturnType<typeof setTimeout> | undefined;
 let recordSource: 'external' | 'phrase' | 'instrument' = 'external';
@@ -363,7 +367,7 @@ function getEditor(id = project.activeTabId) {
   let instance = editors.get(id);
   if (!instance) {
     const config = instrumentFor(project);
-    const tab = id === AUDIO_EDITOR && project.audioInput ? { id, name: 'Audio input', color: 'teal' as const, code: project.audioInput.code, anchors: project.audioInput.anchors } : id === MIDI_EDITOR ? { id, name: 'MIDI instrument', color: 'blue' as const, code: config.code, anchors: config.anchors } : project.tabs.find(t => t.id === id);
+    const tab = id === AUDIO_EDITOR && project.audioInput ? { id, name: 'Audio input', color: 'teal' as const, code: project.audioInput.code, anchors: project.audioInput.anchors } : id === MIDI_EDITOR ? { id, name: 'MIDI instrument', color: 'blue' as const, code: config.code, anchors: config.anchors } : project.tabs.find(t => t.id === id) ?? ((activeRecordingTarget ?? performancePanel.sharedTarget)?.kind === 'new' && (activeRecordingTarget ?? performancePanel.sharedTarget)?.tabId === id ? validateRecordingTarget(project, (activeRecordingTarget ?? performancePanel.sharedTarget)!) : undefined);
     if (!tab) throw new Error('Pattern no longer exists.');
     const root = document.createElement('div'); root.className = 'tab-editor'; root.dataset.tabEditor = id; root.hidden = id !== project.activeTabId;
     $('#editor').append(root);
@@ -371,6 +375,7 @@ function getEditor(id = project.activeTabId) {
     instance = new StudioEditor(root, tab, {
       sounds: () => engine.soundEntries, functions: () => id === AUDIO_EDITOR ? ['AUDIO', 'gain', 'pan', 'lpf', 'hpf', 'delay', 'delaytime', 'delayfeedback', 'room', 'slider'] : id === MIDI_EDITOR ? [...engine.functionNames, 'MIDI'] : engine.functionNames,
       change: (live) => { for (const slider of instance?.sliders ?? []) engine.liveEffects.update(slider.id, instance!.values.get(slider.id) ?? slider.value); if (id === MIDI_EDITOR || id === AUDIO_EDITOR) { const config = id === AUDIO_EDITOR ? project.audioInput! : instrumentFor(project); config.code = instance!.code; config.anchors = instance!.anchors; const updates = new Map<string, number>(); for (const [key, version] of instance!.liveVersions) if (version !== liveVersions.get(key)) { liveVersions.set(key, version); updates.set(key, instance!.values.get(key)!); } updateAppliedInstrumentSliders(config, updates); if (id === AUDIO_EDITOR && updates.size) { try { liveInput.apply(config.appliedCode); } catch (error) { notice((error as Error).message, true); } } if (!live) paintMidiAssignment(); } if (!live) { if (id === activeEditorId()) renderSliders(); renderBindings(); renderTransport(); } dirty(live); },
+      value: (sliderId, value) => queueMidiSlider(instance!, sliderId, value),
       select: (sliderId) => { selectedSlider = sliderId; renderBindings(); },
       evaluate: () => void guard(() => id === AUDIO_EDITOR ? applyAudioInput() : id === MIDI_EDITOR ? applyMidiInstrument() : engine.started ? engine.apply() : startPlayback())(), stop: () => stopPlayback(),
     });
@@ -423,22 +428,38 @@ $('#audio-device').onchange = $('#audio-channel').onchange = () => { liveInput.d
 function disconnectAudio() { if (timelineRecording?.pending) { void timelineRecording.stop(true); return; } liveInput.disconnect(); renderAudioInput(); }
 $('#audio-disconnect').onclick = $('#audio-cancel').onclick = disconnectAudio;
 function resolveRecordTarget() {
-  return recordingTarget(snapshot(), $('#play-target').value === 'composition' ? 'composition' : 'tab', selectedTrack ?? $('#record-track').value, selectedMidiClip, engine.timelinePosition);
+  const context = $('#play-target').value === 'composition' ? 'composition' : 'tab';
+  const mode = document.querySelector<HTMLSelectElement>('#record-destination')?.value === 'existing' ? 'existing' : 'new';
+  const track = selectedTrack ?? $('#record-track').value;
+  if (context === 'composition' && mode === 'new' && proposedRecordingTarget?.trackId === track) {
+    proposedRecordingTarget.position = engine.timelinePosition; return proposedRecordingTarget;
+  }
+  const target = recordingTarget(snapshot(), context, track, selectedMidiClip, engine.timelinePosition, mode);
+  if (target.kind === 'new') proposedRecordingTarget = target;
+  return target;
+}
+function clearPendingPattern() {
+  const target = activeRecordingTarget ?? performancePanel.sharedTarget;
+  if (target?.kind === 'new' && !project.tabs.some(t => t.id === target.tabId)) {
+    const owner = editors.get(target.tabId); const root = owner?.view.dom.parentElement;
+    owner?.view.destroy(); root?.remove(); editors.delete(target.tabId);
+  }
+  proposedRecordingTarget = undefined;
 }
 async function startSharedRecording() {
   if (!recordAudioEnabled && !recordMidiEnabled) throw new Error('Enable Audio input, MIDI, or both.');
   if (timelineRecording?.pending || performancePanel.take?.notes.length || recordingPanel.pending || midiComposition.pending) throw new Error('Keep or discard the pending take first.');
-  const target = resolveRecordTarget(), owner = getEditor(target.tabId);
+  const target = resolveRecordTarget(); activeRecordingTarget = target; const owner = getEditor(target.tabId);
   validateRecordingTarget(snapshot(), target);
   const epoch = ++sharedEpoch; activeRecordingTarget = target; preparingShared = true;
-  engine.stop(); stopTakePreview();
+  if (!(target.context === 'composition' && engine.started && engine.diagnostics.target === 'composition')) { engine.stop(); stopTakePreview(); }
   if (recordMidiEnabled) {
     const sound = instrumentFor(project).appliedCode.replace(/^\s*MIDI/, '');
     performancePanel.armShared(owner, target.tabId, sound.startsWith('.') ? sound : '.s("triangle").gain(0.2)');
     performancePanel.sharedOffset = target.offset; performancePanel.sharedTarget = target;
   }
   if (project.tabs.find(t => t.id === target.tabId)?.audioAssetId) takeCodeOpen.add(target.tabId);
-  switchTab(target.tabId); owner.revealRecording(recordAudioEnabled || !!owner.destination?.append);
+  if (target.kind !== 'new') { switchTab(target.tabId); owner.revealRecording(recordAudioEnabled || !!owner.destination?.append); }
   renderRecording();
   try {
     await persistSession();
@@ -449,36 +470,48 @@ async function startSharedRecording() {
         deferCommit: true,
         prepareMidi: recordMidiEnabled ? () => performancePanel.prepareShared() : undefined,
         startMidi: recordMidiEnabled ? at => { performancePanel.sharedOffset = target.offset; performancePanel.startShared(at); } : undefined,
-        stopMidi: recordMidiEnabled ? () => performancePanel.stop() : undefined,
+        stopMidi: () => { if (recordMidiEnabled) performancePanel.stop(); void flushMidiSliders().catch(e => notice(e.message, true)); },
         ...(recordSource === 'phrase' ? { mode: 'wet' as const, internal: { name: 'Highlighted phrase', prepare: async () => { await performancePanel.prepare(); return engine.performanceAudio.output; } } } : {})
       });
     } else {
       await performancePanel.prepareShared();
-      if (epoch !== sharedEpoch || !await engine.countIn.wait(project.bpm) || epoch !== sharedEpoch) return;
-      if (target.context === 'composition') { engine.transport.position = target.position; await engine.beginAudioRecording(); }
-      else if (performancePanel.accompaniment === 'pattern') await engine.evaluate(true, target.tabId);
       if (epoch !== sharedEpoch) return;
-      performancePanel.startShared(engine.audioContext.currentTime + .025);
-      sharedTimer = setTimeout(() => void stopSharedRecording(), Math.min(897, (target.end === undefined ? 4096 : target.end - target.position) * 240 / project.bpm) * 1000);
+      if (target.context === 'composition' && !engine.started) engine.transport.position = target.position;
+      const at = await engine.recordingStart(target.context === 'composition', performancePanel.accompaniment === 'pattern', target.tabId);
+      if (epoch !== sharedEpoch) return;
+      if (target.kind === 'new') { target.position = engine.positionAt(at); target.offset = target.position - Math.floor(target.position * 4) / 4; performancePanel.sharedOffset = target.offset; }
+      performancePanel.startShared(at);
+      const limit = Math.min(900, ((target.kind === 'new' ? 4096 : target.end ?? 4096) - target.position) * 240 / project.bpm);
+      sharedTimer = setTimeout(() => void stopSharedRecording(), (Math.max(0, at - engine.audioContext.currentTime) + limit) * 1000);
+
     }
   } catch (error) { if (epoch === sharedEpoch) { performancePanel.stop(); throw error; } }
   finally { if (epoch === sharedEpoch) { preparingShared = false; renderTransport(); } }
 }
 async function stopSharedRecording() {
   ++sharedEpoch; clearTimeout(sharedTimer); preparingShared = false; performancePanel.stop();
-  await timelineRecording?.stop(); engine.endAudioRecording(); renderTransport();
+  await timelineRecording?.stop(); engine.endAudioRecording(); if (engine.started) engine.stop(); await performancePanel.flushRecovery(); await performancePanel.prepareProposal(); await flushMidiSliders(); if (!performancePanel.take?.notes.length && !timelineRecording?.pending) { clearPendingPattern(); await performancePanel.completeShared(); activeRecordingTarget = undefined; } renderTransport();
 }
 $('#record-retry').onclick = guard(() => { stopTakePreview(); performancePanel.stop(); return timelineRecording!.retry(); });
 $('#record-preview').onclick = guard(() => { if (previewSource) { stopTakePreview(); performancePanel.stop(); return; } return previewPendingTake(); });
 $('#record-download').onclick = guard(() => timelineRecording!.download());
-$('#record-discard').onclick = guard(async () => { if (await askEdit('Discard this take?', undefined, 'This removes the unsaved take. Your existing pattern stays unchanged.')) { stopTakePreview(); performancePanel.stop(); await timelineRecording!.discard(); performancePanel.completeShared(); activeRecordingTarget = undefined; renderTransport(); } });
+$('#record-discard').onclick = guard(async () => { if (await askEdit('Discard this take?', undefined, 'This removes the unsaved take. Your existing pattern stays unchanged.')) { stopTakePreview(); performancePanel.stop(); await timelineRecording!.discard(); clearPendingPattern(); await performancePanel.completeShared(); activeRecordingTarget = undefined; renderTransport(); } });
+$('#record-destination').onchange = () => { proposedRecordingTarget = undefined; renderRecording(); };
 $('#record-track').onchange = () => { selectedTrack = $('#record-track').value; selectedMidiClip = undefined; renderRecording(); };
 function renderRecording() {
   const recording = timelineRecording, audioPending = !!recording?.pending;
   const running = preparingShared || performancePanel.running || recording?.state === 'recording' || recording?.state === 'preparing';
   const pending = audioPending || !!performancePanel.take?.notes.length;
   if (pending) { recordMidiEnabled ||= !!performancePanel.take?.notes.length; recordAudioEnabled ||= audioPending; }
-  const busy = running || pending;
+  const busy = running || pending || performancePanel.finalizing;
+  $('#midi-quantization-field').hidden = !recordMidiEnabled;
+  $('#midi-quantization').value = String(performancePanel.quantization);
+  $('#midi-quantization').disabled = busy;
+  $('#midi-normalize-velocity-field').hidden = !recordMidiEnabled;
+  $('#midi-normalize-velocity').checked = performancePanel.normalizeVelocity;
+  $('#midi-normalize-velocity').disabled = busy;
+  $('#skip-beginning').disabled = engine.busy || running || performancePanel.finalizing || recording?.state === 'finishing';
+  const choice = document.querySelector<HTMLSelectElement>('#record-destination'); if (choice) { choice.disabled = busy; choice.closest('label')!.hidden = $('#play-target').value !== 'composition'; }
   $('#record-bar').hidden = !recordBarOpen && !busy && !recordingPanel.pending && !midiComposition.pending;
   $('#record-toggle').setAttribute('aria-pressed', String(!$('#record-bar').hidden));
   $('#record-toggle').textContent = preparingShared || recording?.state === 'preparing' ? 'Cancel' : running ? 'Stop' : 'Record';
@@ -503,13 +536,13 @@ function renderRecording() {
   let target = busy ? recording?.identity?.target ?? activeRecordingTarget : undefined;
   let problem = '';
   if (!target) try { target = resolveRecordTarget(); } catch (error) { problem = (error as Error).message; }
-  const name = project.tabs.find(t => t.id === target?.tabId)?.name ?? 'Missing pattern';
+  const name = project.tabs.find(t => t.id === target?.tabId)?.name ?? target?.name ?? 'Missing pattern';
   const phrase = recordMidiEnabled && performancePanel.owner?.destination?.tabId === target?.tabId && !performancePanel.owner?.destination?.append;
   $('#midi-record-hint').hidden = false;
   const placements = project.clips.filter(c => c.tabId === target?.tabId).length;
   const impact = placements === 1 ? ' and its composition placement' : placements > 1 ? ` in all ${placements} composition placements` : '';
   const sections = [recordMidiEnabled ? phrase ? 'MIDI replaces selected note' : 'MIDI adds a section' : '', recordAudioEnabled ? 'Audio adds a section' : ''].filter(Boolean).join(' · ');
-  $('#midi-record-hint').textContent = problem || `${name}${target?.trackId ? ' · ' + (project.tracks.find(t => t.id === target.trackId)?.name ?? 'Missing track') + ' · beat ' + beatPosition(target.position) : ''} · ${sections}${target ? ` · Keeping updates this pattern${impact}` : ''}`;
+  $('#midi-record-hint').textContent = target?.kind === 'new' ? `${target.name} · ${project.tracks.find(t => t.id === target.trackId)?.name} · New pattern on this track · existing clips stay in place` : problem || `${name}${target?.trackId ? ' · ' + (project.tracks.find(t => t.id === target.trackId)?.name ?? 'Missing track') + ' · beat ' + beatPosition(target.position) : ''} · ${sections}${target ? ` · Keeping updates this pattern${impact}` : ''}`;
   $('.record-track').hidden = $('#play-target').value !== 'composition';
   $('#record-source-label').textContent = 'Track';
   $('#record-return').hidden = !busy;
@@ -525,7 +558,7 @@ takeView.innerHTML = '<h2 id="take-title"></h2><p id="take-info"></p><button id=
 $('#editor').before(takeView);
 const takeCodeOpen = new Set<string>();
 let previewSource: AudioBufferSourceNode | undefined, previewEffects: ReturnType<typeof createInputEffects> | undefined, previewEpochAudio = 0;
-const updatePreviewEffects = (code: string) => previewEffects?.apply(code);
+const updatePreviewEffects = (change: string | Partial<AudioEffects>) => previewEffects?.apply(change);
 function stopTakePreview() {
   previewEpochAudio++; try { previewSource?.stop(); } catch { /* ended */ }
   previewSource?.disconnect(); previewEffects?.disconnect(); previewSource = undefined; previewEffects = undefined;
@@ -676,6 +709,8 @@ async function recallMidiPreset(id: string) {
 }
 const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine, () => selectedProjectName || project.name, () => persistSession(), commitPatternTake);
 $('#record-bar').append(performancePanel.root);
+$('#midi-quantization').onchange = guard(() => { performancePanel.setQuantization(Number($('#midi-quantization').value)); renderRecording(); });
+$('#midi-normalize-velocity').onchange = guard(() => { performancePanel.setNormalizeVelocity($('#midi-normalize-velocity').checked); renderRecording(); });
 const recordingPanel = new RecordingPanel(engine, async asset => { project.assetIds = [...new Set([...project.assetIds, asset.id])]; assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, async asset => {
   const recording = asset.recording!, destination = recordingPanel.destination;
   if (!destination) throw new Error('Choose a recording destination before placing the retained audio.');
@@ -695,15 +730,19 @@ const recordingPanel = new RecordingPanel(engine, async asset => { project.asset
 });
 timelineRecording = new TimelineRecording(engine, liveInput, snapshot, ensureAudioInput, async (identity, audio, metaKey) => {
   clearTimeout(saveTimer); await saveChain.catch(() => {});
-  const state = snapshot();
   const target = identity.target, owner = target ? getEditor(target.tabId) : undefined;
+  await performancePanel.flushRecovery(); await performancePanel.prepareProposal(); await flushMidiSliders();
+  const state = snapshot();
   let midiCode = '';
-  if (target) {
+  if (target?.kind === 'new') {
+    performancePanel.alignSharedDuration(audio[0].asset.duration ?? 0); await performancePanel.prepareProposal();
+    identity.midiCode = performancePanel.proposal;
+  } else if (target) {
     const tab = validateRecordingTarget(state, target);
     if (performancePanel.take?.notes.length) {
       const destination = owner?.destination;
       if (performancePanel.owner !== owner || !destination?.valid) throw new Error('MIDI destination changed. Both takes are retained.');
-      performancePanel.alignSharedDuration(audio[0].asset.duration ?? 0);
+      performancePanel.alignSharedDuration(audio[0].asset.duration ?? 0); await performancePanel.prepareProposal();
       midiCode = performancePanel.proposal;
       tab.code = (destination.append ? retainPatternOutput(owner!.code.slice(0, destination.from)) : owner!.code.slice(0, destination.from)) + midiCode + owner!.code.slice(destination.to);
       const changes = ChangeSet.of({ from: destination.from, to: destination.to, insert: midiCode }, owner!.code.length);
@@ -717,8 +756,8 @@ timelineRecording = new TimelineRecording(engine, liveInput, snapshot, ensureAud
     project = next; $('#project-name').value = next.name; selectedProjectName = next.sessionId!;
     assets = await workspace.assets(); await engine.registerAssets(assets);
     if (target && owner) {
-      owner.publishRecording(next.tabs.find(t => t.id === target.tabId)!);
-      performancePanel.completeShared(); activeRecordingTarget = undefined;
+      owner.publishRecording(next.tabs.find(t => t.id === target.tabId)!); if (target.kind === 'new') openTabs.add(target.tabId); proposedRecordingTarget = undefined;
+      await performancePanel.completeShared(); activeRecordingTarget = undefined;
     } else { openTabs.add(identity.tabId); switchTab(identity.tabId); selectedTrack = identity.trackId; }
     renderAll(); saveWorkspace(); cacheDraft(); await refreshProjects();
   });
@@ -729,12 +768,17 @@ performancePanel.sharedKeep = async () => {
   if (timelineRecording?.pending) { await timelineRecording.retry(); return; }
   const target = activeRecordingTarget ?? performancePanel.sharedTarget;
   if (target) validateRecordingTarget(snapshot(), target);
-  await commitPatternTake(performancePanel.owner!, performancePanel.proposal);
-  performancePanel.completeShared(); activeRecordingTarget = undefined; renderTransport();
+  await performancePanel.flushRecovery(); await performancePanel.prepareProposal(); await flushMidiSliders();
+  if (target?.kind === 'new') {
+    project = await commitCaptureProject(placeNewPattern(snapshot(), target, performancePanel.proposal, performancePanel.duration));
+    performancePanel.owner!.publishRecording(project.tabs.find(t => t.id === target.tabId)!); openTabs.add(target.tabId); proposedRecordingTarget = undefined; saveWorkspace();
+  } else await commitPatternTake(performancePanel.owner!, performancePanel.proposal);
+  await performancePanel.completeShared(); activeRecordingTarget = undefined; renderTabs(); renderComposition(); renderTransport();
 };
-performancePanel.sharedDiscard = async () => { performancePanel.stop(); performancePanel.completeShared(); activeRecordingTarget = undefined; renderTransport(); };
-$('#record-return').onclick = () => { const target = timelineRecording?.identity?.target ?? activeRecordingTarget; if (target) { switchTab(target.tabId); getEditor(target.tabId).revealRecording(!!performancePanel.owner?.destination?.append || !recordMidiEnabled); } };
-$('#record-audio-return').onclick = () => { const target = timelineRecording?.identity?.target ?? activeRecordingTarget; if (target) { switchTab(target.tabId); getEditor(target.tabId).revealRecording(true); } };
+performancePanel.onfailure = message => { notice(message, true); void stopSharedRecording().catch(e => notice(e.message, true)); };
+performancePanel.sharedDiscard = async () => { performancePanel.stop(); await performancePanel.flushRecovery(); clearPendingPattern(); await performancePanel.completeShared(); activeRecordingTarget = undefined; renderTransport(); };
+$('#record-return').onclick = () => { const target = timelineRecording?.identity?.target ?? activeRecordingTarget; if (target?.kind === 'new' && !project.tabs.some(t => t.id === target.tabId)) { document.querySelector<HTMLButtonElement>(`[data-pending-tab="${target.tabId}"]`)?.click(); } else if (target) { switchTab(target.tabId); getEditor(target.tabId).revealRecording(!!performancePanel.owner?.destination?.append || !recordMidiEnabled); } };
+$('#record-audio-return').onclick = () => { const target = timelineRecording?.identity?.target ?? activeRecordingTarget; if (target?.kind === 'new' && !project.tabs.some(t => t.id === target.tabId)) { document.querySelector<HTMLButtonElement>(`[data-pending-tab="${target.tabId}"]`)?.click(); } else if (target) { switchTab(target.tabId); getEditor(target.tabId).revealRecording(true); } };
 $('#record-clear-note').onclick = () => { performancePanel.close(); renderRecording(); };
 $('#record-bar').append(recordingPanel.root);
 const sampleImports = new SampleImports(async asset => { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
@@ -936,6 +980,9 @@ function ensureDeviceProfiles() {
   }
 }
 function renderTransport() {
+  $('#composition-loop').hidden = $('#play-target').value !== 'composition';
+  $('#composition-loop').setAttribute('aria-pressed', String(engine.transport.loop));
+  $('#composition-loop').disabled = engine.started || captureActive();
   paintMidiAssignment();
   const countdown = engine.countIn.remaining;
   $('#count-in').setAttribute('aria-pressed', String(engine.countIn.enabled));
@@ -945,7 +992,7 @@ function renderTransport() {
   $('#count-in').setAttribute('aria-description', metronomeLabel);
   $('#count-in').disabled = !!countdown || engine.busy;
   $('#metronome-loop').hidden = engine.countIn.mode !== 'continuous';
-  engine.countIn.sync(engine.started || performancePanel.take?.state === 'capturing' || timelineRecording?.state === 'recording' || recordingPanel.captureView?.state === 'recording', project.bpm);
+  engine.countIn.sync(engine.started || performancePanel.take?.state === 'capturing' || timelineRecording?.state === 'recording' || recordingPanel.captureView?.state === 'recording', project.bpm, engine.started ? () => engine.metronomeClock : undefined);
   $('#count-in-beat').textContent = countdown ? String(countdown) : '';
   const playing = engine.started, target = $('#play-target').value === 'composition' ? 'composition' : 'tab';
   document.querySelectorAll<HTMLButtonElement>('[data-play-target]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.playTarget === target)); button.disabled = playing || (engine.busy || !!countdown) || performancePanel.take?.state === 'capturing' || midiComposition.running || midiComposition.pending; });
@@ -1080,11 +1127,15 @@ function beginLearn(target: Target) {
   $('#midi-learning').hidden = false; $('#cancel-learn').hidden = false; $('#drawer-learning').hidden = false;
 }
 function bind(target: Target, profileId: string, channel: number, kind: 'cc' | 'note', number: number) {
-  project.bindings = project.bindings.filter((b) => !(b.profileId === profileId && b.channel === channel && b.kind === kind && b.number === number));
+  project.bindings = project.bindings.filter((b) => {
+    const replaced = b.profileId === profileId && b.channel === channel && b.kind === kind && b.number === number;
+    if (replaced) pickup.reset(b.id);
+    return !replaced;
+  });
   project.bindings.push({ id: crypto.randomUUID(), profileId, channel, kind, number, target, pickup: kind === 'cc' && profileId !== 'virtual', enabled: true });
   if (target.kind === 'midi-preset') { $('#preset-learn-status').textContent = `Mapped ${targetLabel(target)} to channel ${channel}, key ${number}.`; $('#cancel-preset-learn').hidden = true; }
   learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = `Connected ${kind.toUpperCase()} ${number} to ${targetLabel(target)}.`;
-  pickup.reset(); renderBindings(); dirty();
+  renderBindings(); dirty();
 }
 function receipt(event: MidiEvent, binding: Binding, status: string, value?: number) {
   $('#last-receipt').textContent = `${event.route === 'web-midi' ? 'MIDI' : event.route === 'alsa' ? 'ALSA' : 'SIM'} · ${targetLabel(binding.target)} · ${status}${value === undefined ? '' : ' ' + value}`;
@@ -1108,17 +1159,36 @@ function scheduleMidiFeedback() {
 }
 const pendingMidiSliders = new Map<string, { owner: StudioEditor; id: string; value: number }>();
 let midiSliderFrame = 0;
+let controlJournalFlight: Promise<void> | undefined, controlVersion = 0, savedControlVersion = 0;
+function captureActive() { return preparingShared || performancePanel.running || timelineRecording?.state === 'recording'; }
+async function flushMidiSliders() {
+  const grouped = new Map<StudioEditor, Map<string, number>>();
+  for (const update of pendingMidiSliders.values()) {
+    const values = grouped.get(update.owner) ?? new Map<string, number>();
+    values.set(update.id, update.value); grouped.set(update.owner, values);
+  }
+  pendingMidiSliders.clear();
+  for (const [owner, values] of grouped) owner.setValues(values);
+  if (grouped.size) {
+    const sessionId = project.sessionId;
+    await persistSession(); await controlJournalFlight;
+    await writePending(`controller-values:${sessionId}`, []);
+  }
+}
 function queueMidiSlider(owner: StudioEditor, id: string, value: number) {
   owner.values.set(id, value);
-  engine.liveEffects.update(id, value);
-  pendingMidiSliders.set(id, { owner, id, value });
+  pendingMidiSliders.set(id, { owner, id, value }); controlVersion++;
   if (midiSliderFrame) return;
   midiSliderFrame = requestAnimationFrame(() => {
     midiSliderFrame = 0;
-    for (const update of pendingMidiSliders.values()) {
-      if ([...editors.values()].includes(update.owner)) update.owner.setValue(update.id, update.value);
+    for (const update of pendingMidiSliders.values()) { engine.liveEffects.update(update.id, update.value); update.owner.displayValue(update.id, update.value); }
+    const input = editors.get(AUDIO_EDITOR), values: Record<string, number> = {};
+    for (const update of pendingMidiSliders.values()) if (update.owner === input) {
+      const label = input.sliders.find(slider => slider.id === update.id)?.label;
+      if (label) values[label === 'cutoff' ? 'lpf' : label] = update.value;
     }
-    pendingMidiSliders.clear();
+    if (Object.keys(values).length) liveInput.update(values);
+    if (!captureActive()) void flushMidiSliders().catch(e => notice(e.message, true));
   });
 }
 async function receive(event: MidiEvent) {
@@ -1138,7 +1208,7 @@ async function receive(event: MidiEvent) {
     return;
   }
   if (midi.kind === 'note' && libraryMidi && !$('#sounds-panel').hidden) { await libraryNote(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on); return; }
-  if (midi.kind === 'note' && await performancePanel.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on)) return;
+  if (midi.kind === 'note' && await performancePanel.note(`${event.source}:${midi.channel}:${midi.number}`, midi.number, midi.value, midi.on, event.timestamp)) return;
   if (learning && ((learning.kind === 'slider' && midi.kind === 'cc') || (learning.kind !== 'slider' && midi.on))) {
     bind(learning, profile.id, midi.channel, midi.kind, midi.number); return;
   }
@@ -1150,8 +1220,8 @@ async function receive(event: MidiEvent) {
       if (target.kind === 'slider') {
         const slider = getEditor(target.tabId).sliders.find((s) => s.id === target.sliderId);
         if (!slider) { receipt(event, binding, 'target missing; rebind'); continue; }
-        if (!pickup.accept(binding, midi.value / 127, ((getEditor(target.tabId).values.get(slider.id) ?? slider.value) - slider.min) / (slider.max - slider.min))) { receipt(event, binding, 'waiting for pickup'); continue; }
         const value = scaleCC(midi.value, slider.min, slider.max, slider.step);
+        if (!pickup.accept(binding, midi.value / 127, ((getEditor(target.tabId).values.get(slider.id) ?? slider.value) - slider.min) / (slider.max - slider.min), (value - slider.min) / (slider.max - slider.min))) { receipt(event, binding, 'waiting for pickup'); continue; }
         queueMidiSlider(getEditor(target.tabId), slider.id, value); receipt(event, binding, 'applied', value);
       } else if (midi.on) {
         if (target.kind === 'trigger') { await engine.trigger(assetById(target.assetId), midi.value); receipt(event, binding, 'one-shot triggered'); }
@@ -1176,6 +1246,10 @@ function virtualSend(id: string, value: number, off = false) {
 
 $('#play').onclick = guard(() => { $('#play-target').value = 'tab'; return startPlayback(); });
 $('#evaluate').onclick = guard(() => engine.apply());
+$('#skip-beginning').onclick = guard(async () => {
+  if (engine.busy || preparingShared || performancePanel.running || performancePanel.finalizing || ['preparing', 'recording', 'finishing'].includes(timelineRecording?.state ?? '')) return;
+  stopTakePreview(); engine.stop(); await engine.seek(0); renderTransport();
+});
 $('#stop').onclick = stopPlayback;
 $('#project-name').oninput = () => dirty();
 $('#cancel-learn').onclick = () => { learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = 'Learning cancelled.'; };
@@ -1320,7 +1394,7 @@ $('#saved-projects').onchange = guard(async () => {
   });
 });
 $('#import-file').onchange = guard(async () => { const file = $('#import-file').files?.[0]; if (!file) return;
-  if (file.size > 200000) throw new Error('Pattern file is too large.');
+  if (file.size > 2000000) throw new Error('Pattern file is too large.');
   createTab(file.name.replace(/\.(strudel|str|js)$/, ''), await file.text()); $('#import-file').value = '';
 });
 function exportCode() { const blob = new Blob([standaloneCode({ ...project.tabs.find(t => t.id === project.activeTabId)!, code: editor.code }, project.bpm)], { type: 'text/plain' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${project.tabs.find(t => t.id === project.activeTabId)!.name.replace(/[^\w-]/g, '_')}.strudel`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000); }
@@ -1532,6 +1606,7 @@ $('#drawer-resize').onpointerdown = e => {
 $('#drawer-resize').onkeydown = e => { if (['ArrowUp', 'ArrowDown'].includes(e.key)) { e.preventDefault(); resizeDrawer(drawerHeight + (e.key === 'ArrowUp' ? 20 : -20)); setDrawer(drawerView); } };
 $('#composition-play').onclick = guard(() => { $('#play-target').value = 'composition'; stopTakePreview(); if (engine.started && engine.diagnostics.target !== 'composition') engine.stop(); return engine.playComposition(true); });
 $('#composition-stop').onclick = stopPlayback;
+$('#composition-loop').onclick = guard(toggleLoop);
 function toggleLoop() { if (engine.started) throw new Error('Stop playback to change the loop.'); engine.transport.loop = !engine.transport.loop; renderTransport(); }
 $('#clear-loop').onclick = guard(() => {
   if (engine.started || midiComposition.running || midiComposition.pending) throw new Error('Stop playback and resolve the take before changing the loop.');
@@ -1616,17 +1691,26 @@ function renderComposition() {
   $('#sequencer').style.setProperty('--grid', `${project.snap * 64}px`);
   $('#ruler').innerHTML = '<span class="track-corner">Tracks</span>' + Array.from({ length }, (_, i) => `<span>${beatPosition(i)}</span>`).join('') + `<div id="timeline-range" style="left:${180 + range.begin * 64}px;width:${(range.end - range.begin) * 64}px"></div><button class="range-handle" data-range-edge="begin" role="slider" aria-label="Range start" aria-valuemin="1" aria-valuemax="${beatPosition(range.end - .25)}" aria-valuenow="${beatPosition(range.begin)}" style="left:${180 + range.begin * 64}px"></button><button class="range-handle" data-range-edge="end" role="slider" aria-label="Range end" aria-valuemin="${beatPosition(range.begin + .25)}" aria-valuemax="${beatPosition(engine.arrangementLength || 4)}" aria-valuenow="${beatPosition(range.end)}" style="left:${180 + range.end * 64}px"></button><button id="seek-handle" role="slider" aria-label="Playhead" aria-valuemin="1" aria-valuemax="${beatPosition(engine.arrangementLength)}" aria-valuenow="${beatPosition(engine.timelinePosition)}" style="left:${180 + engine.timelinePosition * 64}px">▼</button>`;
   $('#clip-lane').innerHTML = project.tracks.map(t => `<option value="${t.id}">${escape(t.name)}</option>`).join('');
-  $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
+  const clipRows = new Map<string, number>(), trackRows = new Map<string, number>();
+  for (const track of project.tracks) {
+    const ends: number[] = [];
+    for (const clip of project.clips.filter(c => c.trackId === track.id).sort((a, b) => a.start - b.start)) {
+      let row = ends.findIndex(end => end <= clip.start); if (row < 0) row = ends.length;
+      ends[row] = clip.start + clip.length; clipRows.set(clip.id, row);
+    }
+    trackRows.set(track.id, Math.max(1, ends.length));
+  }
+  $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" style="height:${trackRows.get(track.id)! * 60}px" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" style="height:${trackRows.get(track.id)! * 60}px" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
     const tab = project.tabs.find(t => t.id === c.tabId)!;
-    return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · beat ${beatPosition(c.start)} · ${beatDuration(c.length)} beats${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${beatDuration(c.length)} beats${tab.tempoBpm ? ` · ${tab.tempoBpm} BPM` : ''}</small><span class="clip-resize clip-resize-left" data-resize="left" aria-hidden="true"></span><span class="clip-resize" data-resize="right" aria-hidden="true"></span></button>`;
+    return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="top:${4 + clipRows.get(c.id)! * 60}px;left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · beat ${beatPosition(c.start)} · ${beatDuration(c.length)} beats${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${beatDuration(c.length)} beats${tab.tempoBpm ? ` · ${tab.tempoBpm} BPM` : ''}</small><span class="clip-resize clip-resize-left" data-resize="left" aria-hidden="true"></span><span class="clip-resize" data-resize="right" aria-hidden="true"></span></button>`;
   }).join('') || '<p class="lane-empty">Drag a pattern tab here, or right-click it → Add to composition</p>'}</div></div>`).join('');
   paintRecordingClip(); renderTransport(); renderRecording();
 }
 function paintRecordingClip() {
   const views = [timelineRecording?.captureView, midiComposition.captureView, performancePanel.captureView, recordingPanel.captureView].filter((v): v is CaptureView => !!v);
   paintCaptureFeedback(views, editors);
-  const end = timelineRecording?.captureView?.end;
-  if (end !== undefined) $('#sequencer').style.width = `${Math.max(16, Math.ceil(end + 4), ...project.clips.map(c => c.start + c.length + 4)) * 64 + 180}px`;
+  const ends = views.flatMap(view => view.trackId && view.end !== undefined ? [view.end] : []);
+  if (ends.length) $('#sequencer').style.width = `${Math.max(16, Math.ceil(Math.max(...ends) + 4), ...project.clips.map(c => c.start + c.length + 4)) * 64 + 180}px`;
 }
 
 function toggleClipMute(id: string) { const c = project.clips.find(c => c.id === id)!; c.muted = !c.muted; engine.updateMutes(); renderComposition(); dirty(); }
@@ -1855,10 +1939,20 @@ async function boot() {
   // One automatic opening per page load, after recovery has initialized.
   let optedOut = false; try { optedOut = guideOptedOut(localStorage); } catch { /* Show help when storage is unavailable. */ }
   try { setCountIn(savedMetronomeMode(localStorage.getItem('studio.count-in'))); } catch { /* default off */ }
-  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); if (midiComposition.pending || performancePanel.take?.notes.length) openRecordBar('midi'); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) { openRecordBar('audio'); notice('Recovered audio take in the Record bar. Review it before keeping it.'); } } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
+  try { midiComposition.restore(getEditor); await performancePanel.restore(getEditor); if (midiComposition.pending || performancePanel.take?.notes.length) openRecordBar('midi'); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) { openRecordBar('audio'); notice('Recovered audio take in the Record bar. Review it before keeping it.'); } } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
+  const controls = await readPending<{ tabId: string; id: string; value: number }[]>(`controller-values:${project.sessionId}`);
+  for (const value of controls ?? []) { try { const owner = getEditor(value.tabId); pendingMidiSliders.set(value.id, { owner, ...value }); } catch { /* Deleted destination: retain the recovery record. */ } }
+  if (pendingMidiSliders.size) await flushMidiSliders();
   renderComposition();
   if (!optedOut) openQuickStart();
   setInterval(() => {
+    if (!captureActive() || controlJournalFlight || savedControlVersion === controlVersion) return;
+    const version = controlVersion;
+    const values = [...pendingMidiSliders.values()].map(update => ({ tabId: [...editors].find(([, owner]) => owner === update.owner)?.[0], id: update.id, value: update.value }));
+    controlJournalFlight = writePending(`controller-values:${project.sessionId}`, values).then(() => { savedControlVersion = version; }).catch(e => performancePanel.onfailure(e.message)).finally(() => { controlJournalFlight = undefined; });
+  }, 250);
+  setInterval(() => {
+    performancePanel.feedback();
     liveInput.mix(); const levels = liveInput.levels(); for (const name of ['input', 'output'] as const) { const meter = $<HTMLMeterElement>(`#audio-${name}-level`); meter.value = levels[name]; meter.title = levels[name] >= 1 ? 'Clipping — reduce gain' : `${Math.round(levels[name] * 100)}%`; }
     app.style.setProperty('--input-level', String(Math.min(1, levels.input))); $('#input-tabs').toggleAttribute('data-midi-active', performance.now() < midiPulseUntil); engine.tick(); paintRecordingClip(); settleSlots(); renderTransport(); $('#playhead').hidden = false; $('#playhead').style.left = `${180 + engine.timelinePosition * 64}px`; const head = document.querySelector<HTMLElement>('#seek-handle'); if (head && !timelineDragging) { head.style.left = `${180 + engine.timelinePosition * 64}px`; head.setAttribute('aria-valuenow', String(beatPosition(engine.timelinePosition))); }
     if (!instrumentOpen && engine.started && engine.target === project.activeTabId && engine.repl.state.pattern) { try { const cycle = engine.cycle; editor.paint(engine.repl.state.pattern.queryArc(cycle, cycle + 0.01), cycle); } catch { /* An incomplete edit must not interrupt performance. */ } }

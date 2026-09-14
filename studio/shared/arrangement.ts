@@ -1,12 +1,15 @@
+import { rationalTime } from './pattern-time';
 import { isClipMuted } from './mix';
 import * as core from '@strudel/core';
 import type { Clip } from './model';
 
 // Strudel's published packages do not include TypeScript declarations.
+function preciseSpan(begin: number, end: number) { return new core.TimeSpan(rationalTime(begin), rationalTime(end)); }
+
 export type Pattern = { query(state: any): any[]; queryArc(begin: number, end: number): any[] };
 export function ratePattern(pattern: Pattern, rate = 1): Pattern {
-  return new core.Pattern((state: any) => pattern.query(state.setSpan(new core.TimeSpan(Number(state.span.begin) * rate, Number(state.span.end) * rate)).setControls({ studioCycleRate: rate }))
-    .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(Number(span.begin) / rate, Number(span.end) / rate)).withValue((value: any) => {
+  return new core.Pattern((state: any) => pattern.query(state.setSpan(preciseSpan(Number(state.span.begin) * rate, Number(state.span.end) * rate)).setControls({ studioCycleRate: rate }))
+    .map((hap: any) => hap.withSpan((span: any) => preciseSpan(Number(span.begin) / rate, Number(span.end) / rate)).withValue((value: any) => {
       if (!value || typeof value !== 'object') return value;
       const { cps: _cps, ...rest } = value; return rest;
     })));
@@ -21,8 +24,8 @@ export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes
     const rate = clip.takeId ? 1 : rates.get(clip.tabId) ?? 1;
     if (begin >= end || !pattern) return [];
     const offset = state.controls?.studioLoopOffset ?? 0;
-    return (mutes ? mutes.segments(clip.id, begin + offset, end + offset).map(([a, b]) => [a - offset, b - offset]) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(new core.TimeSpan((a - clip.start) * rate + sourceOffset, (b - clip.start) * rate + sourceOffset)).setControls({ studioCycleOffset: clip.start + offset - sourceOffset / rate, studioCycleRate: rate }))
-      .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(
+    return (mutes ? mutes.segments(clip.id, begin + offset, end + offset).map(([a, b]) => [a - offset, b - offset]) : clip.muted ? [] : [[begin, end]]).flatMap(([a, b]) => pattern.query(state.setSpan(preciseSpan((a - clip.start) * rate + sourceOffset, (b - clip.start) * rate + sourceOffset)).setControls({ studioCycleOffset: clip.start + offset - sourceOffset / rate, studioCycleRate: rate }))
+      .map((hap: any) => hap.withSpan((span: any) => preciseSpan(
         // The queried part already lies inside the clip. Keep the whole onset
         // before the left boundary so a trim cannot invent a new note attack.
         (Number(span.begin) - sourceOffset) / rate + clip.start,
@@ -45,8 +48,8 @@ export function loopRange(pattern: Pattern, begin: number, end: number): Pattern
     for (let pass = Math.floor(a / length); pass * length < b; pass++) {
       const offset = pass * length - begin;
       const left = Math.max(a, pass * length), right = Math.min(b, (pass + 1) * length);
-      result.push(...pattern.query(state.setSpan(new core.TimeSpan(left - offset, right - offset)).setControls({ studioLoopOffset: offset }))
-        .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(Number(span.begin) + offset, Number(span.end) + offset))));
+      result.push(...pattern.query(state.setSpan(preciseSpan(left - offset, right - offset)).setControls({ studioLoopOffset: offset }))
+        .map((hap: any) => hap.withSpan((span: any) => preciseSpan(Number(span.begin) + offset, Number(span.end) + offset))));
     }
     return result;
   });
@@ -66,7 +69,7 @@ export class PatternTimeline {
       const begin = Number(state.span.begin), end = Number(state.span.end);
       return this.versions.flatMap((version, index) => {
         const a = Math.max(begin, version.cycle), b = Math.min(end, this.versions[index + 1]?.cycle ?? Infinity);
-        return a < b ? version.pattern.query(state.setSpan(new core.TimeSpan(a, b))) : [];
+        return a < b ? version.pattern.query(state.setSpan(preciseSpan(a, b))) : [];
       });
     });
   }
@@ -102,11 +105,11 @@ export function transportPattern(pattern: Pattern, position: number, begin: numb
     const a = Number(state.span.begin), b = Number(state.span.end), result: any[] = [];
     for (let cursor = a; cursor < b;) {
       const absolute = position + cursor;
-      const at = looping ? begin + ((absolute - begin) % (end - begin) + end - begin) % (end - begin) : absolute;
+      const at = looping && absolute >= begin ? begin + ((absolute - begin) % (end - begin) + end - begin) % (end - begin) : absolute;
       if (!looping && at >= end) break;
-      const right = Math.min(b, cursor + end - at), offset = cursor - at;
-      result.push(...pattern.query(state.setSpan(new core.TimeSpan(at, at + right - cursor)).setControls({ studioLoopOffset: offset }))
-        .map((hap: any) => hap.withSpan((span: any) => new core.TimeSpan(Number(span.begin) + offset, Number(span.end) + offset))));
+      const right = Math.min(b, cursor + (looping && absolute < begin ? begin : end) - at), offset = cursor - at;
+      result.push(...pattern.query(state.setSpan(preciseSpan(at, at + right - cursor)).setControls({ studioLoopOffset: offset }))
+        .map((hap: any) => hap.withSpan((span: any) => preciseSpan(Number(span.begin) + offset, Number(span.end) + offset))));
       cursor = right;
     }
     return result;

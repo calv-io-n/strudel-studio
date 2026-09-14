@@ -59,14 +59,14 @@ test('on-screen keys stay available without asking for MIDI permission', async (
   await page.locator('#controls .keys button').first().click(); await expect(page.locator('#device-activity')).not.toContainText('denied');
 });
 
-test('recording code forms in the native font, resolves to highlighted shadow code and stops animating', async ({page}) => {
+test('recording shows status then resolves to highlighted review code', async ({page}) => {
   await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await recordBar(page); await page.locator('#record-midi-connection [data-midi-enable]').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
   const ghosts = page.locator('.tab-editor:not([hidden]) .pending-code');
   await expect(ghosts).toHaveCount(2); await expect(ghosts.first()).toHaveAttribute('aria-busy','true');
-  await expect(ghosts.locator('.code-placeholder').first()).toHaveCSS('animation-name','code-forming');
+  await expect(ghosts.first()).toContainText('Recording'); await expect(ghosts.locator('.code-placeholder')).toHaveCount(0);
   await page.evaluate(() => (window as any).midiFixture.note()); await page.waitForTimeout(220); await page.evaluate(() => (window as any).midiFixture.note(67,false));
-  await expect(ghosts.filter({hasText:'note(67)'})).toBeVisible();
+  await expect(ghosts.filter({hasText:'note(67)'})).toHaveCount(0);
   await ghosts.last().scrollIntoViewIfNeeded(); await page.screenshot({path:'/tmp/native-code-forming.png'});
   await page.locator('#stop').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take');
   await expect(ghosts.locator('.code-placeholder')).toHaveCount(0); await expect(page.locator('.creating-code')).toHaveCount(0);
@@ -86,7 +86,7 @@ test('recording code forms in the native font, resolves to highlighted shadow co
 
 test('reduced motion keeps the creating-code placeholders still', async ({page}) => {
   await page.emulateMedia({reducedMotion:'reduce'}); await boot(page); await recordBar(page); await page.locator('#record-toggle').click();
-  await expect(page.locator('.code-placeholder').first()).toHaveCSS('animation-name','none'); await page.locator('#stop').click();
+  await expect(page.locator('.pending-code').first()).toBeVisible(); await expect(page.locator('.code-placeholder')).toHaveCount(0); await page.locator('#stop').click();
 });
 
 

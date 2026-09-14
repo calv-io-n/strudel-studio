@@ -104,7 +104,7 @@ test('Web MIDI input connects, plays, reconnects, and retains selection across s
 });
 
 test('composition Record and Stop append audio to the selected placement without new tabs', async ({ page }) => {
-  await fakeInput(page); await start(page); await page.locator('[data-play-target=composition]').click();
+  await fakeInput(page); await start(page); await page.locator('[data-play-target=composition]').click(); await page.locator('#record-toggle').click(); await page.locator('#record-destination').selectOption('existing'); await page.locator('#record-close').click();
   await openRecordBar(page); await page.locator('#record-track').selectOption('track-2');
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
   await expect(page.locator('[data-pending-tab]')).toHaveCount(0); await expect(page.locator('.pending-region')).toBeVisible();
@@ -296,10 +296,10 @@ test('recording works in an empty timeline and permission denial leaves no take'
   const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(0); expect(project.tabs[0].code).toContain('// Recorded audio');
 });
 
-test('recording joins playing composition at its playhead and stops before an existing clip', async ({ page }) => {
+test('existing pattern recording joins playback and stops before an existing clip', async ({ page }) => {
   await fakeInput(page); await start(page); await playComposition(page); await page.waitForTimeout(600);
   const before = (Number((await page.locator('#composition-position').textContent())!.replace('Beat ', '')) - 1) / 4;
-  await openRecordBar(page); await page.locator('#record-track').selectOption('track-2'); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
+  await openRecordBar(page); await page.locator('#record-destination').selectOption('existing'); await page.locator('#record-track').selectOption('track-2'); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
   await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0], asset = (await records(page,'assets')).find(a=>a.recording?.mode==='wet');
   expect(asset.recording.offsetCycles).toBeGreaterThan(before); expect(project.clips).toHaveLength(6);
@@ -342,6 +342,7 @@ test('cancelled input permission does not create a take or stop the next recordi
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
   await page.evaluate(() => (window as any).rejectInput(new DOMException('Denied after cancellation', 'NotAllowedError'))); await page.waitForTimeout(300);
   await expect(page.locator('#record-status')).toContainText('recording'); await page.locator('#record-toggle').click();
+  await expect(page.locator('#play')).toBeEnabled();
   await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
 });
 

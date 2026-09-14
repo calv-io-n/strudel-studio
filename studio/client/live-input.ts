@@ -1,7 +1,7 @@
 import type { Engine } from './engine';
 import type { AudioInput, Project } from '../shared/model';
 import { createInputEffects } from './input-effects';
-import { compileAudioEffects } from '../shared/audio-input';
+import { compileAudioEffects, type AudioEffects } from '../shared/audio-input';
 import { read, write } from './storage/database';
 export class LiveInput {
   stream?: MediaStream;
@@ -18,7 +18,7 @@ export class LiveInput {
   monitoring = false;
   pending = false;
   settings?: MediaTrackSettings;
-  readonly effectListeners = new Set<(code: string) => void>();
+  readonly effectListeners = new Set<(change: string | Partial<AudioEffects>) => void>();
   onended: () => void = () => {};
   constructor(private engine: Engine, private project: () => Project) {}
   get context() { return this.engine.audioContext; }
@@ -54,6 +54,7 @@ export class LiveInput {
     finally { if (epoch === this.epoch) this.pending = false; }
   }
   apply(code: string) { compileAudioEffects(code); this.effects?.apply(code); this.effectListeners.forEach(listener => listener(code)); }
+  update(values: Partial<AudioEffects>) { this.effects?.apply(values); this.effectListeners.forEach(listener => listener(values)); }
   setMonitoring(on: boolean) { this.monitoring = on && this.active; this.mix(); }
   mix() {
     const p = this.project(), input = p.audioInput, track = p.tracks.find(t => t.id === input?.trackId);

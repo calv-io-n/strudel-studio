@@ -9,6 +9,7 @@ import type { Engine } from './engine';
 import type { LiveInput } from './live-input';
 import { readPending, writePending, removePending } from './recovery';
 import { takeAsset } from './storage/recorded-take';
+import type { AudioEffects } from '../shared/audio-input';
 export type RecordOptions = { target?: RecordingTarget; prepareMidi?: () => Promise<void>; startMidi?: (at: number) => void; stopMidi?: () => void; deferCommit?: boolean; accompaniment?: boolean; trackId: string; device: string; channel: string; mode: 'wet' | 'dry'; latency: number; countin: boolean; internal?: { name: string; prepare: () => Promise<AudioNode> } };
 type Meta = { source?: 'external' | 'internal'; identity: TakeIdentity; input: AudioInput; bpm: number; offset: number; rate: number; mode: 'wet' | 'dry'; latency: number; incomplete: boolean };
 export class TimelineRecording {
@@ -28,7 +29,7 @@ export class TimelineRecording {
   private finishing?: Promise<void>;
   private epoch = 0;
   private encoded?: { asset: Asset; blob: Blob }[];
-  private listener = (code: string) => this.effects?.apply(code);
+  private listener = (change: string | Partial<AudioEffects>) => this.effects?.apply(change);
   constructor(private engine: Engine, private live: LiveInput, private project: () => Project, private input: () => AudioInput, private commit: (identity: TakeIdentity, audio: { asset: Asset; blob: Blob }[], metaKey: string) => Promise<void>, private changed: () => void) {}
   get captureView(): CaptureView | undefined {
     if (!this.meta || this.state === 'idle') return;
@@ -40,7 +41,7 @@ export class TimelineRecording {
       audio: !!identity.target, state: this.state, tabId: identity.tabId,
       code: this.encoded ? recordedSection(this.encoded[0].asset, identity.target?.offset, rate) : undefined,
       trackId: composition ? identity.trackId : undefined, clipId: composition ? identity.clipId : undefined,
-      kind: identity.target ? 'append' : 'new-pattern', start: composition ? this.startCycle : undefined, end: composition ? this.endCycle : undefined,
+      kind: identity.target && identity.target.kind !== 'new' ? 'append' : 'new-pattern', start: composition ? this.startCycle : undefined, end: composition ? this.endCycle : undefined,
       label: `${identity.name} · ${this.state === 'failed' ? 'Save failed · take retained' : this.state}`,
     };
   }
@@ -64,7 +65,7 @@ export class TimelineRecording {
     if (!options.target && (nextClip - position) * 240 / this.project().bpm <= tail + .1 + (options.countin ? 240 / this.project().bpm : 0)) throw new Error('Choose a longer empty section to record, including the effects tail.');
     const epoch = ++this.epoch;
     let n = 1; while (this.project().tabs.some(t => t.name === `Audio take ${n}`) || this.project().tracks.some(t => t.name === `Audio take ${n}`)) n++;
-    const identity = { target: options.target, assetId: crypto.randomUUID(), dryAssetId: crypto.randomUUID(), tabId: options.target?.tabId ?? crypto.randomUUID(), trackId: options.target?.trackId ?? options.trackId, clipId: options.target?.clipId ?? crypto.randomUUID(), name: `Audio take ${n}` };
+    const identity = { target: options.target, assetId: crypto.randomUUID(), dryAssetId: crypto.randomUUID(), tabId: options.target?.tabId ?? crypto.randomUUID(), trackId: options.target?.trackId ?? options.trackId, clipId: options.target?.clipId ?? crypto.randomUUID(), name: options.target?.name ?? `Audio take ${n}` };
     this.prefix = `timeline-audio:${this.project().sessionId}:`;
     const bpm = this.project().bpm;
     this.meta = { source: options.internal ? 'internal' : 'external', identity, input: options.internal ? { id: identity.assetId, name: options.internal.name, trackId: identity.trackId, enabled: false, mode: 'audio', code: 'AUDIO', appliedCode: 'AUDIO', anchors: [] } : structuredClone(this.input()), bpm, offset: position, rate: 48000, mode: options.mode, latency: options.latency, incomplete: false };
@@ -94,27 +95,28 @@ export class TimelineRecording {
       const bpm = this.meta!.bpm;
       await writePending(this.prefix + 'meta', this.meta);
       if (epoch !== this.epoch) return;
-      if (!await this.engine.countIn.wait(bpm) || epoch !== this.epoch) return;
-      if (options.target?.context === 'tab') { if (options.accompaniment !== false) await this.engine.evaluate(true, options.target.tabId); }
-      else { if (options.target) this.engine.transport.position = options.target.position; await this.engine.beginAudioRecording(); }
+      if (options.target?.context === 'composition' && !this.engine.started) this.engine.transport.position = options.target.position;
+      this.at = await this.engine.recordingStart(options.target?.context !== 'tab', options.accompaniment !== false, options.target?.tabId);
       if (epoch !== this.epoch) return;
-      const recordingPosition = () => options.target?.context === 'tab' ? position : this.engine.timelinePosition;
-      const wait = .025;
-      this.at = this.context.currentTime + wait;
-      this.meta.offset = recordingPosition() + wait * bpm / 240;
-      // Persist the exact scheduled start before publishing any chunks.
+      this.meta.offset = options.target?.context === 'tab' ? position : this.engine.positionAt(this.at);
+      if (options.target?.kind === 'new') {
+        options.target.position = this.meta.offset;
+        options.target.offset = this.meta.offset - Math.floor(this.meta.offset * 4) / 4;
+      } else if (this.meta.identity.target) this.meta.identity.target.offset += this.meta.offset - position;
       await writePending(this.prefix + 'meta', this.meta);
-      if (this.context.currentTime >= this.at) {
-        this.at = this.context.currentTime + .025;
-        this.meta.offset = recordingPosition() + .025 * bpm / 240;
-        await writePending(this.prefix + 'meta', this.meta);
-      }
       if (epoch !== this.epoch) return;
-      const limit = Math.min(897, (nextClip - this.meta.offset) * 240 / bpm - (options.target ? 0 : tail) - .05, 248_000_000 / (this.context.sampleRate * 8) - 3);
+      if (this.at <= this.context.currentTime) this.at = this.context.currentTime + .025;
+      const wait = Math.max(0, this.at - this.context.currentTime);
+      const limit = Math.min(900, ((options.target?.kind === 'new' ? 4096 : nextClip) - this.meta.offset) * 240 / bpm - tail - .05);
       if (limit <= 0) throw new Error('Move the playhead earlier before recording.');
-      if (this.meta.identity.target) this.meta.identity.target.offset += this.meta.offset - position;
       options.startMidi?.(this.at);
-      this.capture.onstart = actual => { if (!this.meta) return; this.meta.offset += (actual - this.at) * bpm / 240; if (this.meta.identity.target) this.meta.identity.target.offset += (actual - this.at) * bpm / 240; void writePending(this.prefix + 'meta', this.meta).catch(() => {}); };
+      this.capture.onstart = actual => {
+        if (!this.meta) return;
+        const adjustment = (actual - this.at) * bpm / 240;
+        this.meta.offset = Math.max(0, this.meta.offset + adjustment);
+        if (this.meta.identity.target) this.meta.identity.target.offset = Math.max(0, this.meta.identity.target.offset + adjustment);
+        void writePending(this.prefix + 'meta', this.meta).catch(() => {});
+      };
       this.capture.start(this.at, this.prefix, limit + 3); this.dry?.start(this.at, this.prefix + 'dry:', limit + 3);
       if (!options.internal) this.live.onended = () => void this.stop(true);
       this.timer = setTimeout(() => void this.stop(), (limit + wait) * 1000);
@@ -142,6 +144,7 @@ export class TimelineRecording {
     try { this.source?.disconnect(this.gate!); } catch { /* disconnected device */ }
     this.gate?.gain.setValueAtTime(0, this.context!.currentTime);
     this.live.stop(); this.engine.endAudioRecording();
+    if (this.engine.started) this.engine.stop();
     this.status('finishing', interrupted ? 'Input interrupted · retaining available audio…' : this.meta!.mode === 'wet' ? 'Finishing effects…' : 'Saving recording…');
     if (!interrupted && this.meta!.mode === 'wet') await new Promise(resolve => setTimeout(resolve, 3000));
     await Promise.all([this.capture?.stop(), this.dry?.stop()]);
@@ -188,6 +191,10 @@ export class TimelineRecording {
   async restore() {
     this.prefix = `timeline-audio:${this.project().sessionId}:`; this.meta = await readPending<Meta>(this.prefix + 'meta');
     if (!this.meta) return;
+    // Older captures can contain a sub-sample negative offset from floating-point rounding.
+    if (this.meta.offset < 0 && this.meta.offset > -1e-9) this.meta.offset = 0;
+    const target = this.meta.identity.target;
+    if (target && target.offset < 0 && target.offset > -1e-9) target.offset = 0;
     if (this.meta.identity.target ? this.project().assetIds.includes(this.meta.identity.assetId) : this.project().tabs.some(t => t.id === this.meta!.identity.tabId)) { await removePending(this.prefix); this.meta = undefined; return; }
     this.context = new AudioContext({ sampleRate: this.meta.rate });
     this.capture = new AudioTakeCapture(this.context, this.context.createGain(), () => {}); await this.capture.restore(this.prefix);

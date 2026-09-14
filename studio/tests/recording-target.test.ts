@@ -23,3 +23,14 @@ test('audio appends to the pinned existing pattern, preserves placements, and re
  assert.equal(placeRecordedTake(next,asset,id),next);
  assert.match(recordedSection(asset,2,2),/slow\(7\).late\(4\)/);
 });
+
+test('new composition destinations reserve independent tabs and permit layered clips', async () => {
+ const { placeNewPattern } = await import('../shared/recording-target');
+ const p = newProject();
+ const target = recordingTarget(p, 'composition', p.tracks[0].id, undefined, 0, 'new');
+ assert.equal(target.kind, 'new'); assert.equal(p.tabs.some(t => t.id === target.tabId), false);
+ const next = placeNewPattern(p, target, 'note(60).s("sine")', 10);
+ assert.equal(next.tabs.length, p.tabs.length + 1); assert.equal(next.clips.at(-1)?.trackId, p.tracks[0].id);
+ assert.deepEqual(next.clips.slice(0, -1), p.clips);
+ assert.equal(placeNewPattern(next, target, 'note(60)', 10), next);
+});

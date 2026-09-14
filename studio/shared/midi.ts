@@ -9,13 +9,13 @@ export function parseMidi(bytes: number[]) {
 }
 export function scaleCC(value: number, min: number, max: number, step: number) {
   const raw = min + Math.max(0, Math.min(127, value)) / 127 * (max - min);
-  const snapped = min + Math.round((raw - min) / step) * step;
+  const snapped = min + Math.min(Math.floor((max - min) / step + 1e-9), Math.round((raw - min) / step)) * step;
   return Number(Math.max(min, Math.min(max, snapped)).toFixed(8));
 }
 export class Pickup {
   private states = new Map<string, { previous?: number; caught: boolean; lastApplied?: number }>();
-  reset() { this.states.clear(); }
-  accept(binding: Binding, input: number, current: number) {
+  reset(bindingId?: string) { if (bindingId === undefined) this.states.clear(); else this.states.delete(bindingId); }
+  accept(binding: Binding, input: number, current: number, applied = input) {
     if (!binding.pickup) return true;
     const state = this.states.get(binding.id) ?? { caught: false };
     if (state.lastApplied !== undefined && Math.abs(current - state.lastApplied) > 1 / 127) state.caught = false;
@@ -23,7 +23,7 @@ export class Pickup {
     const crossed = state.previous !== undefined && (state.previous - current) * (input - current) <= 0;
     state.caught ||= close || crossed;
     state.previous = input;
-    if (state.caught) state.lastApplied = input;
+    if (state.caught) state.lastApplied = applied;
     this.states.set(binding.id, state);
     return state.caught;
   }

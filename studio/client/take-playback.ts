@@ -4,6 +4,8 @@ import type { Asset, Clip, Project } from '../shared/model';
 import type { Pattern } from '../shared/arrangement';
 import { createInputEffects } from './input-effects';
 import { compileAudioEffects } from '../shared/audio-input';
+import { rationalTime } from '../shared/pattern-time';
+function preciseSpan(begin: number, end: number) { return new core.TimeSpan(rationalTime(begin), rationalTime(end)); }
 export function takeEffects(asset: Asset, project: Project) {
   if (asset.recording?.mode === 'wet') return 'AUDIO';
   return project.audioInput && project.audioInput.id === asset.recording?.inputId ? project.audioInput.appliedCode : asset.recording?.effectsCode ?? 'AUDIO';
@@ -41,8 +43,8 @@ export function takePattern(clip: Clip, asset: Asset, cps: number, sourcePattern
     if (a >= b) return extras;
     // Read the take's effects once at its onset. Its source expression must not
     // retrigger a long recording every cycle or replace clip timing and trims.
-    const source = sourcePattern?.query(state.setSpan(new core.TimeSpan(0, 1e-6))).find((hap: any) => hap.value?.s === sound);
+    const source = sourcePattern?.query(state.setSpan(preciseSpan(0, 1e-6))).find((hap: any) => hap.value?.s === sound);
     if (sourcePattern && !source) return extras;
-    return [...extras, new core.Hap(new core.TimeSpan(begin, end), new core.TimeSpan(a, b), { gain: 1, attack: 0, release: 0, sustain: 1, ...source?.value, s: `studio_take_${asset.id.replaceAll('-', '')}`, studioTakeOffset: offset + Math.max(0, begin / cps - lead), studioTakeDuration: (end - begin) / cps }, source?.context)];
+    return [...extras, new core.Hap(preciseSpan(begin, end), preciseSpan(a, b), { gain: 1, attack: 0, release: 0, sustain: 1, ...source?.value, s: `studio_take_${asset.id.replaceAll('-', '')}`, studioTakeOffset: offset + Math.max(0, begin / cps - lead), studioTakeDuration: (end - begin) / cps }, source?.context)];
   });
 }

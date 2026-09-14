@@ -23,7 +23,7 @@ class BrowserMidi {
     const inputs = [...this.access!.inputs.values()];
     const ports = inputs.filter(p => p.state === 'connected').map(p => this.key(p));
     this.status = { ready: true, message: 'Web MIDI ready', ports, connected: ports.filter(p => this.selected.includes(p)) };
-    for (const port of inputs) port.onmidimessage = this.selected.includes(this.key(port)) ? event => { if (event.data) this.receive(this.key(port), [...event.data], 'web-midi'); } : null;
+    for (const port of inputs) port.onmidimessage = this.selected.includes(this.key(port)) ? event => { if (event.data) this.receive(this.key(port), [...event.data], 'web-midi', event.timeStamp); } : null;
     this.emit({ type: 'status', ...this.status });
   }
   async connections() { return { ports: this.selected }; }
@@ -31,7 +31,7 @@ class BrowserMidi {
     await exclusive(async () => { const current = await read<string[]>('settings', 'midi-connections') ?? []; this.selected = [...new Set(input.connected ? [...current, input.port] : current.filter(p => p !== input.port))]; await write([{ collection: 'settings', key: 'midi-connections', value: this.selected }]); });
     this.emit({ type: 'midi-connections', ports: this.selected }); if (this.access) this.refresh(); return { ports: this.selected };
   }
-  private receive(source: string, bytes: number[], route: MidiEvent['route']) { if (parseMidi(bytes)) this.emit({ type: 'midi', source, bytes, receivedAt: Date.now(), sequence: ++this.sequence, route }); }
+  private receive(source: string, bytes: number[], route: MidiEvent['route'], timestamp = performance.now()) { if (parseMidi(bytes)) this.emit({ type: 'midi', source, bytes, receivedAt: Date.now(), timestamp, sequence: ++this.sequence, route }); }
   send(value: { type: string; bytes?: number[]; simulate?: boolean }) { if (value.type === 'send' && value.bytes) this.receive('studio:virtual', value.bytes, 'simulation'); }
 }
 export const browserMidi = new BrowserMidi();

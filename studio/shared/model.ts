@@ -17,7 +17,7 @@ export const AssetSchema = z.object({
   contentHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   pack: z.object({ id: z.string().uuid(), name: z.string().min(1).max(80), folder: z.string().max(1000).default('') }).optional(),
   source: z.object({ name: z.string().max(1000), url: z.string().max(2000).optional(), revision: z.string().max(100).optional(), originalFormat: z.enum(['wav', 'mp3', 'ogg', 'flac']).optional() }).optional(),
-  recording: z.object({ source: z.enum(['internal', 'external']), bpm: z.number().positive(), offsetCycles: z.number().nonnegative(), duration: z.number().nonnegative(), trimStart: z.number().nonnegative(), trimEnd: z.number().nonnegative(), incomplete: z.boolean().default(false), inputId: z.string().uuid().optional(), trackId: id.optional(), mode: z.enum(['dry', 'wet']).optional(), dryAssetId: z.string().uuid().optional(), effectsCode: z.string().max(200_000).optional(), rate: z.number().int().positive().optional(), frames: z.number().int().nonnegative().optional(), latencySeconds: z.number().min(-2).max(2).optional() }).optional(),
+  recording: z.object({ source: z.enum(['internal', 'external']), bpm: z.number().positive(), offsetCycles: z.number().nonnegative(), duration: z.number().nonnegative(), trimStart: z.number().nonnegative(), trimEnd: z.number().nonnegative(), incomplete: z.boolean().default(false), inputId: z.string().uuid().optional(), trackId: id.optional(), mode: z.enum(['dry', 'wet']).optional(), dryAssetId: z.string().uuid().optional(), effectsCode: z.string().max(2_000_000).optional(), rate: z.number().int().positive().optional(), frames: z.number().int().nonnegative().optional(), latencySeconds: z.number().min(-2).max(2).optional() }).optional(),
   precision: z.object({ rate: z.number().int().positive(), channels: z.number().int().min(1).max(64), bits: z.number().int().optional(), working: z.enum(['float32', 'legacy']), originalAvailable: z.boolean() }).optional(),
   catalogue: z.object({ packId: z.string().uuid(), revision: z.string(), path: z.string(), hash: z.string() }).optional(),
   personal: z.boolean().optional(),
@@ -48,7 +48,7 @@ export const VirtualControlSchema = z.object({
 });
 export type VirtualControl = z.infer<typeof VirtualControlSchema>;
 const LegacyProjectSchema = z.object({
-  version: z.literal(1), name: z.string().min(1).max(80), code: z.string().max(200_000),
+  version: z.literal(1), name: z.string().min(1).max(80), code: z.string().max(2_000_000),
   anchors: z.array(AnchorSchema).max(500), bindings: z.array(BindingSchema).max(1000),
   profiles: z.array(ProfileSchema).max(50),
   slots: z.array(z.object({ name: z.string().regex(/^[a-zA-Z][\w-]{0,39}$/),
@@ -56,7 +56,7 @@ const LegacyProjectSchema = z.object({
   controls: z.array(VirtualControlSchema).max(100),
 });
 const tabId = id.regex(/^[a-zA-Z0-9_-]+$/);
-const OldTabSchema = z.object({ id: tabId, name: z.string().trim().min(1).max(80), code: z.string().max(200_000), anchors: z.array(AnchorSchema).max(500) });
+const OldTabSchema = z.object({ id: tabId, name: z.string().trim().min(1).max(80), code: z.string().max(2_000_000), anchors: z.array(AnchorSchema).max(500) });
 
 const OldClipSchema = z.object({ id: tabId, tabId, lane: z.union([z.literal(0), z.literal(1)]), start: z.number().int().min(0).max(4096), length: z.number().int().min(1).max(4096) });
 
@@ -97,15 +97,14 @@ export const ProjectV3Schema = LegacyProjectSchema.omit({ code: true, anchors: t
   if (new Set(p.clips.map(c => c.id)).size !== p.clips.length) issue('Duplicate clip ID');
   for (const c of p.clips) {
     if (!tabs.has(c.tabId) || !tracks.has(c.trackId)) issue('Missing clip source or track');
-    if (p.clips.some(o => o.id !== c.id && o.trackId === c.trackId && c.start < o.start + o.length && o.start < c.start + c.length)) issue('Clips cannot overlap in the same track');
   }
   if (p.bindings.some(b => b.target.kind === 'slider' && b.target.tabId !== '@midi' && b.target.tabId !== '@audio' && !tabs.has(b.target.tabId!))) issue('Slider mapping references a missing pattern');
 });
 export const ProjectV4Schema = z.object({ ...ProjectV3Schema.shape, version: z.literal(4), assetIds: z.array(z.string().uuid()).max(10000).default([]) }).superRefine((p, ctx) => { const result = ProjectV3Schema.safeParse({ ...p, version: 3 }); if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path }); });
-export const ProjectV5Schema = z.object({ ...ProjectV4Schema.shape, version: z.literal(5), revision: z.number().int().nonnegative().optional(), midiSound: z.string().min(1).max(300).optional(), midiInstrument: z.object({ enabled: z.boolean().default(true), mode: z.enum(['script', 'midi']), code: z.string().max(200_000), appliedCode: z.string().max(200_000), appliedAnchors: z.array(AnchorSchema).max(500).optional(), anchors: z.array(AnchorSchema).max(500) }).optional() }).superRefine((p, ctx) => { const result = ProjectV4Schema.safeParse({ ...p, version: 4 }); if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path }); });
-export const AudioInputSchema = z.object({ id: z.string().uuid(), name: z.string().min(1).max(80), trackId: tabId, enabled: z.boolean().default(true), mode: z.literal('audio').default('audio'), code: z.string().max(200_000), appliedCode: z.string().max(200_000), anchors: z.array(AnchorSchema).max(500), appliedAnchors: z.array(AnchorSchema).max(500).optional() });
+export const ProjectV5Schema = z.object({ ...ProjectV4Schema.shape, version: z.literal(5), revision: z.number().int().nonnegative().optional(), midiSound: z.string().min(1).max(300).optional(), midiInstrument: z.object({ enabled: z.boolean().default(true), mode: z.enum(['script', 'midi']), code: z.string().max(2_000_000), appliedCode: z.string().max(2_000_000), appliedAnchors: z.array(AnchorSchema).max(500).optional(), anchors: z.array(AnchorSchema).max(500) }).optional() }).superRefine((p, ctx) => { const result = ProjectV4Schema.safeParse({ ...p, version: 4 }); if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path }); });
+export const AudioInputSchema = z.object({ id: z.string().uuid(), name: z.string().min(1).max(80), trackId: tabId, enabled: z.boolean().default(true), mode: z.literal('audio').default('audio'), code: z.string().max(2_000_000), appliedCode: z.string().max(2_000_000), anchors: z.array(AnchorSchema).max(500), appliedAnchors: z.array(AnchorSchema).max(500).optional() });
 export type AudioInput = z.infer<typeof AudioInputSchema>;
-export const ProjectV6Schema = z.object({ ...ProjectV5Schema.shape, version: z.literal(6), audioInput: AudioInputSchema.optional(), appliedPatterns: z.record(z.string(), z.string().max(200_000)).optional(), appliedPatternAnchors: z.record(z.string(), z.array(AnchorSchema).max(500)).optional() }).superRefine((p, ctx) => {
+export const ProjectV6Schema = z.object({ ...ProjectV5Schema.shape, version: z.literal(6), audioInput: AudioInputSchema.optional(), appliedPatterns: z.record(z.string(), z.string().max(2_000_000)).optional(), appliedPatternAnchors: z.record(z.string(), z.array(AnchorSchema).max(500)).optional() }).superRefine((p, ctx) => {
   const result = ProjectV5Schema.safeParse({ ...p, version: 5 });
   if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
   if (p.audioInput && !p.tracks.some(t => t.id === p.audioInput!.trackId)) ctx.addIssue({ code: 'custom', message: 'Audio input references a missing track' });
@@ -147,7 +146,7 @@ export function parseProject(value: unknown): Project {
   if (result.success) return result.data;
   throw new Error(describeProjectIssues(value));
 }
-export type MidiEvent = { source: string; bytes: number[]; receivedAt: number; sequence: number; route: 'alsa' | 'web-midi' | 'simulation' };
+export type MidiEvent = { source: string; bytes: number[]; receivedAt: number; timestamp?: number; sequence: number; route: 'alsa' | 'web-midi' | 'simulation' };
 export type BridgeStatus = { ready: boolean; message: string; ports: string[]; connected: string[] };
 export type Receipt = { sequence: number; bindingId: string; target: Target; status: string; value?: number; at: number };
 export type Job = { id: string; state: 'running' | 'complete' | 'failed'; asset?: Asset; error?: string };

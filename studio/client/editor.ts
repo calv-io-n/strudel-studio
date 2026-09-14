@@ -1,7 +1,7 @@
 import { highlightingFor } from '@codemirror/language';
 import { highlightCode } from '@lezer/highlight';
 import type { CaptureView } from '../shared/capture-state';
-import { parser } from '@lezer/javascript';
+import { parseCode } from '../shared/syntax';
 import { headerEnd, reconcileTempo } from '../shared/tempo';
 import { isolateHistory } from '@codemirror/commands';
 import { StateEffect, StateField, Transaction, EditorState, Compartment } from '@codemirror/state';
@@ -84,7 +84,7 @@ export class StudioEditor {
     if (!code.trim()) throw new Error('An empty take cannot replace code.');
     this.view.dispatch({ changes: { from: destination.from, to: destination.to, insert: code }, effects: this.destinationEffect.of(null), userEvent: 'input.performance', annotations: isolateHistory.of('full') });
   }
-  constructor(root: HTMLElement, project: Tab, callbacks: { change: (live: boolean) => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
+  constructor(root: HTMLElement, project: Tab, callbacks: { change: (live: boolean) => void; value?: (id: string, value: number) => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
     const owner = this;
     class PendingWidget extends WidgetType {
       constructor(readonly label: string, readonly code?: string, readonly inline = false, readonly state?: CaptureView['state'], readonly audio = false, readonly appearanceVersion = owner.appearanceVersion) { super(); }
@@ -94,9 +94,15 @@ export class StudioEditor {
         const el = document.createElement(this.inline ? 'span' : 'div');
         el.className = `pending-code${this.inline ? ' pending-inline' : ''}${creating ? ' creating-code' : ''}`;
         el.setAttribute('aria-label', this.label); el.setAttribute('aria-busy', String(creating)); el.title = this.label;
-        const putCode = (code: string) => highlightCode(code, parser.parse(code), { style: tags => highlightingFor(view.state, tags) }, (text, classes) => {
+        const putCode = (code: string) => highlightCode(code, parseCode(code), { style: tags => highlightingFor(view.state, tags) }, (text, classes) => {
           const span = document.createElement('span'); span.className = classes; span.textContent = text; el.append(span);
         }, () => el.append(document.createTextNode('\n')));
+        if (creating) { el.textContent = this.label; return el; }
+        if (this.code && this.code.length > 12000) {
+          const root = document.createElement('div'); root.className = 'take-code-review'; el.append(root);
+          const preview = new EditorView({ doc: this.code, extensions: [EditorState.readOnly.of(true), EditorView.editable.of(false), EditorView.theme({ '&': { maxHeight: '320px' }, '.cm-scroller': { overflow: 'auto' } })], parent: root });
+          (el as any).takePreview = preview; return el;
+        }
         if (this.code?.trim()) putCode(this.code.trim());
         else {
           putCode(this.audio ? '// Recorded audio\n$: s(' : `${this.inline ? '' : '// Recorded MIDI\n$: '}note(`);
@@ -105,13 +111,14 @@ export class StudioEditor {
         }
         return el;
       }
+      destroy(dom: HTMLElement) { (dom as any).takePreview?.destroy(); }
       ignoreEvent() { return true; }
     }
     const cues = (code: string, destination?: Destination | null) => {
       const ranges = [];
       const end = headerEnd(code);
       if (owner.managedTempo && end) ranges.push(Decoration.mark({ class: 'managed-tempo', attributes: { title: 'Controlled by project BPM. Change tempo beside the transport; pattern overrides are in the pattern menu.' } }).range(0, end - 1));
-      parser.parse(code).iterate({ enter(node) {
+      parseCode(code).iterate({ enter(node) {
         if (node.name !== 'CallExpression') return;
         const name = node.node.firstChild;
         if (name?.name !== 'VariableName') return;
@@ -154,7 +161,7 @@ export class StudioEditor {
         input.title = 'Adjust value. Use the slider() name to bind a MIDI control.';
         input.addEventListener('pointerdown', () => owner.select(this.slider.id));
         input.addEventListener('focus', () => owner.select(this.slider.id));
-        input.addEventListener('input', () => owner.setValue(input.dataset.sliderId!, Number(input.value)));
+        input.addEventListener('input', () => (callbacks.value ?? owner.setValue.bind(owner))(input.dataset.sliderId!, Number(input.value)));
         return input;
       }
       updateDOM(dom: HTMLElement) {
@@ -221,17 +228,22 @@ export class StudioEditor {
   refresh() { this.view.dispatch({ effects: this.changeWidgets.of(this.sliders) }); this.markSelected(); }
   get code() { return this.view.state.doc.toString(); }
   get anchors() { return this.sliders.map(({ id, from, fingerprint }) => ({ id, from, fingerprint })); }
-  setValue(id: string, value: number) {
-    const slider = this.sliders.find((s) => s.id === id);
-    if (!slider) return false;
-    const next = Math.min(slider.max, Math.max(slider.min, value));
-    if (next === slider.value) return true;
-    this.values.set(id, next);
-    this.liveVersions.set(id, (this.liveVersions.get(id) ?? 0) + 1);
-    this.liveWrite = true;
-    this.view.dispatch({ changes: { from: slider.from, to: slider.to, insert: String(Number(next.toFixed(8))) } });
-    this.liveWrite = false;
+  setValue(id: string, value: number) { return this.setValues(new Map([[id, value]])); }
+  setValues(values: Map<string, number>) {
+    const changes = [];
+    for (const slider of this.sliders) {
+      const value = values.get(slider.id); if (value === undefined) continue;
+      const next = Math.min(slider.max, Math.max(slider.min, value));
+      if (next === slider.value) continue;
+      this.values.set(slider.id, next); this.liveVersions.set(slider.id, (this.liveVersions.get(slider.id) ?? 0) + 1);
+      changes.push({ from: slider.from, to: slider.to, insert: String(Number(next.toFixed(8))) });
+    }
+    if (changes.length) { this.liveWrite = true; try { this.view.dispatch({ changes }); } finally { this.liveWrite = false; } }
     return true;
+  }
+  displayValue(id: string, value: number) {
+    this.values.set(id, value);
+    for (const input of this.view.dom.querySelectorAll<HTMLInputElement>('.inline-slider')) if (input.dataset.sliderId === id) input.value = String(value);
   }
   publishRecording(project: Tab) {
     const previous = this.code, next = project.code;

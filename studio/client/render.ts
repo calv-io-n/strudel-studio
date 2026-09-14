@@ -1,3 +1,5 @@
+import { installPreciseQueries } from '../shared/pattern-time';
+import { optimizeRecordedMidi } from '../shared/optimize-midi';
 import { tempoRate } from '../shared/tempo';
 import { isClipMuted } from '../shared/mix';
 import * as core from '@strudel/core';
@@ -24,7 +26,7 @@ window.addEventListener('message', async event => {
     if (!Number.isInteger(cycles) || cycles < 1 || cycles > 4096) throw new Error('Invalid export length.');
     if (target === 'composition' && !project.clips.length) throw new Error('Add patterns to Composition first.');
     const context = new OfflineAudioContext(2, 1, options.rate);
-    audio.setAudioContext(context); mini.miniAllStrings(); audio.registerSynthSounds(); audio.registerZZFXSounds();
+    audio.setAudioContext(context); installPreciseQueries(core); mini.miniAllStrings(); audio.registerSynthSounds(); audio.registerZZFXSounds();
     const snapshots = new Map<string, { asset: Asset; blob: Blob; url: string }>();
     let assetBytes = 0;
     for (const entry of event.data.audio as { asset: Asset; bytes: ArrayBuffer }[]) {
@@ -54,7 +56,7 @@ window.addEventListener('message', async event => {
       if (/\b(?:Math\s*\.\s*random|Date|fetch|WebSocket|navigator|MIDI|AUDIO)\b/.test(tab.code.replace(/\/\/[^\n]*/g, ''))) throw new Error(`${tab.name}: capture live/external state before rendering. Nondeterministic JavaScript is unsupported.`);
       send({ type: 'progress', text: `Preparing ${tab.name}…` });
       compiler.scheduler.setCps(cps);
-      await compiler.evaluate(tab.code.trim() || 'silence', false);
+      await compiler.evaluate(optimizeRecordedMidi(tab.code).trim() || 'silence', false);
       if (compiler.state.evalError) throw new Error(`${tab.name}: ${compiler.state.evalError.message}`);
       patterns.set(id, compiler.state.pattern);
 
