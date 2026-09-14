@@ -21,16 +21,17 @@ export class StudioEditor {
   private managedTempo = false;
   private managing = false;
   private inputLabels = new Map<string, string>();
-  private pending?: { label: string; append: boolean };
+  private pending?: { label: string; append: boolean; code?: string };
   private audioPending?: string;
-  setAudioPending(label?: string) { if (label === this.audioPending) return; this.audioPending = label; this.view.dispatch({ effects: this.repaint.of(null) }); }
+  private audioCode?: string;
+  setAudioPending(label?: string, code?: string) { if (label === this.audioPending && code === this.audioCode) return; this.audioPending = label; this.audioCode = code; this.view.dispatch({ effects: this.repaint.of(null) }); }
   revealRecording(append = false) { this.view.dispatch({ effects: EditorView.scrollIntoView(append ? this.code.length : this.destination?.from ?? this.code.length, { y: 'center' }) }); }
   private repaint = StateEffect.define<null>();
   setInputLabels(labels: Map<string, string>) { this.inputLabels = labels; this.view.dispatch({ effects: this.repaint.of(null) }); }
-  setPending(label?: string, append = false) {
-    if (this.pending?.label === label && this.pending?.append === append || !this.pending && !label) return;
+  setPending(label?: string, append = false, code?: string) {
+    if (this.pending?.label === label && this.pending?.append === append && this.pending?.code === code || !this.pending && !label) return;
     if (label) this.view.dom.dataset.captureState = label; else delete this.view.dom.dataset.captureState;
-    this.pending = label ? { label, append } : undefined;
+    this.pending = label ? { label, append, code } : undefined;
     this.view.dispatch({ effects: this.repaint.of(null) });
   }
   syncTempo(bpm: number, override?: number) {
@@ -81,9 +82,14 @@ export class StudioEditor {
   constructor(root: HTMLElement, project: Tab, callbacks: { change: (live: boolean) => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
     const owner = this;
     class PendingWidget extends WidgetType {
-      constructor(readonly label: string) { super(); }
-      eq(other: PendingWidget) { return this.label === other.label; }
-      toDOM() { const el = document.createElement('div'); el.className = 'pending-code'; el.setAttribute('role', 'status'); el.textContent = this.label; if (this.label.startsWith('Audio →') || owner.destination?.append) { const code = document.createElement('code'); code.textContent = this.label.startsWith('Audio →') ? '$: s(…audio being captured…).gain(1)' : `$: note(…notes being captured…)${owner.destination?.soundCode ?? ''}`; el.append(code); } for (let i = 0; i < 2; i++) { const line = document.createElement('i'); el.append(line); } return el; }
+      constructor(readonly label: string, readonly code?: string, readonly inline = false) { super(); }
+      eq(other: PendingWidget) { return this.label === other.label && this.code === other.code && this.inline === other.inline; }
+      toDOM() {
+        const el = document.createElement(this.inline ? 'span' : 'div'); el.className = this.inline ? 'pending-code pending-inline' : 'pending-code';
+        el.setAttribute('aria-label', this.label); el.title = this.label;
+        el.textContent = this.code?.trim() || `// ${this.label}`;
+        return el;
+      }
       ignoreEvent() { return true; }
     }
     const cues = (code: string, destination?: Destination | null) => {
@@ -109,9 +115,11 @@ export class StudioEditor {
       }
       if (owner.pending) {
         const at = owner.pending.append ? code.length : Math.min(code.length, destination?.to ?? code.length);
-        ranges.push(Decoration.widget({ widget: new PendingWidget(owner.pending.label), side: 1 }).range(at));
+        if (owner.pending.code && destination?.valid && !destination.append) {
+          ranges.push(Decoration.replace({ widget: new PendingWidget(owner.pending.label, owner.pending.code, true) }).range(destination.from, destination.to));
+        } else ranges.push(Decoration.widget({ widget: new PendingWidget(owner.pending.label, owner.pending.code), side: 1 }).range(at));
       }
-      if (owner.audioPending) ranges.push(Decoration.widget({ widget: new PendingWidget(`Audio → appended section · ${owner.audioPending}`), side: 2 }).range(code.length));
+      if (owner.audioPending) ranges.push(Decoration.widget({ widget: new PendingWidget(`Audio · ${owner.audioPending}`, owner.audioCode), side: 2 }).range(code.length));
       return Decoration.set(ranges, true);
     };
     const cueField = StateField.define<DecorationSet>({

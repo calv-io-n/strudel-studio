@@ -33,9 +33,9 @@ for(const context of ['tab','composition'] as const) for(const inputs of ['both-
   await page.getByRole('tab',{name:'Chords',exact:true}).click(); await page.waitForTimeout(100);
   await expect(page.getByRole('tab',{name:'Chords',exact:true})).toHaveAttribute('aria-selected','true');
   await page.locator('#record-toggle').click();
-  if(inputs.startsWith('both')) {await expect(page.locator('#record-retry')).toHaveText('Keep take'); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');}
+  if(!inputs.startsWith('midi')) {await expect(page.locator('#record-retry')).toHaveText('Keep take'); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');}
   else if(inputs.startsWith('midi')) await page.locator('.performance-panel [data-accept]').click();
-  else await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
+
   await expect.poll(async()=>{const p=await saved(page);return p.tabs.find((t:any)=>t.name==='Lead').code!==tab.code;}).toBe(true);
   const after=await saved(page), code=after.tabs.find((t:any)=>t.name==='Lead').code;
   expect(after.tabs.length).toBe(before.tabs.length); expect(after.clips).toEqual(before.clips);
@@ -99,4 +99,48 @@ test('a failed combined save retains both inputs and retry commits exactly once'
  await page.evaluate(()=>(window as any).restoreCombinedWrites()); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
  const code=(await saved(page)).tabs.find((t:any)=>t.name==='Lead').code;expect(code.match(/Recorded MIDI/g)).toHaveLength(1);expect(code.match(/Recorded audio/g)).toHaveLength(1);
  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('// Recorded audio');
+});
+
+test('Tab review shows shadow code and previews both inputs before approval', async ({ page }) => {
+ await installAudioCapture(page); await setup(page);
+ const before = await saved(page);
+ await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click();
+ await expect(page.locator('#midi-record-hint')).toContainText(`Keeping updates this pattern in all ${before.clips.filter((c:any) => c.tabId === before.tabs.find((t:any) => t.name === 'Lead').id).length} composition placements`);
+ await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+ await expect(page.locator('.pending-region')).toHaveCount(0);
+ await expect(page.locator('#composition-content')).not.toHaveClass(/capturing-audio/);
+ await page.waitForTimeout(75); await page.evaluate(() => (window as any).combinedNote(true)); await page.waitForTimeout(650); await page.evaluate(() => (window as any).combinedNote(false));
+ await page.locator('#stop').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take');
+ const shadow = page.locator('.tab-editor:not([hidden]) .pending-code');
+ await expect(shadow.filter({hasText: '// Recorded MIDI'})).toBeVisible();
+ await expect(shadow.filter({hasText: '// Recorded audio'})).toBeVisible();
+ const styles = await shadow.first().evaluate(el => { const a = getComputedStyle(el), b = getComputedStyle(el.closest('.cm-content')!); return {font:a.fontFamily, size:a.fontSize, parentFont:b.fontFamily, parentSize:b.fontSize, opacity:Number(a.opacity)}; });
+ expect(styles.font).toBe(styles.parentFont); expect(styles.size).toBe(styles.parentSize); expect(styles.opacity).toBeLessThan(1);
+ expect((await saved(page)).tabs).toEqual(before.tabs);
+ await page.screenshot({path:'/tmp/record-review-shadow.png'});
+ await page.evaluate(() => window.neonCapture.start()); await page.locator('#record-preview').click(); await page.waitForTimeout(900);
+ const wav = await page.evaluate(() => window.neonCapture.finish()); await page.locator('#record-preview').click();
+ const decoded = decodeWav(Buffer.from(wav.wav,'base64'));
+ const power = (frequency:number) => { let re=0, im=0; const from=Math.floor(decoded.rate*.2), end=Math.min(decoded.left.length,Math.floor(decoded.rate*.5)); for(let i=from;i<end;i++){re+=decoded.left[i]*Math.cos(2*Math.PI*frequency*i/decoded.rate);im+=decoded.left[i]*Math.sin(2*Math.PI*frequency*i/decoded.rate);} return Math.hypot(re,im)/(end-from); };
+ expect(power(330)).toBeGreaterThan(.02); expect(power(391.995)).toBeGreaterThan(.001);
+ expect((await saved(page)).tabs).toEqual(before.tabs);
+ const pending = await shadow.allTextContents();
+ await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); await expect(shadow).toHaveCount(0);
+ const code = (await saved(page)).tabs.find((t:any)=>t.name==='Lead').code;
+ for (const section of pending) expect(code).toContain(section);
+});
+
+test('a replacement phrase is shown inline as shadow code and discard restores the original', async ({ page }) => {
+ await setup(page); const before = await saved(page);
+ await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem',{name:'Record MIDI solo',exact:true}).click();
+ await expect(page.locator('#midi-record-hint')).toContainText('MIDI replaces selected note');
+ await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop');
+ await page.waitForTimeout(75); await page.evaluate(() => (window as any).combinedNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).combinedNote(false)); await page.locator('#stop').click();
+ await expect(page.locator('#record-retry')).toHaveText('Keep take');
+ const shadow = page.locator('.tab-editor:not([hidden]) .pending-inline'); await expect(shadow).toContainText('note(67)'); await expect(shadow).toHaveCSS('display','inline');
+ expect((await saved(page)).tabs).toEqual(before.tabs);
+ await page.locator('#record-discard').click(); await page.locator('#edit-dialog button[value=confirm]').click();
+ await expect(page.locator('.pending-code')).toHaveCount(0);
+ expect((await saved(page)).tabs).toEqual(before.tabs);
+ await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('e5 ~ g5 a5');
 });

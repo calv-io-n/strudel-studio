@@ -40,7 +40,7 @@ export class PerformancePanel {
   private fallback = false;
   get captureView(): CaptureView | undefined {
     if (!this.take || !this.owner?.destination || !this.preparing && (this.take.state === 'armed' || this.take.state === 'review' && !this.take.notes.length)) return;
-    return { state: this.preparing ? 'preparing' : this.saving ? 'saving' : this.take?.state === 'capturing' ? 'recording' : 'review', tabId: this.take.destination.tabId, trackId: this.sharedTarget?.trackId, clipId: this.sharedTarget?.clipId, start: this.sharedTarget?.position, end: this.sharedTarget ? this.sharedTarget.position + (this.take.state === 'capturing' ? Math.max(0, this.elapsed) : this.length) : undefined, kind: this.take.destination.append ? 'append' : 'phrase', label: this.preparing ? 'Preparing recording' : this.saving ? 'Saving' : this.take?.state === 'capturing' ? `Recording · ${this.take.notes.length} notes${this.take.notes.length ? ' · ' + this.take.notes.slice(-8).map(n => n.pitch).join(' ') : ''}` : 'Ready to review' };
+    return { code: this.take.state === 'review' ? this.proposal : undefined, state: this.preparing ? 'preparing' : this.saving ? 'saving' : this.take?.state === 'capturing' ? 'recording' : 'review', tabId: this.take.destination.tabId, trackId: this.sharedTarget?.trackId, clipId: this.sharedTarget?.clipId, start: this.sharedTarget?.position, end: this.sharedTarget ? this.sharedTarget.position + (this.take.state === 'capturing' ? Math.max(0, this.elapsed) : this.length) : undefined, kind: this.take.destination.append ? 'append' : 'phrase', label: this.preparing ? 'Preparing recording' : this.saving ? 'Saving' : this.take?.state === 'capturing' ? `Recording · ${this.take.notes.length} notes${this.take.notes.length ? ' · ' + this.take.notes.slice(-8).map(n => n.pitch).join(' ') : ''}` : 'Ready to review' };
   }
   private recoveryKey = '';
   private values?: Record<string, any>;
@@ -197,7 +197,7 @@ export class PerformancePanel {
     try { await this.commitTake(this.owner!, code); } finally { this.saving = false; }
     this.clearRecovery(); void this.engine.suppressPhrase(this.owner!, this.take!.destination.tabId, this.take!.destination.original, false); this.take = undefined; this.stop(); if (!this.pendingAudio()) this.close();
   }
-  private async preview(isolated: boolean) {
+  async preview(isolated: boolean) {
     if (!this.take?.notes.length) throw new Error('Play a take before previewing.');
     this.stop(); if (!this.values) await this.prepare(); this.engine.isolatePerformance(isolated);
     const epoch = this.previewEpoch;

@@ -109,7 +109,7 @@ test('composition Record and Stop append audio to the selected placement without
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
   await expect(page.locator('[data-pending-tab]')).toHaveCount(0); await expect(page.locator('.pending-region')).toBeVisible();
   await page.waitForTimeout(450); await page.locator('#composition-stop').click(); await page.locator('#composition-stop').click();
-  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
+  await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
   const saved = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive');
   expect(saved.tabs).toHaveLength(4); expect(saved.clips).toHaveLength(6);
   expect(saved.tabs.find((t:any)=>t.name==='Chords').code).toContain('// Recorded audio');
@@ -202,7 +202,7 @@ for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited
   await page.locator('#audio-connect').click(); await expect(page.locator('#audio-state')).toContainText('Armed'); expect(await page.locator('#audio-monitor').isChecked()).toBe(false);
   await openRecordBar(page);  await command(page, 'Recording settings'); await page.locator('#record-mode').selectOption(mode); await closeSheet(page);
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(600);
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
   await expect.poll(async () => (await records(page, 'assets')).filter(a => a.provider === 'recording').length).toBe(mode === 'wet' ? 2 : 1);
   await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
   let saved = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive'); expect(saved.tabs.some((t: any) => t.code.includes('// Recorded audio'))).toBeTruthy();
@@ -292,7 +292,7 @@ test('recording works in an empty timeline and permission denial leaves no take'
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).getInput; });
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(500);
   await expect(page.locator('#composition-position')).not.toHaveText('0.00'); await page.locator('#record-toggle').click();
-  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
+  await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(0); expect(project.tabs[0].code).toContain('// Recorded audio');
 });
 
@@ -300,7 +300,7 @@ test('recording joins playing composition at its playhead and stops before an ex
   await fakeInput(page); await start(page); await playComposition(page); await page.waitForTimeout(600);
   const before = (Number((await page.locator('#composition-position').textContent())!.replace('Beat ', '')) - 1) / 4;
   await openRecordBar(page); await page.locator('#record-track').selectOption('track-2'); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
-  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
+  await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0], asset = (await records(page,'assets')).find(a=>a.recording?.mode==='wet');
   expect(asset.recording.offsetCycles).toBeGreaterThan(before); expect(project.clips).toHaveLength(6);
   expect(project.tracks).toHaveLength(2);
@@ -311,6 +311,7 @@ test('recording save failure retains audio and retry places exactly one pattern'
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(400);
   await page.evaluate(() => { const put = IDBObjectStore.prototype.put; (window as any).restoreTakeWrites = () => IDBObjectStore.prototype.put = put; IDBObjectStore.prototype.put = function(value, key) { if (this.name === 'projects' && value.tabs.some((t: any) => t.code.includes('// Recorded audio'))) throw new DOMException('Full', 'QuotaExceededError'); return put.call(this, value, key); }; });
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-retry')).toBeVisible({ timeout: 15000 });
+  await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('retained');
   expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.code.includes('// Recorded audio'))).toHaveLength(0); expect((await records(page, 'assets')).filter(a => a.provider === 'recording')).toHaveLength(0);
   await page.evaluate(() => (window as any).restoreTakeWrites()); await page.locator('#record-retry').click();
   await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.code.includes('// Recorded audio'))).toHaveLength(1);
@@ -335,13 +336,13 @@ test('reload recovers an interrupted recording and effects testing keeps the sav
 test('cancelled input permission does not create a take or stop the next recording', async ({ page }) => {
   await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page);
   await page.evaluate(() => { const get = navigator.mediaDevices.getUserMedia; (window as any).originalInput = get; navigator.mediaDevices.getUserMedia = () => new Promise((_resolve, reject) => { (window as any).rejectInput = reject; }); });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.locator('#record-toggle').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.waitForFunction(() => typeof (window as any).rejectInput === 'function'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('cancelled');
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).originalInput; });
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
   await page.evaluate(() => (window as any).rejectInput(new DOMException('Denied after cancellation', 'NotAllowedError'))); await page.waitForTimeout(300);
   await expect(page.locator('#record-status')).toContainText('recording'); await page.locator('#record-toggle').click();
-  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
+  await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
 });
 
 test('two tabs can save unchanged content and a stale unchanged tab loads the newer session', async ({ page, context }) => {

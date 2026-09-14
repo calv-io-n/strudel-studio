@@ -604,8 +604,8 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 #record-bar [data-input]:empty { display: none; }
 #record-bar [data-input].midi-active { color: var(--text); }
 #record-bar .performance-review { margin: 0; gap: 6px; }
-#record-bar .record-options { flex-wrap: nowrap; }
-#midi-record-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#record-bar .record-options { flex-wrap: wrap; }
+#midi-record-hint { flex-basis: 100%; white-space: normal; line-height: 1.5; }
 #record-bar .chips { flex-shrink: 0; gap: 2px; }
 #record-bar .chips button { border-color: transparent; border-radius: 5px; padding: 5px 9px; }
 #record-bar .chips button[aria-pressed=true]::before { content: "✓"; margin-right: 5px; }
@@ -632,4 +632,9 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 
 #record-bar .recording-recovery { grid-column: 1 / -1; max-height: 32vh; overflow: auto; }
 
-.pending-code code { display: block; white-space: pre-wrap; font-size: 12px; opacity: .7; margin-top: 4px; }
+
+/* Pending takes occupy their code destination without becoming saved edits. */
+.cm-editor .pending-code { display: block; min-width: 0; margin: 0; padding: 0; border: 0; font: inherit; line-height: inherit; white-space: pre-wrap; color: inherit; opacity: .45; }
+
+
+.cm-editor .pending-code.pending-inline { display: inline; }

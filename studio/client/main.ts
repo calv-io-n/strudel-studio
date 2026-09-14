@@ -80,7 +80,7 @@ app.innerHTML = `
   </div>
   <div class="record-actions">
     <output id="record-status" role="status" aria-live="polite"></output>
-    <button id="record-retry" hidden>Retry save</button><button id="record-download" hidden>Download recording</button><button id="record-discard" hidden>Discard recording…</button>
+    <button id="record-preview" hidden>Preview take</button><button id="record-retry" hidden>Retry save</button><button id="record-download" hidden>Download recording</button><button id="record-discard" hidden>Discard…</button>
     <button id="record-settings" class="bare">Settings</button><button id="record-close" class="bare icon" aria-label="Close record bar">✕</button>
   </div>
 </div>
@@ -445,7 +445,7 @@ async function startSharedRecording() {
     if (recordAudioEnabled) {
       await timelineRecording!.start({ target, trackId: target.trackId ?? project.tracks[0].id, device: $('#audio-device').value, channel: $('#audio-channel').value, mode: $('#record-mode').value as 'wet' | 'dry', latency: Number($('#record-latency').value), countin: engine.countIn.enabled,
         accompaniment: !recordMidiEnabled || performancePanel.accompaniment === 'pattern',
-        deferCommit: recordMidiEnabled,
+        deferCommit: true,
         prepareMidi: recordMidiEnabled ? () => performancePanel.prepareShared() : undefined,
         startMidi: recordMidiEnabled ? at => { performancePanel.sharedOffset = target.offset; performancePanel.startShared(at); } : undefined,
         stopMidi: recordMidiEnabled ? () => performancePanel.stop() : undefined,
@@ -467,9 +467,10 @@ async function stopSharedRecording() {
   ++sharedEpoch; clearTimeout(sharedTimer); preparingShared = false; performancePanel.stop();
   await timelineRecording?.stop(); engine.endAudioRecording(); renderTransport();
 }
-$('#record-retry').onclick = guard(() => timelineRecording!.retry());
+$('#record-retry').onclick = guard(() => { stopTakePreview(); performancePanel.stop(); return timelineRecording!.retry(); });
+$('#record-preview').onclick = guard(() => { if (previewSource) { stopTakePreview(); performancePanel.stop(); return; } return previewPendingTake(); });
 $('#record-download').onclick = guard(() => timelineRecording!.download());
-$('#record-discard').onclick = guard(async () => { if (await askEdit('Discard recovered recording?', undefined, 'This removes the unsaved recording. Download it first if you want to keep it.')) { await timelineRecording!.discard(); performancePanel.completeShared(); activeRecordingTarget = undefined; renderTransport(); } });
+$('#record-discard').onclick = guard(async () => { if (await askEdit('Discard this take?', undefined, 'This removes the unsaved take. Your existing pattern stays unchanged.')) { stopTakePreview(); performancePanel.stop(); await timelineRecording!.discard(); performancePanel.completeShared(); activeRecordingTarget = undefined; renderTransport(); } });
 $('#record-track').onchange = () => { selectedTrack = $('#record-track').value; selectedMidiClip = undefined; renderRecording(); };
 function renderRecording() {
   const recording = timelineRecording, audioPending = !!recording?.pending;
@@ -489,7 +490,9 @@ function renderRecording() {
   $('#record-close').disabled = busy;
   $('#record-status').hidden = !audioPending && !recording?.message;
   $('#record-status').textContent = recording?.state === 'recording' ? `Audio · recording ${recording.elapsed.toFixed(1)} s` : recording?.message ?? '';
-  $('#record-retry').hidden = $('#record-download').hidden = $('#record-discard').hidden = !['review', 'failed'].includes(recording?.state ?? '');
+  $('#record-preview').hidden = $('#record-retry').hidden = $('#record-download').hidden = $('#record-discard').hidden = !['review', 'failed'].includes(recording?.state ?? '');
+  $('#record-preview').textContent = previewSource ? 'Stop preview' : 'Preview take';
+  $('#record-download').hidden = recording?.state !== 'failed';
   $('#record-retry').textContent = recording?.state === 'review' ? 'Keep take' : 'Retry save';
   performancePanel.root.hidden = !performancePanel.running && !performancePanel.take?.notes.length;
   if (audioPending) performancePanel.root.querySelector<HTMLElement>('.performance-review')!.hidden = true;
@@ -499,7 +502,10 @@ function renderRecording() {
   const name = project.tabs.find(t => t.id === target?.tabId)?.name ?? 'Missing pattern';
   const phrase = recordMidiEnabled && performancePanel.owner?.destination?.tabId === target?.tabId && !performancePanel.owner?.destination?.append;
   $('#midi-record-hint').hidden = false;
-  $('#midi-record-hint').textContent = problem || `${name}${target?.trackId ? ' · ' + (project.tracks.find(t => t.id === target.trackId)?.name ?? 'Missing track') + ' · beat ' + beatPosition(target.position) : ''} · ${[recordMidiEnabled ? phrase ? 'MIDI → selected note' : 'MIDI → appended section' : '', recordAudioEnabled ? 'Audio → appended section' : ''].filter(Boolean).join(' · ')}`;
+  const placements = project.clips.filter(c => c.tabId === target?.tabId).length;
+  const impact = placements === 1 ? ' and its composition placement' : placements > 1 ? ` in all ${placements} composition placements` : '';
+  const sections = [recordMidiEnabled ? phrase ? 'MIDI replaces selected note' : 'MIDI adds a section' : '', recordAudioEnabled ? 'Audio adds a section' : ''].filter(Boolean).join(' · ');
+  $('#midi-record-hint').textContent = problem || `${name}${target?.trackId ? ' · ' + (project.tracks.find(t => t.id === target.trackId)?.name ?? 'Missing track') + ' · beat ' + beatPosition(target.position) : ''} · ${sections}${target ? ` · Keeping updates this pattern${impact}` : ''}`;
   $('.record-track').hidden = $('#play-target').value !== 'composition';
   $('#record-source-label').textContent = 'Track';
   $('#record-return').hidden = !busy;
@@ -507,7 +513,7 @@ function renderRecording() {
   $('#record-clear-note').hidden = !phrase || busy;
   for (const id of ['record-track', 'record-mode', 'record-latency', 'audio-device', 'audio-channel', 'audio-connect', 'audio-sheet-connect', 'audio-disconnect', 'audio-track', 'new-tab']) $('#' + id).disabled = busy;
   document.querySelectorAll<HTMLButtonElement>('[data-play-target]').forEach(button => { button.disabled = busy; });
-  $('#composition-content').classList.toggle('capturing-audio', running);
+  $('#composition-content').classList.toggle('capturing-audio', running && target?.context === 'composition');
 }
 
 const takeView = document.createElement('section'); takeView.id = 'recorded-take-view'; takeView.hidden = true;
@@ -520,6 +526,23 @@ function stopTakePreview() {
   previewEpochAudio++; try { previewSource?.stop(); } catch { /* ended */ }
   previewSource?.disconnect(); previewEffects?.disconnect(); previewSource = undefined; previewEffects = undefined;
   liveInput.effectListeners.delete(updatePreviewEffects);
+}
+async function previewPendingTake() {
+  engine.stop(); stopTakePreview(); performancePanel.stop();
+  const epoch = previewEpochAudio;
+  const [audio] = await timelineRecording!.encode();
+  await engine.unlock();
+  const context = engine.audioContext;
+  const buffer = await context.decodeAudioData(await audio.blob.arrayBuffer());
+  if (epoch !== previewEpochAudio) return;
+  previewEffects = createInputEffects(context, audio.asset.recording?.mode === 'dry' ? audio.asset.recording.effectsCode ?? 'AUDIO' : 'AUDIO');
+  previewSource = context.createBufferSource(); previewSource.buffer = buffer;
+  previewSource.connect(previewEffects.input); previewEffects.output.connect(engine.masterInput);
+  if (performancePanel.take?.notes.length) await performancePanel.preview(false);
+  if (epoch !== previewEpochAudio) return;
+  const source = previewSource;
+  source.onended = () => { setTimeout(() => { if (previewSource === source) stopTakePreview(); }, 3000); };
+  source.start();
 }
 async function previewRecordedAudio(id: string, testEffects = false) {
   if (timelineRecording?.pending) throw new Error('Finish recording before previewing another take.');
@@ -696,7 +719,7 @@ timelineRecording = new TimelineRecording(engine, liveInput, snapshot, ensureAud
     renderAll(); saveWorkspace(); cacheDraft(); await refreshProjects();
   });
   saveChain = operation; try { await operation; } finally { owner?.lockEditing(false); }
-}, () => { renderRecording(); renderComposition(); renderAudioInput(); });
+}, () => { if (timelineRecording && ['review', 'failed'].includes(timelineRecording.state) && timelineRecording.elapsed > 0 && performancePanel.take?.notes.length) performancePanel.alignSharedDuration(timelineRecording.elapsed); renderRecording(); renderComposition(); renderAudioInput(); });
 performancePanel.pendingAudio = () => recordingPanel.pending || !!timelineRecording?.pending;
 performancePanel.sharedKeep = async () => {
   if (timelineRecording?.pending) { await timelineRecording.retry(); return; }

@@ -1,5 +1,5 @@
 import type { RecordingTarget } from '../shared/recording-target';
-import { validateRecordingTarget } from '../shared/recording-target';
+import { recordedSection, validateRecordingTarget } from '../shared/recording-target';
 import type { CaptureView } from '../shared/capture-state';
 import type { AudioInput, Asset, Project } from '../shared/model';
 import { checkTakeCapacity, type TakeIdentity } from '../shared/recorded-take';
@@ -32,7 +32,17 @@ export class TimelineRecording {
   constructor(private engine: Engine, private live: LiveInput, private project: () => Project, private input: () => AudioInput, private commit: (identity: TakeIdentity, audio: { asset: Asset; blob: Blob }[], metaKey: string) => Promise<void>, private changed: () => void) {}
   get captureView(): CaptureView | undefined {
     if (!this.meta || this.state === 'idle') return;
-    return { audio: !!this.meta.identity.target, state: this.state, tabId: this.meta.identity.tabId, trackId: this.meta.identity.trackId, clipId: this.meta.identity.clipId, kind: this.meta.identity.target ? 'append' : 'new-pattern', start: this.startCycle, end: this.endCycle, label: `${this.meta.identity.name} · ${this.state === 'failed' ? 'Save failed · take retained' : this.state}` };
+    const { identity } = this.meta;
+    const tab = this.project().tabs.find(t => t.id === identity.tabId);
+    const rate = (tab?.tempoBpm ?? this.project().bpm) / this.project().bpm;
+    const composition = identity.target?.context !== 'tab';
+    return {
+      audio: !!identity.target, state: this.state, tabId: identity.tabId,
+      code: this.encoded ? recordedSection(this.encoded[0].asset, identity.target?.offset, rate) : undefined,
+      trackId: composition ? identity.trackId : undefined, clipId: composition ? identity.clipId : undefined,
+      kind: identity.target ? 'append' : 'new-pattern', start: composition ? this.startCycle : undefined, end: composition ? this.endCycle : undefined,
+      label: `${identity.name} · ${this.state === 'failed' ? 'Save failed · take retained' : this.state}`,
+    };
   }
   get pending() { return this.state !== 'idle'; }
   get identity() { return this.meta?.identity; }
@@ -138,10 +148,14 @@ export class TimelineRecording {
     this.meta!.incomplete ||= !!this.capture?.failed || !!this.dry?.failed;
     if (!this.capture?.frames) { this.cleanup(); await removePending(this.prefix); this.meta = undefined; this.status('idle', 'No audio captured'); return; }
     await writePending(this.prefix + 'meta', this.meta).catch(() => {});
-    if (this.options?.deferCommit) { this.status('review', 'Audio ready · review and keep take'); return; }
+    if (this.options?.deferCommit) {
+      try { await this.encode(); this.status('review', 'Audio ready · review and keep take'); }
+      catch (error) { this.status('failed', `Recording retained. ${(error as Error).message}`); }
+      return;
+    }
     await this.retry();
   }
-  private async encode() {
+  async encode() {
     if (this.encoded) return this.encoded;
     if (!this.meta || !this.capture?.frames) throw new Error('No recording is available.');
     const { identity, input, bpm, offset, mode, latency, incomplete } = this.meta;
@@ -180,7 +194,8 @@ export class TimelineRecording {
     if (!this.capture.frames) { this.cleanup(); this.meta = undefined; await removePending(this.prefix); return; }
     this.meta.incomplete = true;
     if (this.meta.mode === 'wet') { this.dry = new AudioTakeCapture(this.context, this.context.createGain(), () => {}); await this.dry.restore(this.prefix + 'dry:'); }
-    this.status('failed', 'Recovered interrupted recording. Retry save to place it on the timeline, or download it.');
+    await this.encode();
+    this.status('failed', 'Recovered interrupted recording. Preview, then retry save to keep it.');
   }
   private cleanup() {
     clearTimeout(this.timer); this.live.effectListeners.delete(this.listener); this.live.onended = () => {};
