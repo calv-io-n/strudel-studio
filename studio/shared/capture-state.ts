@@ -5,6 +5,7 @@ export type CaptureView = {
   audio?: boolean;
   kind: 'phrase' | 'append' | 'new-pattern';
   label: string;
+  code?: string;
   trackId?: string;
   clipId?: string;
   start?: number;

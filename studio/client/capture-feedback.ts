@@ -5,11 +5,15 @@ import type { StudioEditor } from './editor';
 export function paintCaptureFeedback(views: CaptureView[], editors: Map<string, StudioEditor>) {
   for (const [id, owner] of editors) {
     const view = views.find(v => v.tabId === id && v.kind !== 'new-pattern' && !v.audio);
-    owner.setAudioPending(views.find(v => v.tabId === id && v.audio)?.label);
-    owner.setPending(view?.label, view?.kind === 'append');
+    const audio = views.find(v => v.tabId === id && v.audio);
+    owner.setAudioPending(audio?.label, audio?.code, audio?.state);
+    owner.setPending(view?.label, view?.kind === 'append', view?.code, view?.state);
   }
   const ids = new Set(views.map(v => v.tabId));
   document.querySelectorAll<HTMLElement>('[data-pending-for]').forEach(el => { if (!ids.has(el.dataset.pendingFor!)) el.remove(); });
+  document.querySelectorAll<HTMLElement>('[data-pending-region]').forEach(el => {
+    if (!views.some(v => v.tabId === el.dataset.pendingRegion && v.trackId === el.parentElement?.dataset.trackId)) el.remove();
+  });
   for (const view of views) {
     if (view.kind === 'new-pattern') {
       let tab = document.querySelector<HTMLButtonElement>(`[data-pending-tab="${view.tabId}"]`);
