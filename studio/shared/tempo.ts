@@ -1,5 +1,5 @@
 import { Text, ChangeSet } from '@codemirror/state';
-import { parser } from '@lezer/javascript';
+import { parseCode } from './syntax';
 import type { Project, Tab } from './model';
 
 export const beatsPerCycle = 4;
@@ -19,7 +19,7 @@ export function reconcileTempo(code: string, bpm: number, override?: number) {
   const header = tempoHeader(bpm, override);
   if (code.slice(0, end) !== header) changes.push({ from: 0, to: end, insert: header });
   let complex = false;
-  parser.parse(code).iterate({ enter(node) {
+  parseCode(code).iterate({ enter(node) {
     if (node.name !== 'CallExpression' || node.from < end) return;
     const callee = node.node.firstChild;
     if (callee?.name !== 'VariableName' || !setters.has(code.slice(callee.from, callee.to))) return;

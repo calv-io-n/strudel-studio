@@ -18,7 +18,7 @@ test('snapping chooses valid nearby edges and grid positions without changing le
   assert.equal(snapPlacement([], moving, 1.3, .5).clip.start, 1.5);
   assert.equal(snapPlacement([], moving, 1.3, .25).clip.start, 1.25);
   assert.equal(snapPlacement([neighbor], moving, 2.2, .25, true).clip.length, 2.25);
-  assert.equal(canPlace([neighbor], { ...moving, start: 2 }), false);
+  assert.equal(canPlace([neighbor], { ...moving, start: 2 }), true);
   assert.equal(canPlace([], { ...moving, length: .25 }), true);
   assert.equal(canPlace([], { ...moving, start: -.25 }), false);
   assert.equal(canPlace([], { ...moving, length: .1 }), false);

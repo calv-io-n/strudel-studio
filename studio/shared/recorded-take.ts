@@ -1,12 +1,18 @@
 import type { RecordingTarget } from './recording-target';
-import { recordedSection, validateRecordingTarget, retainPatternOutput } from './recording-target';
+import { recordedSection, validateRecordingTarget, retainPatternOutput, placeNewPattern } from './recording-target';
 import { parseProject, type Asset, type Project } from './model';
-export type TakeIdentity = { assetId: string; dryAssetId: string; tabId: string; trackId: string; clipId: string; name: string; target?: RecordingTarget };
+export type TakeIdentity = { midiCode?: string; assetId: string; dryAssetId: string; tabId: string; trackId: string; clipId: string; name: string; target?: RecordingTarget };
 export function checkTakeCapacity(project: Project) {
   if (project.tabs.length >= 50) throw new Error('Delete a pattern before recording (50-tab limit).');
   if (project.clips.length >= 500) throw new Error('Free a clip before recording (500-clip limit).');
 }
 export function placeRecordedTake(project: Project, asset: Asset, identity: TakeIdentity): Project {
+  if (identity.target?.kind === 'new') {
+    if (project.tabs.some(t => t.id === identity.tabId)) return project;
+    const next = placeNewPattern(project, identity.target, (identity.midiCode || '') + recordedSection(asset, identity.target.offset), asset.duration ?? 0);
+    next.assetIds = [...new Set([...next.assetIds, asset.id, ...(asset.recording?.dryAssetId ? [asset.recording.dryAssetId] : [])])];
+    return parseProject(next);
+  }
   if (identity.target) {
     if (project.assetIds.includes(asset.id)) return project;
     const next = structuredClone(project), tab = validateRecordingTarget(next, identity.target);

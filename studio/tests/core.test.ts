@@ -19,6 +19,7 @@ test('CC scaling honors endpoints, ranges and step', () => {
   assert.equal(scaleCC(64, 0, 1, 0.01), 0.5);
   assert.equal(scaleCC(0, -1, 1, .1), -1);
   assert.equal(scaleCC(127, 0, 10, 3), 9);
+  assert.equal(scaleCC(127, .25, 2, .1), 1.95);
 });
 test('pickup catches crossings, rearms after external changes, and isolates bindings', () => {
   const pickup = new Pickup();
@@ -26,10 +27,24 @@ test('pickup catches crossings, rearms after external changes, and isolates bind
   assert.equal(pickup.accept(binding, .1, .5), false);
   assert.equal(pickup.accept(binding, .7, .5), true);
   assert.equal(pickup.accept(binding, .8, .7), true);
+  pickup.reset('another-binding');
+  assert.equal(pickup.accept(binding, .9, .8), true);
   assert.equal(pickup.accept({ ...binding, id: 'b' }, .8, .2), false);
   assert.equal(pickup.accept(binding, .75, .2), false);
   pickup.reset(); assert.equal(pickup.accept(binding, .8, .5), false);
 });
+test('pickup follows stepped slider values through slow hardware sweeps', () => {
+  const pickup = new Pickup();
+  const binding: Binding = { id: 'gain', profileId: 'physical', channel: 1, kind: 'cc', number: 20, target: { kind: 'slider', sliderId: 's' }, pickup: true, enabled: true };
+  let current = 0;
+  for (const cc of [...Array.from({ length: 128 }, (_, i) => i), ...Array.from({ length: 128 }, (_, i) => 127 - i)]) {
+    const applied = (scaleCC(cc, .25, 2, .1) - .25) / 1.75;
+    assert.equal(pickup.accept(binding, cc / 127, current, applied), true, `CC ${cc} must not rearm after rounding`);
+    current = applied;
+  }
+  assert.equal(pickup.accept(binding, .1, .8, .1), false, 'A real external slider change still rearms pickup');
+});
+
 test('sliders ignore comments, strings, member calls, and non-literal expressions', () => {
   const source = `// slider(9)\nconst x = 'slider(1)'; foo.slider(1); slider(-1,-2,2,.1); slider(sine);`;
   const sliders = scanSliders(source);

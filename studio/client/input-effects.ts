@@ -1,4 +1,4 @@
-import { compileAudioEffects, type AudioEffects } from '../shared/audio-input';
+import { compileAudioEffects, effectRanges, type AudioEffects, type EffectName } from '../shared/audio-input';
 /** Fixed topology preserves delay/reverb state when a slider changes. */
 export function createInputEffects(context: BaseAudioContext, code: string) {
   const input = context.createGain(), high = context.createBiquadFilter(), low = context.createBiquadFilter(), pan = context.createStereoPanner(), output = context.createGain();
@@ -16,6 +16,14 @@ export function createInputEffects(context: BaseAudioContext, code: string) {
     set(input.gain, values.gain); set(high.frequency, Math.min(context.sampleRate / 2, values.hpf)); set(low.frequency, Math.min(context.sampleRate / 2, values.lpf)); set(pan.pan, values.pan * 2 - 1);
     set(delay.delayTime, values.delaytime); set(feedback.gain, values.delayfeedback); set(delayWet.gain, values.delay); set(roomWet.gain, values.room); initial = false;
   };
-  apply(compileAudioEffects(code));
-  return { input, output, apply: (code: string) => apply(compileAudioEffects(code)), disconnect: () => [input, high, low, pan, output, delay, feedback, delayWet, room, roomWet].forEach(node => node.disconnect()) };
+  let values = compileAudioEffects(code); apply(values);
+  const update = (change: string | Partial<AudioEffects>) => {
+    if (typeof change === 'string') values = compileAudioEffects(change);
+    else for (const [key, value] of Object.entries(change)) {
+      const name = key as EffectName, range = effectRanges[name];
+      if (range && Number.isFinite(value)) values[name] = Math.min(range[1], Math.max(range[0], value));
+    }
+    apply(values);
+  };
+  return { input, output, apply: update, disconnect: () => [input, high, low, pan, output, delay, feedback, delayWet, room, roomWet].forEach(node => node.disconnect()) };
 }

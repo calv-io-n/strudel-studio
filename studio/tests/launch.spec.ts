@@ -1,3 +1,4 @@
+import { midiRecovery } from './midi-recovery';
 import { test, expect, type Page } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { decodeWav } from '../shared/wav';
@@ -83,7 +84,7 @@ test('pattern MIDI capture retains its destination across tabs and publishes onl
   await expect(page.locator('.performance-panel [data-destination]')).toContainText('Lead');
   await expect(page.locator('#midi-record')).toHaveCount(0); await expect(page.locator('#record-settings')).toBeHidden();
   await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).playNote(false));
-  expect(await page.evaluate(() => { const key = Object.keys(localStorage).find(key => key.startsWith('studio.midi-take:'))!; return JSON.parse(localStorage.getItem(key)!).length; })).toBeLessThan(2);
+  await expect.poll(async () => (await midiRecovery(page))?.length ?? Infinity).toBeLessThan(2);
   await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await expect(page.locator('.performance-review')).toBeHidden(); await page.locator('#stop').click();
   await expect(page.locator('.performance-review')).toBeVisible();
   await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', 'Ready to review'); await expect(page.locator('.pending-code')).toContainText('note(64)');
@@ -208,7 +209,7 @@ test('MIDI phrase recording waits for the metronome and ignores notes during the
   await page.locator('#record-toggle').click(); await expect(page.locator('#count-in-beat')).toHaveText('4'); await page.evaluate(() => { (window as any).playNote(true); (window as any).playNote(false); });
   await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Preparing/); await expect(page.locator('#count-in-beat')).toBeEmpty({ timeout: 5000 });
   await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(120); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
-  expect(await page.evaluate(() => { const key = Object.keys(localStorage).find(key => key.startsWith('studio.midi-take:'))!; return JSON.parse(localStorage.getItem(key)!).notes.length; })).toBe(1); await page.locator('.performance-panel [data-discard]').click();
+  expect((await midiRecovery(page))?.notes.length).toBe(1); await page.locator('.performance-panel [data-discard]').click();
 });
 
 test('MIDI can append instrument notes without requesting microphone access', async ({ page }) => {

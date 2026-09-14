@@ -5,8 +5,8 @@ import { exclusive, all, write, type Write } from './database';
 import { hash } from './workspace';
 import { prepareSessionSave, sessionSaveEntries, type SaveOutcome } from './session-save';
 export async function takeAsset(id: string, label: string, recording: NonNullable<Asset['recording']>, blob: Blob): Promise<Asset> {
-  const bytes = await blob.arrayBuffer(), info = wavInfo(new Uint8Array(bytes));
-  return AssetSchema.parse({ id, label, provider: 'recording', personal: true, createdAt: new Date().toISOString(), format: 'wav', duration: info.frames / info.rate, contentHash: await hash(bytes), precision: { rate: info.rate, channels: info.channels, bits: info.bits, working: 'float32', originalAvailable: true }, recording: { ...recording, duration: info.frames / info.rate, trimStart: 0, trimEnd: info.frames / info.rate, rate: info.rate, frames: info.frames } });
+  const { info, contentHash } = await inspectTake(blob);
+  return AssetSchema.parse({ id, label, provider: 'recording', personal: true, createdAt: new Date().toISOString(), format: 'wav', duration: info.frames / info.rate, contentHash, precision: { rate: info.rate, channels: info.channels, bits: info.bits, working: 'float32', originalAvailable: true }, recording: { ...recording, duration: info.frames / info.rate, trimStart: 0, trimEnd: info.frames / info.rate, rate: info.rate, frames: info.frames } });
 }
 export async function commitRecordedTake(project: Project, identity: TakeIdentity, audio: { asset: Asset; blob: Blob }[], pendingMeta: string, base: Project = project): Promise<SaveOutcome> {
   return exclusive(async () => {
@@ -17,5 +17,15 @@ export async function commitRecordedTake(project: Project, identity: TakeIdentit
     const entries: Write[] = audio.flatMap(({ asset, blob }) => [{ collection: 'assets' as const, key: asset.id, value: asset }, { collection: 'audio' as const, key: asset.id, value: blob }, { collection: 'originals' as const, key: asset.id, value: blob }]);
     entries.push(...sessionSaveEntries(result), { collection: 'pending', key: pendingMeta, delete: true });
     await write(entries); return result;
+  });
+}
+
+async function inspectTake(blob: Blob): Promise<{ info: ReturnType<typeof wavInfo>; contentHash: string }> {
+  if (typeof Worker === 'undefined' || blob.size < 16_000_000) { const bytes = await blob.arrayBuffer(); return { info: wavInfo(new Uint8Array(bytes)), contentHash: await hash(bytes) }; }
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../take-info-worker.ts', import.meta.url), { type: 'module' });
+    worker.onerror = event => { worker.terminate(); reject(new Error(event.message)); };
+    worker.onmessage = ({ data }) => { worker.terminate(); if (data.error) reject(new Error(data.error)); else resolve(data); };
+    worker.postMessage(blob);
   });
 }

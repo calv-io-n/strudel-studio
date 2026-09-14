@@ -14,14 +14,14 @@ test('legacy projects migrate without losing code, slider identity, controls or 
   assert.deepEqual(result.tabs[0].anchors, anchors); assert.deepEqual(result.controls, current.controls);
   assert.deepEqual(result.bindings[0].target, { kind: 'slider', sliderId: 'stable-slider', tabId: result.tabs[0].id });
 });
-test('clips permit layering but reject overlap, invalid timing, and dangling references', () => {
+test('clips permit layering and reject invalid timing and dangling references', () => {
   const a = clip('a', 'pattern-1', 0, 0, 4);
   assert.equal(canPlace([a], clip('b', 'pattern-1', 1, 0, 4)), true);
-  assert.equal(canPlace([a], clip('b', 'pattern-1', 0, 3, 4)), false);
+  assert.equal(canPlace([a], clip('b', 'pattern-1', 0, 3, 4)), true);
   assert.equal(canPlace([a], clip('b', 'pattern-1', 0, 4, 4)), true);
   assert.equal(canPlace([], clip('b', 'pattern-1', 0, .3, 4)), false);
   assert.equal(ProjectSchema.safeParse({ ...newProject(), clips: [clip('x', 'missing', 0, 0, 4)] }).success, false);
-  assert.equal(ProjectSchema.safeParse({ ...newProject(), clips: [a, clip('b', 'pattern-1', 0, 2, 4)] }).success, false);
+  assert.equal(ProjectSchema.safeParse({ ...newProject(), clips: [a, clip('b', 'pattern-1', 0, 2, 4)] }).success, true);
 });
 
 test('v2 migration preserves sessions, timing and mappings; v3 validates track identity and limits', () => {

@@ -1,4 +1,4 @@
-import { parser } from '@lezer/javascript';
+import { parseCode } from './syntax';
 import type { ChangeDesc } from '@codemirror/state';
 import type { Tab } from './model';
 
@@ -6,7 +6,7 @@ export type Slider = { id: string; start: number; end: number; from: number; to:
 const literal = /^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?$/i;
 export function scanSliders(code: string): Slider[] {
   const result: Slider[] = [];
-  parser.parse(code).iterate({ enter(node) {
+  parseCode(code).iterate({ enter(node) {
     if (node.name !== 'CallExpression') return;
     const callee = node.node.firstChild;
     const args = node.node.lastChild;

@@ -1,3 +1,4 @@
+import { midiRecovery } from './midi-recovery';
 import { installAudioCapture } from './audio-capture';
 import { decodeWav } from '../shared/wav';
 import { test, expect, type Page } from '@playwright/test';
@@ -24,7 +25,7 @@ for(const context of ['tab','composition'] as const) for(const inputs of ['both-
   if(inputs.startsWith('both')||inputs.startsWith('midi')) {if(await page.locator('[data-capture=midi]').getAttribute('aria-pressed')==='false') await page.locator('[data-capture=midi]').click();}
   if(inputs.startsWith('audio') && await page.locator('[data-capture=midi]').getAttribute('aria-pressed') === 'true') await page.locator('[data-capture=midi]').click();
   if(inputs.startsWith('midi')) await page.locator('[data-capture=audio]').click();
-  if(context==='composition') {await page.locator('[data-play-target=composition]').click(); const clip=before.clips.find((c:any)=>c.tabId===tab.id); await page.locator('#record-track').selectOption(clip.trackId); await page.locator(`[data-clip="${clip.id}"]`).click(); await page.keyboard.press('Escape');}
+  if(context==='composition') {await page.locator('[data-play-target=composition]').click(); await page.locator('#record-destination').selectOption('existing'); const clip=before.clips.find((c:any)=>c.tabId===tab.id); await page.locator('#record-track').selectOption(clip.trackId); await page.locator(`[data-clip="${clip.id}"]`).click(); await page.keyboard.press('Escape');}
   await expect(page.locator('#midi-record-hint')).toContainText('Lead');
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(75);
   await page.evaluate(()=>(window as any).combinedNote(true)); await page.waitForTimeout(180); await page.evaluate(()=>(window as any).combinedNote(false));
@@ -62,13 +63,23 @@ test('both inputs share one count-in; Cancel creates no sections and early MIDI 
  await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(100);
  await page.evaluate(()=>(window as any).combinedNote(true)); await page.waitForTimeout(150); await page.evaluate(()=>(window as any).combinedNote(false));
  await page.locator('#stop').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take');
- expect(await page.evaluate(()=>JSON.parse(localStorage.getItem('studio.midi-take:Neon-Drive')!).notes.length)).toBe(1);
+ expect((await midiRecovery(page))?.notes.length).toBe(1);
  await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
 });
 test('interrupted simultaneous capture recovers both sources in the same pattern',async({page})=>{
  await setup(page); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click();
  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(100);
  await page.evaluate(()=>(window as any).combinedNote(true)); await page.waitForTimeout(1200); await page.evaluate(()=>(window as any).combinedNote(false));
+ // Recover older checkpoints affected by sub-sample rounding at the start of a tab.
+ await page.evaluate(async()=>{
+   const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('strudel-studio');r.onsuccess=()=>resolve(r.result);});
+   await new Promise<void>(resolve=>{const tx=db.transaction('pending','readwrite'),r=tx.objectStore('pending').openCursor();
+     r.onsuccess=()=>{const cursor=r.result;if(!cursor)return;const value=cursor.value;
+       if(String(cursor.key).endsWith(':meta')){
+         if(value.sharedTarget){value.sharedTarget.offset=-Number.EPSILON;cursor.update(value);}
+         if(value.identity?.target){value.offset=-Number.EPSILON;value.identity.target.offset=-Number.EPSILON;cursor.update(value);}
+       } cursor.continue();};tx.oncomplete=()=>resolve();});db.close();
+ });
  await page.reload(); await expect(page.locator('#record-retry')).toBeVisible(); await page.locator('#record-retry').click();
  await expect(page.locator('#record-status')).toContainText('saved');
  const p=await saved(page), code=p.tabs.find((t:any)=>t.name==='Lead').code;
@@ -95,7 +106,7 @@ test('a failed combined save retains both inputs and retry commits exactly once'
  await page.evaluate(()=>{const put=IDBObjectStore.prototype.put;(window as any).restoreCombinedWrites=()=>IDBObjectStore.prototype.put=put;IDBObjectStore.prototype.put=function(value,key){if(this.name==='projects'&&value.tabs.some((t:any)=>t.code.includes('// Recorded audio')))throw new DOMException('Full','QuotaExceededError');return put.call(this,value,key);};});
  await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('retained');
  expect((await saved(page)).tabs.some((t:any)=>t.code.includes('// Recorded audio'))).toBe(false);
- expect(await page.evaluate(()=>!!localStorage.getItem('studio.midi-take:Neon-Drive'))).toBe(true);
+ expect(!!(await midiRecovery(page))).toBe(true);
  await page.evaluate(()=>(window as any).restoreCombinedWrites()); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
  const code=(await saved(page)).tabs.find((t:any)=>t.name==='Lead').code;expect(code.match(/Recorded MIDI/g)).toHaveLength(1);expect(code.match(/Recorded audio/g)).toHaveLength(1);
  await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('// Recorded audio');

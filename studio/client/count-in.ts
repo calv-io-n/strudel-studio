@@ -17,6 +17,12 @@ export class CountIn {
   private beat = 0;
   private loopBpm = 0;
   private leadEnd?: number;
+  private clock?: () => { position: number; loop?: { begin: number; end: number } };
+  scheduleLead(at: number, bpm: number) {
+    if (this.mode !== 'count-in') return;
+    const context = this.context(), step = 60 / bpm;
+    for (let i = 0; i < 4; i++) { const t = at - (4 - i) * step; if (t >= context.currentTime) this.click(context, t, i === 0, this.loopVoices); }
+  }
   constructor(private context: () => AudioContext, private changed: () => void) {}
   private click(context: AudioContext, at: number, accent: boolean, voices: Set<OscillatorNode>) {
     const voice = context.createOscillator(), gain = context.createGain();
@@ -31,16 +37,25 @@ export class CountIn {
     this.loopVoices.clear();
   }
   /** Called from transport state updates, including solo MIDI and audio capture without playback. */
-  sync(active: boolean, bpm: number) {
-    if (!active || this.mode !== 'continuous' || this.remaining) { this.stopLoop(); return; }
+  sync(active: boolean, bpm: number, clock?: () => { position: number; loop?: { begin: number; end: number } }) {
+    this.clock = clock;
+    if (!active || this.remaining || this.mode === 'off') { this.stopLoop(); return; }
+    if (this.mode !== 'continuous') { if (this.loop) this.stopLoop(); return; }
     if (this.loop && this.loopBpm === bpm) return;
     this.stopLoop(); const context = this.context(); this.loopBpm = bpm; this.beat = 0;
     this.nextBeat = this.leadEnd !== undefined && Math.abs(context.currentTime - this.leadEnd) < .2 ? Math.max(context.currentTime, this.leadEnd) : context.currentTime + .02;
+    if (clock) { const phase = clock().position * 4; const edge = Math.ceil(phase - .03); this.nextBeat = Math.max(context.currentTime, context.currentTime + (edge - phase) * 60 / bpm); }
     this.leadEnd = undefined;
     const schedule = () => {
       // Background tabs may suspend the scheduler: resume at the current beat, never emit a burst.
       if (this.nextBeat < context.currentTime - .1) { const missed = Math.ceil((context.currentTime - this.nextBeat) * bpm / 60); this.nextBeat += missed * 60 / bpm; this.beat += missed; }
-      while (this.nextBeat < context.currentTime + .1) { this.click(context, this.nextBeat, this.beat++ % 4 === 0, this.loopVoices); this.nextBeat += 60 / bpm; }
+      while (this.nextBeat < context.currentTime + .1) { let accent = this.beat++ % 4 === 0;
+        if (this.clock) {
+          const clock = this.clock(); let position = clock.position + (this.nextBeat - context.currentTime) * bpm / 240;
+          if (clock.loop && position >= clock.loop.begin) { const { begin, end } = clock.loop; position = begin + ((position - begin) % (end - begin) + end - begin) % (end - begin); accent = Math.abs(position - begin) < .01 || Math.abs(position - end) < .01; }
+          else accent = Math.abs(position - Math.round(position)) < .01;
+        }
+        this.click(context, this.nextBeat, accent, this.loopVoices); this.nextBeat += 60 / bpm; }
     };
     schedule(); this.loop = setInterval(schedule, 25);
   }

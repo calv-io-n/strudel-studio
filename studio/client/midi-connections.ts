@@ -23,7 +23,9 @@ export class MidiConnections {
     });
     this.render(); return root;
   }
-  activity(text: string) { for (const { root } of this.views) root.querySelector('[data-midi-activity]')!.textContent = text; }
+  private activityTimer?: ReturnType<typeof setTimeout>;
+  private activityText = '';
+  activity(text: string) { this.activityText = text; if (this.activityTimer) return; this.activityTimer = setTimeout(() => { this.activityTimer = undefined; for (const { root } of this.views) root.querySelector('[data-midi-activity]')!.textContent = this.activityText; }, 100); }
   update(status: BridgeStatus, selected: string[]) {
     this.status = status; this.selected = selected;
     this.render();
