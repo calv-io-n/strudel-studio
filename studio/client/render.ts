@@ -11,7 +11,7 @@ import { ProjectSchema, type Asset } from '../shared/model';
 import { slotName } from '../shared/slots';
 import { RenderOptionsSchema, renderMemory, assertRenderBudget } from '../shared/render-options';
 import { encodeAudio } from './encode';
-import { prepareTake, takePattern } from './take-playback';
+import { prepareTake, takePattern, takeTabClip } from './take-playback';
 const send = (message: object) => parent.postMessage(message, location.origin);
 let started = false;
 window.addEventListener('message', async event => {
@@ -47,7 +47,7 @@ window.addEventListener('message', async event => {
       await core.evalScope({ setCpm: () => core.silence, setcpm: () => core.silence, setCps: () => core.silence, setcps: () => core.silence });
     } });
     const patterns = new Map<string, Pattern>(), clips = project.clips.map(c => ({ ...c, muted: isClipMuted(c, project.tracks, project.soloTrackId) }));
-    const ids = target === 'composition' ? [...new Set(clips.filter(c => !c.muted && !c.takeId).map(c => c.tabId))] : [target];
+    const ids = target === 'composition' ? [...new Set(clips.filter(c => !c.muted && (!c.takeId || project.tabs.find(t => t.id === c.tabId)?.audioAssetId)).map(c => c.tabId))] : [target];
     let cps = project.bpm / 240;
     for (const id of ids) {
       const tab = project.tabs.find(tab => tab.id === id)!;
@@ -59,7 +59,10 @@ window.addEventListener('message', async event => {
       patterns.set(id, compiler.state.pattern);
 
     }
-    const end = target === 'composition' ? Math.max(...clips.map(c => c.start + c.length)) : cycles;
+    const tabTakeId = project.tabs.find(t => t.id === target)?.audioAssetId;
+    const tabTake = tabTakeId ? snapshots.get(tabTakeId) : undefined;
+    if (tabTakeId && !tabTake) throw new Error('The recorded take is missing. Restore its backup.');
+    const end = target === 'composition' ? Math.max(...clips.map(c => c.start + c.length)) : tabTake ? (tabTake.asset.duration ?? 0) * cps : cycles;
     const seconds = end / cps + options.tail;
     if (!Number.isFinite(seconds) || cps <= 0 || seconds > 900) throw new Error('Export must be no longer than 15 minutes with a valid tempo.');
     assertRenderBudget(renderMemory(seconds, options.rate, options.format, assetBytes, 0));
@@ -68,7 +71,11 @@ window.addEventListener('message', async event => {
     let takeVoices = 0;
     if (target === 'composition') for (const clip of clips.filter(c => !c.muted && c.takeId)) {
       const snapshot = snapshots.get(clip.takeId!); if (!snapshot) throw new Error(`Take ${clip.takeId} is missing. Restore its backup.`);
-      await prepareTake(snapshot.asset, project, offline, snapshot.blob); patterns.set(clip.id, takePattern(clip, snapshot.asset, cps)); takeVoices++;
+      await prepareTake(snapshot.asset, project, offline, snapshot.blob); patterns.set(clip.id, takePattern(clip, snapshot.asset, cps, project.tabs.find(t => t.id === clip.tabId)?.audioAssetId ? patterns.get(clip.tabId) : undefined)); takeVoices++;
+    }
+    if (tabTake) {
+      await prepareTake(tabTake.asset, project, offline, tabTake.blob);
+      patterns.set(target, takePattern(takeTabClip(target, tabTake.asset, cps), tabTake.asset, cps, patterns.get(target))); takeVoices++;
     }
     const pattern = target === 'composition' ? arrangement(clips, patterns, undefined, undefined, new Map(project.tabs.map(t => [t.id, tempoRate(t, project.bpm)]))) : ratePattern(patterns.get(target)!, tempoRate(project.tabs.find(t => t.id === target)!, project.bpm));
     const windows: { value: any; at: number; duration: number }[][] = [];

@@ -7,14 +7,15 @@ import type { Engine } from './engine';
 import type { LiveInput } from './live-input';
 import { readPending, writePending, removePending } from './recovery';
 import { takeAsset } from './storage/recorded-take';
-export type RecordOptions = { trackId: string; device: string; channel: string; mode: 'wet' | 'dry'; latency: number; countin: boolean };
-type Meta = { identity: TakeIdentity; input: AudioInput; bpm: number; offset: number; rate: number; mode: 'wet' | 'dry'; latency: number; incomplete: boolean };
+export type RecordOptions = { trackId: string; device: string; channel: string; mode: 'wet' | 'dry'; latency: number; countin: boolean; internal?: { name: string; prepare: () => Promise<AudioNode> } };
+type Meta = { source?: 'external' | 'internal'; identity: TakeIdentity; input: AudioInput; bpm: number; offset: number; rate: number; mode: 'wet' | 'dry'; latency: number; incomplete: boolean };
 export class TimelineRecording {
   state: 'idle' | 'preparing' | 'recording' | 'finishing' | 'saving' | 'failed' = 'idle';
   message = '';
   private capture?: AudioTakeCapture;
   private dry?: AudioTakeCapture;
   private gate?: GainNode;
+  private source?: AudioNode;
   private effects?: ReturnType<typeof createInputEffects>;
   private context?: AudioContext;
   private meta?: Meta;
@@ -51,22 +52,27 @@ export class TimelineRecording {
     const identity = { assetId: crypto.randomUUID(), dryAssetId: crypto.randomUUID(), tabId: crypto.randomUUID(), trackId: options.trackId, clipId: crypto.randomUUID(), name: `Audio take ${n}` };
     this.prefix = `timeline-audio:${this.project().sessionId}:`;
     const bpm = this.project().bpm;
-    this.meta = { identity, input: structuredClone(this.input()), bpm, offset: this.engine.timelinePosition, rate: 48000, mode: options.mode, latency: options.latency, incomplete: false };
-    this.status('preparing', 'Connecting audio input…');
+    this.meta = { source: options.internal ? 'internal' : 'external', identity, input: options.internal ? { id: identity.assetId, name: options.internal.name, trackId: identity.trackId, enabled: false, mode: 'audio', code: 'AUDIO', appliedCode: 'AUDIO', anchors: [] } : structuredClone(this.input()), bpm, offset: this.engine.timelinePosition, rate: 48000, mode: options.mode, latency: options.latency, incomplete: false };
+    this.status('preparing', options.internal ? 'Preparing recording…' : 'Connecting audio input…');
     try {
-      const input = this.input(); input.enabled = true;
-      if (!this.live.active) await this.live.connect(input, options.device, options.channel);
+      const input = this.meta.input;
+      if (options.internal) {
+        await this.engine.unlock(); this.source = await options.internal.prepare(); this.context = this.engine.audioContext;
+      } else {
+        this.input().enabled = true;
+        if (!this.live.active) await this.live.connect(this.input(), options.device, options.channel);
+        this.source = this.live.dry; this.context = this.live.context;
+      }
       if (epoch !== this.epoch) return;
-      if (!this.live.dry) throw new Error('Input connection was cancelled.');
-      this.context = this.live.context;
-      this.gate = this.context.createGain(); this.live.dry.connect(this.gate);
+      if (!this.source) throw new Error('Input connection was cancelled.');
+      this.gate = this.context.createGain(); this.source.connect(this.gate);
       this.effects = createInputEffects(this.context, input.appliedCode); this.gate.connect(this.effects.input);
-      this.live.effectListeners.add(this.listener);
+      if (!options.internal) this.live.effectListeners.add(this.listener);
       const failed = (message: string) => { if (this.meta) this.meta.incomplete = true; this.message = message; void this.stop(true); };
       const capture = new AudioTakeCapture(this.context, options.mode === 'wet' ? this.effects.output : this.gate, () => {}, failed); this.capture = capture;
       await capture.setup();
       if (epoch !== this.epoch) { capture.disconnect(); return; }
-      if (options.mode === 'wet') { const dry = new AudioTakeCapture(this.context, this.gate, () => {}, failed); this.dry = dry; await dry.setup(); if (epoch !== this.epoch) { dry.disconnect(); return; } }
+      if (options.mode === 'wet' && !options.internal) { const dry = new AudioTakeCapture(this.context, this.gate, () => {}, failed); this.dry = dry; await dry.setup(); if (epoch !== this.epoch) { dry.disconnect(); return; } }
       this.meta!.rate = this.context.sampleRate;
       const bpm = this.meta!.bpm;
       await writePending(this.prefix + 'meta', this.meta);
@@ -89,7 +95,7 @@ export class TimelineRecording {
       if (limit <= 0) throw new Error('Move the playhead earlier before recording.');
       this.capture.onstart = actual => { if (!this.meta) return; this.meta.offset += (actual - this.at) * bpm / 240; void writePending(this.prefix + 'meta', this.meta).catch(() => {}); };
       this.capture.start(this.at, this.prefix, limit + 3); this.dry?.start(this.at, this.prefix + 'dry:', limit + 3);
-      this.live.onended = () => void this.stop(true);
+      if (!options.internal) this.live.onended = () => void this.stop(true);
       this.timer = setTimeout(() => void this.stop(), (limit + wait) * 1000);
       this.status('recording', options.countin ? 'Count-in…' : 'Recording');
     } catch (error) {
@@ -101,7 +107,7 @@ export class TimelineRecording {
   }
   stop(interrupted = false): Promise<void> {
     if (this.finishing) return this.finishing;
-    if (this.state === 'preparing') { this.engine.countIn.cancel(); ++this.epoch; if (this.engine.recordingTransport) this.engine.endAudioRecording(); this.live.disconnect(); this.cleanup(); this.meta = undefined; this.status('idle', 'Recording cancelled'); return Promise.resolve(); }
+    if (this.state === 'preparing') { this.engine.countIn.cancel(); ++this.epoch; if (this.engine.recordingTransport) this.engine.endAudioRecording(); if (this.meta?.source !== 'internal') this.live.disconnect(); this.cleanup(); this.meta = undefined; this.status('idle', 'Recording cancelled'); return Promise.resolve(); }
     if (this.state !== 'recording') return Promise.resolve();
     this.finishing = this.finish(interrupted).finally(() => { this.finishing = undefined; });
     return this.finishing;
@@ -111,7 +117,7 @@ export class TimelineRecording {
     this.meta!.incomplete ||= interrupted;
     this.live.effectListeners.delete(this.listener); this.live.onended = () => {};
     // This private branch stops accepting input while its existing effects decay.
-    try { this.live.dry?.disconnect(this.gate!); } catch { /* disconnected device */ }
+    try { this.source?.disconnect(this.gate!); } catch { /* disconnected device */ }
     this.gate?.gain.setValueAtTime(0, this.context!.currentTime);
     this.live.stop(); this.engine.endAudioRecording();
     this.status('finishing', interrupted ? 'Input interrupted · retaining available audio…' : this.meta!.mode === 'wet' ? 'Finishing effects…' : 'Saving recording…');
@@ -127,7 +133,7 @@ export class TimelineRecording {
     if (!this.meta || !this.capture?.frames) throw new Error('No recording is available.');
     const { identity, input, bpm, offset, mode, latency, incomplete } = this.meta;
     const name = identity.name + (incomplete ? ' · Interrupted recording' : '');
-    const recording = { source: 'external' as const, bpm, offsetCycles: offset, duration: this.capture.duration, trimStart: 0, trimEnd: this.capture.duration, incomplete, inputId: input.id, trackId: identity.trackId, mode, effectsCode: input.appliedCode, latencySeconds: latency };
+    const recording = { source: this.meta.source ?? 'external', bpm, offsetCycles: offset, duration: this.capture.duration, trimStart: 0, trimEnd: this.capture.duration, incomplete, inputId: input.id, trackId: identity.trackId, mode, effectsCode: input.appliedCode, latencySeconds: latency };
     const blob = new Blob([await this.capture.wav()], { type: 'audio/wav' });
     const asset = await takeAsset(identity.assetId, name, { ...recording, dryAssetId: this.dry?.frames ? identity.dryAssetId : undefined }, blob);
     const result = [{ asset, blob }];
@@ -165,9 +171,9 @@ export class TimelineRecording {
   }
   private cleanup() {
     clearTimeout(this.timer); this.live.effectListeners.delete(this.listener); this.live.onended = () => {};
-    try { this.live.dry?.disconnect(this.gate!); } catch { /* source gone */ }
+    try { this.source?.disconnect(this.gate!); } catch { /* source gone */ }
     this.capture?.disconnect(); this.dry?.disconnect(); this.gate?.disconnect(); this.effects?.disconnect();
     if (this.context && this.context !== this.engine.audioContext) void this.context.close();
-    this.capture = this.dry = undefined; this.gate = undefined; this.effects = undefined;
+    this.capture = this.dry = undefined; this.source = undefined; this.gate = undefined; this.effects = undefined;
   }
 }

@@ -100,6 +100,10 @@ export class StudioEditor {
         const assigned = slider ? owner.inputLabels.get(slider.id) : destination?.valid && destination.from === node.from ? 'MIDI notes · connected inputs and on-screen keys' : undefined;
         ranges.push(Decoration.mark({ class: `input-function${assigned ? ' input-assigned' : ''}`, attributes: { 'data-input-function': kind, tabindex: '0', role: 'button', 'aria-label': `${kind}: ${assigned ?? 'Unassigned input'}; open input controls`, title: assigned ?? `${kind}: input controls` } }).range(name.from, name.to));
       } });
+      if (owner.pending?.label.startsWith('Recording') && destination?.valid && !destination.append) {
+        const from = destination.from + destination.original.indexOf('(') + 1, to = destination.to - 1;
+        if (to > from) ranges.push(Decoration.mark({ class: 'pending-note' }).range(from, to));
+      }
       if (owner.pending) {
         const at = owner.pending.append ? code.length : Math.min(code.length, destination?.to ?? code.length);
         ranges.push(Decoration.widget({ widget: new PendingWidget(owner.pending.label), side: 1 }).range(at));
@@ -120,7 +124,7 @@ export class StudioEditor {
         Object.assign(input, { min: String(this.slider.min), max: String(this.slider.max), step: String(this.slider.step), value: String(this.slider.value) });
         input.dataset.sliderId = this.slider.id;
         input.setAttribute('aria-label', `${this.slider.label} inline slider`);
-        input.title = 'Select this slider, then MIDI Learn';
+        input.title = 'Adjust value. Use the slider() name to bind a MIDI control.';
         input.addEventListener('pointerdown', () => owner.select(this.slider.id));
         input.addEventListener('focus', () => owner.select(this.slider.id));
         input.addEventListener('input', () => owner.setValue(input.dataset.sliderId!, Number(input.value)));

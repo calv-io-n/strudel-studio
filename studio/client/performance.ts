@@ -5,6 +5,9 @@ import type { StudioEditor } from './editor';
 
 export class PerformancePanel {
   take?: MidiTake;
+  accompaniment: 'pattern' | 'solo' = 'solo';
+  get running() { return this.preparing || this.take?.state === 'capturing'; }
+  private ownsPlayback = false;
   owner?: StudioEditor;
   pendingAudio: () => boolean = () => false;
   private saving = false;
@@ -13,7 +16,7 @@ export class PerformancePanel {
   private fallback = false;
   get captureView(): CaptureView | undefined {
     if (!this.take || !this.owner?.destination || !this.preparing && (this.take.state === 'armed' || this.take.state === 'review' && !this.take.notes.length)) return;
-    return { state: this.preparing ? 'preparing' : this.saving ? 'saving' : this.take?.state === 'capturing' ? 'recording' : 'review', tabId: this.take.destination.tabId, kind: this.take.destination.append ? 'append' : 'phrase', label: this.preparing ? 'Preparing recording' : this.saving ? 'Saving' : this.take?.state === 'capturing' ? 'Recording' : 'Ready to review' };
+    return { state: this.preparing ? 'preparing' : this.saving ? 'saving' : this.take?.state === 'capturing' ? 'recording' : 'review', tabId: this.take.destination.tabId, kind: this.take.destination.append ? 'append' : 'phrase', label: this.preparing ? 'Preparing recording' : this.saving ? 'Saving' : this.take?.state === 'capturing' ? `Recording · ${this.take.notes.length} notes${this.take.notes.length ? ' · ' + this.take.notes.slice(-8).map(n => n.pitch).join(' ') : ''}` : 'Ready to review' };
   }
   private recoveryKey = '';
   private values?: Record<string, any>;
@@ -31,40 +34,18 @@ export class PerformancePanel {
   readonly root = document.createElement('section');
   constructor(private editor: () => StudioEditor, private tab: () => { id: string; name: string }, private report: (message: string) => void, private engine: Engine, private session: () => string, private saveSession: () => Promise<void>, private commitTake: (owner: StudioEditor, code: string) => Promise<void>) {
     this.root.className = 'performance-panel'; this.root.hidden = true;
-    this.root.setAttribute('aria-label', 'Play MIDI');
-    this.root.innerHTML = `<div class="form-row"><strong data-destination></strong><button data-close>Leave performance</button></div><p data-state role="status">Armed · choose an output</p><div data-actions class="form-row"><button data-audition>Test MIDI</button><button data-transcribe>Record notes</button><button data-fallback>Use fallback synth</button><button data-stop>Finish</button></div><div class="form-row"><label>Duration (beats) <input data-length type="number" min="1" max="256" step="1" value="16"></label><label>Quantization <select data-grid><option value="0.0625">¼ beat</option><option value="0.125">½ beat</option><option value="0.25">1 beat</option><option value="0">Unquantized</option></select></label><label><input data-countin type="checkbox"> Four-beat count-in</label></div><div class="form-row"><button data-preview>Preview</button><button data-preview-mix>Preview with accompaniment</button><button data-accept>Keep take</button><button data-discard>Discard</button><button data-retry>Retry</button><button data-retarget>Retarget take to selection</button></div><div class="form-row"><label>Loop start <input data-jam-start type="number" min="0" step="0.25" value="0"></label><label>Loop end <input data-jam-end type="number" min="0.25" step="0.25" value="4"></label><button data-jam>Play composition while recording</button><button data-leave-jam>Leave jam</button><label><input data-suppress type="checkbox"> Suppress original phrase</label></div><p data-jam-state role="status"></p><div class="performance-diff"><div><h3>Original</h3><pre data-original></pre></div><div><h3>Proposed · editable pattern</h3><pre data-proposed>No take yet</pre></div></div>`;
-    const advanced = document.createElement('details'); advanced.className = 'performance-options';
-    const summary = document.createElement('summary'); summary.textContent = 'Timing and accompaniment'; advanced.append(summary);
-    this.root.querySelector('[data-actions]')!.after(this.root.querySelector('.performance-diff')!);
-    advanced.append(this.root.querySelector('[data-length]')!.closest('.form-row')!, this.root.querySelector('[data-jam-start]')!.closest('.form-row')!, this.root.querySelector('[data-jam-state]')!, this.root.querySelector('[data-fallback]')!, this.root.querySelector('[data-retarget]')!);
-    advanced.append(this.root.querySelector('.performance-diff')!, this.root.querySelector('[data-preview-mix]')!, this.root.querySelector('[data-retry]')!); this.root.append(advanced);
+    this.root.setAttribute('aria-label', 'MIDI recording');
+    this.root.innerHTML = `<span data-destination hidden></span><div class="performance-feedback"><p data-state role="status"></p></div><div class="form-row performance-review" hidden><button data-preview>Preview</button><button data-accept>Keep take</button><button data-discard>Discard</button></div><button data-retarget hidden>Use selected phrase</button><button data-fallback hidden>Use fallback synth</button>`;
     const input = document.createElement('p'); input.dataset.input = ''; input.setAttribute('role', 'status');
-    input.textContent = 'MIDI input · waiting for a key';
+    input.textContent = '';
     this.root.querySelector('[data-state]')!.after(input);
     this.root.querySelector('[data-accept]')!.classList.add('primary');
-    this.button('audition', async () => { await this.prepare(); this.audition = true; this.status('Audition · no code or audio is saved'); });
     this.button('fallback', () => { this.fallback = true; this.values = { s: 'triangle', gain: .2 }; this.audition = true; this.status('Audition · fallback triangle synth'); });
-    this.button('jam', async () => {
-      if (!this.take) return;
-      this.stop();
-      await this.engine.startJam(this.take.destination.tabId, Number(this.root.querySelector<HTMLInputElement>('[data-jam-start]')!.value), Number(this.root.querySelector<HTMLInputElement>('[data-jam-end]')!.value));
-      this.root.querySelector('[data-jam-state]')!.textContent = `Loop ${this.engine.jam!.begin}–${this.engine.jam!.end} · excluding ${this.root.querySelector('[data-destination]')!.textContent}`; this.paint();
-    });
-    this.button('leave-jam', () => { this.stop(); this.engine.endJam(); this.root.querySelector('[data-jam-state]')!.textContent = ''; });
-    this.root.querySelector<HTMLInputElement>('[data-suppress]')!.onchange = async event => {
-      const input = event.target as HTMLInputElement;
-      try { await this.engine.suppressPhrase(this.owner!, this.take!.destination.tabId, this.take!.destination.original, input.checked); }
-      catch (error) { input.checked = false; this.report((error as Error).message); }
-    };
-    this.button('transcribe', () => this.start());
     this.button('preview', () => this.preview(true));
-    this.button('preview-mix', () => this.preview(false));
     this.button('accept', () => this.accept());
     this.button('discard', () => this.discard());
-    this.button('retarget', () => { this.stop(); if (!this.take) throw new Error('No pending take.'); const owner = this.editor(); const destination = owner.arm(this.tab().id); if (owner !== this.owner) this.owner?.disarm(); this.owner = owner; this.take.destination = destination; this.values = undefined; this.root.querySelector('[data-original]')!.textContent = destination.original; this.root.querySelector('[data-destination]')!.textContent = `Recording into: ${this.tab().name} → ${destination.append ? 'new notes at end' : 'selected phrase'} · updates the source pattern and all its placements. Composition placement: none.`; this.paint(); });
-    this.button('retry', async () => { this.discard(); await this.start(); });
-    this.button('stop', () => this.stop());
-    this.root.querySelector<HTMLButtonElement>('[data-close]')!.onclick = () => { try { this.close(); } catch (error) { this.report((error as Error).message); } };
+    this.button('retarget', () => { this.stop(); if (!this.take) throw new Error('No pending take.'); const owner = this.editor(); const destination = owner.arm(this.tab().id); if (owner !== this.owner) this.owner?.disarm(); this.owner = owner; this.take.destination = destination; this.values = undefined; this.root.querySelector('[data-destination]')!.textContent = `Recording into: ${this.tab().name} → ${destination.append ? 'new notes at end' : 'selected phrase'} · keeping a take updates every placement of this pattern.`; this.paint(); });
+
   }
   protected button(name: string, action: () => unknown | Promise<unknown>) {
     this.root.querySelector<HTMLButtonElement>(`[data-${name}]`)!.onclick = async () => { try { if (this.saving) return; await action(); } catch (error) { this.report((error as Error).message); } };
@@ -72,7 +53,8 @@ export class PerformancePanel {
   protected status(text: string) { this.root.querySelector('[data-state]')!.textContent = text; }
   async prepare() {
     if (!this.owner?.destination?.valid) throw new Error('The destination changed. Select a supported note expression again.');
-    this.values = this.fallback ? { s: 'triangle', gain: .2 } : await this.engine.performanceValues(this.owner, this.owner.destination.soundCode); this.audition = true; this.paint();
+    try { this.values = this.fallback ? { s: 'triangle', gain: .2 } : await this.engine.performanceValues(this.owner, this.owner.destination.soundCode); this.root.querySelector<HTMLElement>('[data-fallback]')!.hidden = true; } catch (error) { this.root.querySelector<HTMLElement>('[data-fallback]')!.hidden = false; throw error; }
+    this.audition = true; this.paint();
   }
   async note(key: string, pitch: number, velocity: number, on: boolean) {
     if (!this.owner?.destination || !this.take && !this.audition) return false;
@@ -81,7 +63,7 @@ export class PerformancePanel {
     const label = `${['C', 'C♯', 'D', 'D♯', 'E', 'F', 'F♯', 'G', 'G♯', 'A', 'A♯', 'B'][pitch % 12]}${Math.floor(pitch / 12) - 1}`;
     const input = this.root.querySelector<HTMLElement>('[data-input]')!;
     input.classList.toggle('midi-active', this.held.size > 0);
-    input.textContent = `MIDI received · ${label} ${on ? 'pressed' : 'released'} · ${this.held.size} held · ${this.take?.state === 'capturing' ? (this.elapsed < 0 ? 'count-in, not captured yet' : 'capturing proposal') : this.audition ? (this.engine.started ? 'playing live over the loop · not saved' : 'playing live · not saved') : 'monitor only · click Audition or Record notes to hear it'}`;
+    input.textContent = this.held.size ? `${label} · ${this.held.size} held` : '';
     if (this.take?.state === 'capturing' && this.elapsed >= 0) {
       this.take!.note(key, pitch, velocity, this.elapsed, on); this.paint();
     }
@@ -94,10 +76,9 @@ export class PerformancePanel {
   private paint() {
     this.persist();
     const capturing = this.take?.state === 'capturing', pending = !!this.take?.notes.length;
-    this.root.querySelector<HTMLElement>('[data-stop]')!.hidden = !capturing && !pending && !this.audition && !this.engine.jam;
-    this.root.querySelector<HTMLElement>('[data-transcribe]')!.hidden = capturing;
-    for (const name of ['preview', 'accept', 'discard']) this.root.querySelector<HTMLElement>(`[data-${name}]`)!.hidden = !pending;
-    this.root.querySelector('[data-proposed]')!.textContent = this.code() || (this.take?.state === 'capturing' ? 'Waiting for notes — play your MIDI keyboard now.' : 'No notes captured. Click Record notes, then play your keyboard.');
+    this.root.querySelector<HTMLElement>('.performance-review')!.hidden = !pending || !!capturing;
+    this.root.querySelector<HTMLElement>('[data-retarget]')!.hidden = !pending || !!this.owner?.destination?.valid;
+    this.root.querySelector<HTMLElement>('.performance-feedback')!.hidden = !pending && !capturing && !this.preparing;
     this.root.querySelector<HTMLButtonElement>('[data-accept]')!.disabled = !this.take?.notes.length || !this.owner?.destination?.valid || this.take?.state === 'capturing';
   }
   private persist() {
@@ -106,51 +87,58 @@ export class PerformancePanel {
       const key = `studio.midi-take:${this.session()}`;
       if (this.recoveryKey && this.recoveryKey !== key) localStorage.removeItem(this.recoveryKey);
       this.recoveryKey = key;
-      localStorage.setItem(key, JSON.stringify({ destination: this.owner?.destination ?? this.take.destination, notes: this.take.notes, length: this.length, grid: this.grid, cps: this.cps, fallback: this.fallback }));
+      localStorage.setItem(key, JSON.stringify({ destination: this.owner?.destination ?? this.take.destination, accompaniment: this.accompaniment, notes: this.take.notes, length: this.take.state === 'capturing' ? Math.min(this.length, Math.max(.25, Math.ceil(Math.max(0, this.elapsed) * 4) / 4)) : this.length, grid: this.grid, cps: this.cps, fallback: this.fallback }));
     } catch { this.status('Take is retained in memory; browser recovery storage is unavailable.'); }
   }
   restore(editorFor: (id: string) => StudioEditor) {
     const key = `studio.midi-take:${this.session()}`;
     const text = localStorage.getItem(key); if (!text) return;
-    const saved = PendingMidiSchema.parse(JSON.parse(text));
+    const raw = JSON.parse(text); const saved = PendingMidiSchema.parse(raw);
+    this.accompaniment = raw.accompaniment === 'pattern' ? 'pattern' : 'solo';
     if (!saved.destination || !Array.isArray(saved.notes) || !saved.notes.length || saved.notes.length > 10000) return;
-    this.owner = editorFor(saved.destination.tabId); this.owner.restoreDestination(saved.destination);
-    this.take = new MidiTake(this.owner.destination!); this.take.notes = saved.notes; this.length = saved.length; this.grid = saved.grid; this.cps = saved.cps; this.fallback = saved.fallback;
+    try { this.owner = editorFor(saved.destination.tabId); this.owner.restoreDestination(saved.destination); } catch { this.owner = undefined; }
+    this.take = new MidiTake(this.owner?.destination ?? { ...saved.destination, valid: false }); this.take.notes = saved.notes; this.length = saved.length; this.grid = saved.grid; this.cps = saved.cps; this.fallback = saved.fallback;
     this.take.stop(this.length); this.recoveryKey = key; this.root.hidden = false;
-    this.root.querySelector('[data-original]')!.textContent = this.take.destination.original;
     this.root.querySelector('[data-destination]')!.textContent = `Recovered take · ${this.take.destination.tabId}`;
-    this.paint(); this.status('Recovered MIDI take · review before accepting');
+    this.paint(); this.status(this.owner ? 'Recovered MIDI take · review before accepting' : 'Recovered MIDI take · original pattern missing. Select a phrase, then choose Use selected phrase.');
   }
   private clearRecovery() { try { localStorage.removeItem(this.recoveryKey || `studio.midi-take:${this.session()}`); } catch { /* memory remains authoritative */ } }
-  private async start() {
+  async start() {
     if (this.preparing) return;
     if (!this.take && this.owner?.destination?.valid) this.take = new MidiTake(this.owner.destination);
     if (!this.take || this.take.notes.length) throw new Error('Accept, Discard, or Retry the pending take first.');
     const epoch = ++this.captureEpoch;
     this.preparing = true;
+    this.engine.stop(); this.ownsPlayback = false; this.audition = false;
     try {
     await this.saveSession();
-    this.length = Number(this.root.querySelector<HTMLInputElement>('[data-length]')!.value) / 4;
-    this.grid = Number(this.root.querySelector<HTMLSelectElement>('[data-grid]')!.value);
+    this.length = 4096; this.grid = .0625;
     phraseNotes([], this.length, this.grid, 0);
     await this.prepare();
-    if (!await this.engine.countIn.wait(this.engine.tempo)) return;
+    this.audition = false;
+    if (epoch !== this.captureEpoch) return;
+    if (this.accompaniment === 'pattern') {
+      await this.engine.evaluate(true, this.take.destination.tabId, true);
+      if (epoch !== this.captureEpoch) return;
+      this.ownsPlayback = this.engine.started;
+      if (!this.ownsPlayback) return;
+    } else if (!await this.engine.countIn.wait(this.engine.tempo)) return;
     } finally { this.preparing = false; }
     if (epoch !== this.captureEpoch) return;
     this.cps = this.engine.tempo / 240;
     const countIn = this.engine.countIn.enabled;
     this.waiting = !this.engine.started && !countIn;
-    this.startedAt = this.waiting ? Infinity : this.engine.performanceAudio.time + (this.engine.started && !countIn ? (Math.ceil(this.engine.cycle) - this.engine.cycle) / this.cps : 0);
+    this.startedAt = this.waiting ? Infinity : this.engine.performanceAudio.time;
     this.take.start(); this.audition = true;
     clearInterval(this.timer);
     const update = () => {
       if (!this.owner?.destination?.valid) { this.stop(); this.status('Destination changed · take retained. Choose a valid destination before accepting.'); return; }
       this.paint();
       const count = this.take?.notes.length ?? 0;
-      this.status(this.waiting ? `Armed · play a note to start capturing ${this.length} ${this.length === 1 ? 'cycle' : 'cycles'} · original code unchanged` : this.elapsed < 0 ? `Count-in · starts in ${Math.ceil(-this.elapsed / this.cps)}s` : `Transcribing · ${count} ${count === 1 ? 'note' : 'notes'} captured · ${Math.max(0, (this.length - this.elapsed) / this.cps).toFixed(1)}s remaining · original code unchanged`);
+      this.status(this.waiting ? 'Ready · play a note to begin' : `Recording · ${count} ${count === 1 ? 'note' : 'notes'} · ${Math.max(0, this.elapsed / this.cps).toFixed(1)}s`);
       if (this.elapsed >= this.length) {
         this.stop();
-        if (!this.take?.notes.length && this.values) { this.audition = true; this.status('No notes captured · keys still play live · click Record notes to try again'); this.root.querySelector('[data-input]')!.textContent = 'MIDI input · live sound ready'; this.paint(); }
+        if (!this.take?.notes.length && this.values) { this.audition = true; this.status('No notes captured · try again'); this.root.querySelector('[data-input]')!.textContent = ''; this.paint(); }
       }
     };
     update();
@@ -159,18 +147,18 @@ export class PerformancePanel {
   stop() {
     this.engine.countIn.cancel();
     this.captureEpoch++; this.preparing = false;
+    if (this.ownsPlayback) { this.engine.stop(); this.ownsPlayback = false; }
     clearInterval(this.timer); this.timer = undefined; this.waiting = false;
     this.previewEpoch++; this.previewTimers.forEach(clearTimeout); this.previewTimers = [];
-    if (this.take?.state === 'capturing') this.take.stop(Math.min(this.length, Math.max(0, this.elapsed)));
+    if (this.take?.state === 'capturing') { const elapsed = Math.min(this.length, Math.max(0, this.elapsed)); this.length = Math.max(.25, Math.ceil(elapsed * 4) / 4); this.take.stop(elapsed); }
     this.audition = false; this.engine.performanceAudio.stop(); this.engine.isolatePerformance(false);
     this.held.clear(); this.root.querySelector('[data-input]')!.classList.remove('midi-active');
-    this.root.querySelector('[data-input]')!.textContent = 'MIDI input · live sound stopped';
+    this.root.querySelector('[data-input]')!.textContent = '';
     const count = this.take?.notes.length ?? 0;
-    this.status(count ? `Stopped · ${count} ${count === 1 ? 'note' : 'notes'} captured · Preview isolated, then Accept into selection or Retry` : 'Stopped · no notes captured. Click Record notes, then play before the timer ends. Check MIDI feedback if notes do not appear.'); this.paint();
+    this.status(count ? `Take ready · ${count} ${count === 1 ? 'note' : 'notes'} · not saved yet` : 'Ready · no notes captured'); this.paint();
   }
   private discard() {
-    this.stop(); this.clearRecovery(); if (this.take) void this.engine.suppressPhrase(this.owner!, this.take.destination.tabId, this.take.destination.original, false);
-    this.root.querySelector<HTMLInputElement>('[data-suppress]')!.checked = false;
+    this.stop(); this.clearRecovery(); if (this.take && this.owner) void this.engine.suppressPhrase(this.owner, this.take.destination.tabId, this.take.destination.original, false);
     if (this.take) this.take = new MidiTake(this.take.destination); this.paint(); this.status('Discarded · original code unchanged');
   }
   private async accept() {
@@ -194,17 +182,7 @@ export class PerformancePanel {
     this.previewTimers.push(setTimeout(() => { if (epoch === this.previewEpoch) this.stop(); }, this.length / this.cps * 1000 + 1500));
     this.status(isolated ? 'Preview · isolated take' : 'Preview · with accompaniment');
   }
-  globalStop() { this.stop(); this.engine.endJam(); this.root.querySelector('[data-jam-state]')!.textContent = ''; }
-  async loopAndPlay() {
-    this.arm();
-    await this.prepare();
-    this.engine.stop();
-    await this.engine.evaluate(true, this.take!.destination.tabId);
-    this.audition = true;
-    this.status(`Looping ${this.tab().name} · play your keyboard over the highlighted phrase · click Record notes to capture a proposal`);
-    this.root.querySelector('[data-input]')!.textContent = 'MIDI input · waiting for a key · live sound ready';
-    this.root.scrollIntoView({ block: 'nearest' });
-  }
+  globalStop() { this.stop(); this.engine.endJam(); }
   arm(createTake = true, appendSound?: string) {
     if (this.pendingAudio()) throw new Error('Save or discard the pending audio take before changing destinations.');
     if (this.take?.notes.length) throw new Error('Accept or discard the pending take before changing destinations.');
@@ -213,17 +191,16 @@ export class PerformancePanel {
     const destination = appendSound ? next.armAppend(this.tab().id, appendSound) : next.arm(this.tab().id);
     if (this.owner !== next) this.owner?.disarm();
     this.owner = next; this.take = createTake ? new MidiTake(destination) : undefined;
-    this.root.querySelector<HTMLInputElement>('[data-jam-end]')!.value = String(this.engine.arrangementLength || 4);
     this.root.hidden = false;
-    this.root.querySelector('[data-destination]')!.textContent = `Recording into: ${this.tab().name} → ${destination.append ? 'new notes at end' : 'selected phrase'} · updates the source pattern and all its placements. Composition placement: none.`;
-    this.root.querySelector('[data-original]')!.textContent = destination.original; this.paint();
-    this.status(`Ready · click Record notes, then play your keyboard · ${this.engine.tempo} BPM · original code stays unchanged until acceptance`);
+    this.root.querySelector('[data-destination]')!.textContent = `Recording into: ${this.tab().name} → ${destination.append ? 'new notes at end' : 'selected phrase'} · keeping a take updates every placement of this pattern.`;
+    this.paint();
+    this.status('Ready');
   }
   close() {
     if (this.pendingAudio()) throw new Error('Save or discard the pending audio take before leaving performance.');
     if (this.take?.notes.length) throw new Error('Accept or discard the pending take before leaving.');
     this.stop(); this.engine.endJam();
-    if (this.take) void this.engine.suppressPhrase(this.owner!, this.take.destination.tabId, this.take.destination.original, false);
+    if (this.take && this.owner) void this.engine.suppressPhrase(this.owner, this.take.destination.tabId, this.take.destination.original, false);
     this.engine.performanceAudio.silence();
     this.owner?.setPending(); this.owner?.disarm(); this.owner = undefined; this.take = undefined; this.root.hidden = true;
   }

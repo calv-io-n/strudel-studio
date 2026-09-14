@@ -68,8 +68,8 @@ test('GitHub failures and cancellation remain recoverable; corrupt upload does n
 test('project backups preserve imported audio and restore without overwriting a session', async ({ page }) => {
   await start(page); await importWave(page); await page.getByRole('link', { name: 'Back to Studio', exact: false }).click(); await page.locator('#save-now').click();
   const download = page.waitForEvent('download'); await command(page, 'Download project backup'); const file = await download; const path = await file.path(); expect(path).toBeTruthy();
-  await page.locator('#backup-file').setInputFiles(path!); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive-restored'); expect(await records(page, 'projects')).toHaveLength(2); expect(await records(page, 'assets')).toHaveLength(1);
-  await page.reload(); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive-restored');
+  await page.locator('#backup-file').setInputFiles(path!); await expect(page.locator('#saved-projects')).toHaveValue('DEMO-Neon-Drive-restored'); expect(await records(page, 'projects')).toHaveLength(2); expect(await records(page, 'assets')).toHaveLength(1);
+  await page.reload(); await expect(page.locator('#saved-projects')).toHaveValue('DEMO-Neon-Drive-restored');
 });
 
 test('static renderer exports audible synth WAV', async ({ page }) => {
@@ -106,7 +106,7 @@ test('Web MIDI input connects, plays, reconnects, and retains selection across s
 test('composition Record and Stop create a new take tab on the selected track automatically', async ({ page }) => {
   await fakeInput(page); await start(page); await page.locator('#add-track').click();
   await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording');
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
   await expect(page.locator('#sounds-panel')).toBeHidden(); await expect(page.locator('#recording-clip')).toBeVisible();
   await page.waitForTimeout(450); await page.locator('#composition-stop').click(); await page.locator('#composition-stop').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
@@ -127,7 +127,7 @@ test('storage exhaustion preserves the saved project and draft, then retry succe
     IDBObjectStore.prototype.put = function(...args: Parameters<IDBObjectStore['put']>) { if (this.name === 'projects') { this.transaction.abort(); throw new DOMException('Quota exceeded', 'QuotaExceededError'); } return original.apply(this, args); };
   });
   await page.locator('#project-name').fill('Retain this unsaved draft'); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toContainText('Not saved');
-  expect((await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').name).toBe('Neon Drive'); await expect(page.locator('#project-name')).toHaveValue('Retain this unsaved draft');
+  expect((await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').name).toBe('DEMO: Neon Drive'); await expect(page.locator('#project-name')).toHaveValue('Retain this unsaved draft');
   await page.evaluate(() => (window as any).restorePut()); await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser'); await page.reload(); await expect(page.locator('#project-name')).toHaveValue('Retain this unsaved draft');
 });
 
@@ -177,7 +177,7 @@ test('OPFS and IndexedDB fallback retain float precision through import and back
   const pointers = await records(page, 'audio'); expect(pointers[0].storage).toBe('opfs');
   await page.getByRole('link', { name: 'Back to Studio', exact: false }).click(); await page.locator('#save-now').click();
   const pending = page.waitForEvent('download'); await command(page, 'Download project backup'); const backup = await pending;
-  await page.locator('#backup-file').setInputFiles((await backup.path())!); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive-restored');
+  await page.locator('#backup-file').setInputFiles((await backup.path())!); await expect(page.locator('#saved-projects')).toHaveValue('DEMO-Neon-Drive-restored');
   await page.reload(); expect((await records(page, 'assets'))[0].id).toBe(a.id);
   // With OPFS absent, the identical import contract uses IndexedDB Blobs.
   await page.evaluate(() => { Object.defineProperty(navigator.storage, 'getDirectory', { configurable: true, value: undefined }); });
@@ -198,14 +198,14 @@ async function fakeInput(page: Page) {
   });
 }
 
-for (const mode of ['dry', 'wet'] as const) test(`${mode} input take survives reload and renders the applied gain once without hardware`, async ({ page }) => {
-  await fakeInput(page); await start(page); await page.locator('#add-track').click();
+for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited effects once in tab playback and composition render`, async ({ page }) => {
+  await installAudioCapture(page); await fakeInput(page); await start(page); await page.locator('#add-track').click();
   await page.getByRole('tab', { name: 'Audio input', exact: true }).click(); await command(page, 'Audio input settings'); await page.locator('#audio-track').selectOption({ label: 'Track 3' }); await closeSheet(page);
   await page.locator('#editor .cm-content:visible').fill('AUDIO.gain(slider(0.25, 0, 1))'); await page.locator('#audio-apply').click();
   await page.locator('#audio-connect').click(); await expect(page.locator('#audio-state')).toContainText('Armed'); expect(await page.locator('#audio-monitor').isChecked()).toBe(false);
   await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' }); await command(page, 'Recording settings'); await page.locator('#record-mode').selectOption(mode); await closeSheet(page);
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(600);
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(600);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
   await expect.poll(async () => (await records(page, 'assets')).filter(a => a.provider === 'recording').length).toBe(mode === 'wet' ? 2 : 1);
   await expect(page.locator('#record-status')).toContainText('saved to the timeline');
   const saved = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive'); expect(saved.clips.some((c: any) => c.takeId)).toBeTruthy();
@@ -218,14 +218,30 @@ for (const mode of ['dry', 'wet'] as const) test(`${mode} input take survives re
   }, wet.id);
   expect(capturedPeak).toBeGreaterThan(mode === 'wet' ? .018 : .09); expect(capturedPeak).toBeLessThan(mode === 'wet' ? .035 : .11);
   await page.locator('#save-now').click(); await page.reload();
+  const takeTab = saved.tabs.find((t: any) => t.audioAssetId === wet.id);
+  await page.getByRole('tab', { name: takeTab.name, exact: true }).click(); await page.locator('#take-code').click();
+  const content = page.locator('.tab-editor:not([hidden]) .cm-content'); await content.focus();
+  await page.keyboard.press('Control+Home'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Home'); await page.keyboard.press('Control+Shift+End');
+  await page.keyboard.insertText(`s("studio_${wet.id.replaceAll('-', '')}").gain(0.5)`);
+  await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
+  await page.reload(); await expect(page.locator('#take-play')).toBeVisible();
+  await page.evaluate(() => window.neonCapture.start()); await page.locator('#take-play').click();
+  await page.waitForTimeout(250); await expect(page.locator('#play')).toBeDisabled(); await page.waitForTimeout(2500);
+  const preview = await page.evaluate(() => window.neonCapture.finish()); await page.locator('#stop').click();
+  expect(preview.peak).toBeGreaterThan(.009); expect(preview.peak).toBeLessThan(.018);
+  // A sub-second take must not play again in the following pattern cycles.
+  expect(Math.max(...preview.bins.slice(2).map((b: any) => b.peak))).toBeLessThan(.001);
   // Solo the captured track, keeping accompaniment out of the exported signal.
   const clip = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').clips.find((c: any) => c.takeId);
   const track = saved.tracks.find((t: any) => t.id === clip.trackId);
   await page.getByRole('button', { name: `Solo ${track.name}`, exact: true }).click(); await page.locator('#save-now').click(); await expect.poll(async () => (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive').soloTrackId).toBe(clip.trackId);
+  await command(page, 'Return to range start'); await page.evaluate(() => window.neonCapture.start()); await playComposition(page); await page.waitForTimeout(1400);
+  const composed = await page.evaluate(() => window.neonCapture.finish()); await page.locator('#composition-stop').click();
+  expect(composed.peak).toBeGreaterThan(.009); expect(composed.peak).toBeLessThan(.018);
   await command(page, 'Export full song render'); await page.locator('#export-format').selectOption('float32');
   const pending = page.waitForEvent('download'); await page.locator('#render-audio').click(); const file = await pending;
   const rendered = decodeWav(await readFile((await file.path())!)); const peak = rendered.left.reduce((p, n) => Math.max(p, Math.abs(n)), 0);
-  expect(peak).toBeGreaterThan(.018); expect(peak).toBeLessThan(.035); expect(rendered.bits).toBe(32);
+  expect(peak).toBeGreaterThan(.009); expect(peak).toBeLessThan(.018); expect(rendered.bits).toBe(32);
 });
 
 test('input drafts retain working processing; live input blocks export until explicitly excluded', async ({ page }) => {
@@ -266,10 +282,10 @@ async function blankComposition(page: Page) {
 test('recording works in an empty timeline and permission denial leaves no take', async ({ page }) => {
   await fakeInput(page); await start(page); await blankComposition(page);
   await page.evaluate(() => { (window as any).getInput = navigator.mediaDevices.getUserMedia; navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); }; });
-  await openRecordBar(page); await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('denied'); expect((await records(page, 'projects'))[0].clips).toHaveLength(0);
+  await openRecordBar(page); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('denied'); expect((await records(page, 'projects'))[0].clips).toHaveLength(0);
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).getInput; });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(500);
-  await expect(page.locator('#composition-position')).not.toHaveText('0.00'); await page.locator('#audio-record').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(500);
+  await expect(page.locator('#composition-position')).not.toHaveText('0.00'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(1);
 });
@@ -277,7 +293,7 @@ test('recording works in an empty timeline and permission denial leaves no take'
 test('recording joins playing composition at its playhead and stops before an existing clip', async ({ page }) => {
   await fakeInput(page); await start(page); await playComposition(page); await page.waitForTimeout(600);
   const before = (Number((await page.locator('#composition-position').textContent())!.replace('Beat ', '')) - 1) / 4;
-  await openRecordBar(page); await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording');
+  await openRecordBar(page); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0], clip = project.clips.find((c: any) => c.takeId);
   expect(clip.start + clip.takeLeadSeconds * project.bpm / 240).toBeGreaterThan(before);
@@ -287,9 +303,9 @@ test('recording joins playing composition at its playhead and stops before an ex
 
 test('recording save failure retains audio and retry places exactly one pattern', async ({ page }) => {
   await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(400);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(400);
   await page.evaluate(() => { const put = IDBObjectStore.prototype.put; (window as any).restoreTakeWrites = () => IDBObjectStore.prototype.put = put; IDBObjectStore.prototype.put = function(value, key) { if (this.name === 'projects' && value.tabs.some((t: any) => t.audioAssetId)) throw new DOMException('Full', 'QuotaExceededError'); return put.call(this, value, key); }; });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-retry')).toBeVisible({ timeout: 15000 });
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-retry')).toBeVisible({ timeout: 15000 });
   expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.audioAssetId)).toHaveLength(0); expect((await records(page, 'assets')).filter(a => a.provider === 'recording')).toHaveLength(0);
   await page.evaluate(() => (window as any).restoreTakeWrites()); await page.locator('#record-retry').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline'); expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.audioAssetId)).toHaveLength(1);
@@ -297,7 +313,7 @@ test('recording save failure retains audio and retry places exactly one pattern'
 
 test('reload recovers an interrupted recording and effects testing keeps the saved take intact', async ({ page }) => {
   await installAudioCapture(page); await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(650);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(650);
   await expect.poll(async () => (await records(page, 'pending')).filter(value => value instanceof Object).length).toBeGreaterThan(1);
   await page.reload(); await expect(page.locator('#record-status')).toContainText('Recovered interrupted recording'); await openRecordBar(page); await page.locator('#record-retry').click();
   await expect(page.locator('#record-status')).toContainText('Interrupted recording saved');
@@ -314,12 +330,12 @@ test('reload recovers an interrupted recording and effects testing keeps the sav
 test('cancelled input permission does not create a take or stop the next recording', async ({ page }) => {
   await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
   await page.evaluate(() => { const get = navigator.mediaDevices.getUserMedia; (window as any).originalInput = get; navigator.mediaDevices.getUserMedia = () => new Promise((_resolve, reject) => { (window as any).rejectInput = reject; }); });
-  await page.locator('#audio-record').click(); await expect(page.locator('#audio-record')).toHaveText('Cancel connection'); await page.locator('#audio-record').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('cancelled');
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).originalInput; });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording');
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
   await page.evaluate(() => (window as any).rejectInput(new DOMException('Denied after cancellation', 'NotAllowedError'))); await page.waitForTimeout(300);
-  await expect(page.locator('#record-status')).toContainText('Recording'); await page.locator('#audio-record').click();
+  await expect(page.locator('#record-status')).toContainText('Recording'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
 });
 

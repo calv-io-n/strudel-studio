@@ -44,7 +44,7 @@ export function setupExport(root: HTMLElement, snapshot: () => Project, assets: 
     if (url) URL.revokeObjectURL(url); url = undefined; download.hidden = true;
     const target = source.value === 'composition' ? 'composition' : project.activeTabId;
     const choice = $<HTMLSelectElement>('#export-code').value;
-    const relevant = target === 'composition' ? project.tabs.filter(t => project.clips.some(c => c.tabId === t.id && !c.takeId)) : project.tabs.filter(t => t.id === target);
+    const relevant = target === 'composition' ? project.tabs.filter(t => project.clips.some(c => c.tabId === t.id && (!c.takeId || !!t.audioAssetId))) : project.tabs.filter(t => t.id === target);
     if (!choice && relevant.some(t => project.appliedPatterns?.[t.id] !== undefined && project.appliedPatterns[t.id] !== t.code)) { status.textContent = 'Choose last-applied or current-draft pattern code before rendering.'; return; }
     if (choice === 'applied') for (const tab of project.tabs) tab.code = project.appliedPatterns?.[tab.id] ?? tab.code;
     const input = project.audioInput, track = project.tracks.find(t => t.id === input?.trackId);

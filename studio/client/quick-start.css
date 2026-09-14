@@ -66,3 +66,13 @@ dialog#quick-start[open] { display: flex; flex-direction: column; height: min(85
 #quick-start #help-arrange:not([hidden]) { display: block; }
 #help-arrange .quick-start-copy { margin-top: 18px; }
 .quick-start-browser video { display: block; width: 100%; aspect-ratio: 8 / 5; max-height: 60dvh; object-fit: contain; background: #202c3b; border-radius: 8px; }
+
+#quick-start #help-midi:not([hidden]), #quick-start #help-mapping:not([hidden]) { display: block; max-width: none; }
+.quick-start-media { min-width: 0; }
+#help-midi .quick-start-media { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; }
+#help-midi .quick-start-media > figure:first-child { grid-row: span 3; }
+.quick-start-browser video { aspect-ratio: auto; }
+@media (max-width: 700px) { #help-midi .quick-start-media { display: block; } #help-midi .quick-start-media > figure:first-child img { max-width: 180px; } }
+
+#help-mapping .quick-start-media { display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 16px; }
+@media (max-width: 700px) { #help-mapping .quick-start-media { display: block; } #help-mapping .quick-start-media img { max-width: 180px; } }

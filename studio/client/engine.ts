@@ -1,6 +1,6 @@
 import { CountIn } from './count-in';
 import { tempoRate } from '../shared/tempo';
-import { prepareTake, takePattern } from './take-playback';
+import { prepareTake, takePattern, takeTabClip } from './take-playback';
 import { asset as storedAsset, audioBlob } from './storage/workspace';
 import { sampleUrl, releaseSampleUrls } from './storage/workspace';
 import { instrumentFor, validateInstrumentInput, MIDI_EDITOR, updateAppliedInstrumentSliders } from '../shared/midi-instrument';
@@ -403,12 +403,12 @@ export class Engine {
     const ids = target === 'composition' ? [...new Set(project.clips.map(c => c.tabId))] : [target];
     const clips = project.clips.map(c => ({ ...c }));
     const next = new Map<string, Pattern>(), codes = new Map<string, number>(), appliedCodes = new Map<string, string>();
-    let cps = project.bpm / 240;
+    let cps = project.bpm / 240, takeEnd: number | undefined;
     try {
       if (!ids.length && !this.recordingTransport) throw new Error('Add a pattern to the composition first.');
       await this.unlock();
       for (const id of ids) {
-        if (target === 'composition' && clips.filter(c => c.tabId === id).every(c => !!c.takeId)) continue;
+        if (target === 'composition' && !project.tabs.find(t => t.id === id)?.audioAssetId && clips.filter(c => c.tabId === id).every(c => !!c.takeId)) continue;
         const tab = project.tabs.find(t => t.id === id)!;
         if (epoch !== this.epoch) return;
         this.compositionCompile = target === 'composition';
@@ -444,8 +444,16 @@ export class Engine {
       if (epoch !== this.epoch) return;
       if (target === 'composition') for (const clip of clips.filter(c => c.takeId)) {
         const asset = await storedAsset(clip.takeId!); await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id));
-        next.set(clip.id, takePattern(clip, asset, cps));
+        next.set(clip.id, takePattern(clip, asset, cps, project.tabs.find(t => t.id === clip.tabId)?.audioAssetId ? next.get(clip.tabId) : undefined));
       }
+      const takeId = project.tabs.find(t => t.id === target)?.audioAssetId;
+      if (takeId) {
+        const asset = await storedAsset(takeId);
+        await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id));
+        next.set(target, takePattern(takeTabClip(target, asset, cps), asset, cps, next.get(target)));
+        takeEnd = ((asset.duration ?? 0) + 3) * cps;
+      }
+      if (epoch !== this.epoch) return;
       let pattern = target === 'composition' ? arrangement(clips, next, this.mutes, () => this.jam?.tabId, new Map(project.tabs.map(t => [t.id, tempoRate(t, project.bpm)]))) : ratePattern(next.get(target)!, tempoRate(project.tabs.find(t => t.id === target)!, project.bpm));
       if (this.midiSection && target === 'composition') {
         const composed = pattern; const section = this.midiSection;
@@ -477,7 +485,7 @@ export class Engine {
         this.patterns.reset(pattern);
         this.repl.scheduler.setCps(cps);
         this.target = target;
-        this.endCycle = target === 'composition' && !this.jam && !this.midiSection ? (this.recordingTransport || this.transport.loop ? Infinity : Math.max(...clips.map(c => c.start + c.length)) - this.transportStart) : Infinity;
+        this.endCycle = target === 'composition' && !this.jam && !this.midiSection ? (this.recordingTransport || this.transport.loop ? Infinity : Math.max(...clips.map(c => c.start + c.length)) - this.transportStart) : takeEnd ?? Infinity;
         const live = this.patterns.pattern();
         this.repl.state.pattern = live;
         await this.repl.scheduler.setPattern(live, true);

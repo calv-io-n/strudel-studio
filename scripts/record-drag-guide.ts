@@ -38,14 +38,16 @@ try {
   });
   let frame = 0;
   const captured: Buffer[] = [];
-  const capture = async () => { captured.push(await page.screenshot({ type: 'jpeg', quality: 92, path: path.join(frames, `${String(frame++).padStart(4, '0')}.jpg`) })); };
+  const capture = async () => { captured.push(await page.screenshot({ type: 'jpeg', quality: 92, clip: crop, path: path.join(frames, `${String(frame++).padStart(4, '0')}.jpg`) })); };
   const hold = async (count: number) => { for (let i = 0; i < count; i++) await capture(); };
   const tab = (await page.locator('#tabs [data-tab]').first().boundingBox())!;
   const lane = (await page.locator('.lane').first().boundingBox())!;
+  // Focus on the tab strip, ruler, target lane, and saved clip; omit the unrelated editor.
+  const crop = { x: 0, y: Math.max(0, Math.floor(tab.y - 24)), width: 900, height: Math.min(320, 800 - Math.max(0, Math.floor(tab.y - 24))) };
   const from = { x: tab.x + tab.width / 2, y: tab.y + tab.height / 2 };
   const to = { x: lane.x + 8, y: lane.y + lane.height / 2 };
   await page.mouse.move(from.x + 120, from.y + 90);
-  await page.screenshot({ path: path.join(output, 'drag-pattern-browser.png') });
+  await page.screenshot({ path: path.join(output, 'drag-pattern-browser.png'), clip: crop });
   await hold(12);
   for (let i = 1; i <= 15; i++) {
     await page.mouse.move(from.x + 120 * (1 - i / 15), from.y + 90 * (1 - i / 15)); await capture();
@@ -61,6 +63,7 @@ try {
   await expect(page.locator('[data-clip]')).toHaveCount(1);
   await expect(page.locator('[data-clip]')).toContainText('Pattern 1');
   await page.mouse.move(to.x + 290, to.y + 40); await hold(27);
+  await page.screenshot({ path: path.join(output, 'drag-pattern-browser.png'), clip: crop });
   await page.locator('#save-now').click();
   await page.reload();
   await expect(page.locator('[data-clip]')).toHaveCount(1);

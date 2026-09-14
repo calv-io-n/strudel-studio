@@ -32,7 +32,7 @@ export async function createNeonDrive(): Promise<Project> {
     return { id: `${tabId}-mapping`, profileId: 'virtual', channel: 1, kind: 'cc', number,
       target: { kind: 'slider', tabId, sliderId: tab.anchors[index].id }, pickup: false, enabled: true };
   });
-  return ProjectSchema.parse({ ...project, name: 'Neon Drive', bpm: 168, tabs, activeTabId: 'neon-lead', bindings, slots: [],
+  return ProjectSchema.parse({ ...project, name: 'DEMO: Neon Drive', bpm: 168, tabs, activeTabId: 'neon-lead', bindings, slots: [],
     clips: [
       { id: 'intro', tabId: 'neon-chords', trackId: 'track-2', muted: false, start: 0, length: 4 },
       { id: 'groove-rhythm', tabId: 'neon-rhythm', trackId: 'track-1', muted: false, start: 4, length: 12 },
@@ -64,5 +64,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try { process.loadEnvFile(path.join(root, '.env')); } catch { /* Optional local configuration. */ }
   const result = await installNeonDrive(process.env.STUDIO_DATA_DIR || undefined);
   console.log(result.created ? `Installed Neon Drive: ${result.file}` : `Neon Drive already exists; left unchanged: ${result.file}`);
-  console.log('Run npm run dev, then Sessions → Neon Drive. Select Composition and press Play.');
+  console.log('Run npm run dev, then Sessions → DEMO: Neon Drive. Select Composition and press Play.');
 }

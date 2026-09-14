@@ -1,3 +1,4 @@
+import { registerOverlay } from './overlay';
 /** Right-side settings sheet. Panes are declared in the shell markup as `[data-sheet]` sections; one is visible at a time. */
 export class Sheets {
   current?: string;
@@ -8,7 +9,7 @@ export class Sheets {
     this.title = root.querySelector('[data-sheet-title]')!;
     this.subtitle = root.querySelector('[data-sheet-subtitle]')!;
     root.querySelector<HTMLButtonElement>('[data-sheet-close]')!.onclick = () => this.close();
-    backdrop.onclick = () => this.close();
+    registerOverlay(root, () => this.close());
   }
   open(id: string) {
     const pane = this.root.querySelector<HTMLElement>(`[data-sheet="${id}"]`);

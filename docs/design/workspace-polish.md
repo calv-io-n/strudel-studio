@@ -24,10 +24,13 @@ The ruler stays fixed during vertical scrolling. Track names remain opaque and f
 
 ## MIDI
 
-Click a visibly interactive `note` name to inspect its source, Test MIDI, Record notes or unbind. The menu does not start playback. Testing produces sound without a take. Recording explicitly selects source-phrase replacement or a variation for one clip, with optional accompaniment selected separately. Gray pending code and timeline regions reflect the real capture lifecycle. Accept saves before publishing; failed saves retain the take for retry.
+Click a visibly interactive `note()` name for Test MIDI, Record MIDI on pattern, Record MIDI solo, or unbind. Recording actions arm the shared Record bar and retain the clicked source phrase. Pattern mode accompanies with the complete tab; solo mode has no accompaniment. Press the top Record button to start, Stop to finish, then preview and Keep take in the same bar. Gray inline notes and timeline placeholders reflect capture state. Acceptance saves before publishing; failures retain work. Old clip-targeted recoveries retain their original placement semantics without a separate sheet.
+
+Click or drag an inline slider to adjust its value. Its function-name menu owns bind/inspect/unbind; controller settings remain separate. The metronome is neutral gray off and gold enabled.
+
 
 See [ADR 0009](../adr/0009-launch-timing-and-capture.md) for the action inventory, beat/source-window semantics, source-owned tempo overrides and explicit Quick Start preference. These launch decisions supersede the previous automatic Play MIDI routing.
 
 ## Verification
 
-`workspace-polish.spec.ts` covers reversible tabs, direct sound replacement, audible preview and MIDI testing, range and playhead controls, sticky headers, MIDI recovery, and draft-safe seeking. Existing library, composition, completion, recording, and MIDI suites exercise the preserved workflows. Physical controller hardware still requires a manual walkthrough; browser tests exercise the MIDI event route and audible output with fixtures.
+`followup.spec.ts`, `launch.spec.ts`, and `pages.spec.ts` cover reversible tabs, direct sound replacement, audible preview and MIDI testing, range and playhead controls, sticky headers, MIDI recovery, and draft-safe seeking. Existing library, composition, completion, recording, and MIDI suites exercise the preserved workflows. Physical controller hardware still requires a manual walkthrough; browser tests exercise the MIDI event route and audible output with fixtures.
