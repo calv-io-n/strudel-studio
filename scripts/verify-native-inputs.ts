@@ -69,7 +69,7 @@ try {
   await step('Native microphone to audio pattern and composition', async () => {
     await page.locator('#seek-handle').focus(); await page.keyboard.press('Home');
     if (!await page.locator('#record-bar').isVisible()) await page.locator('#record-toggle').click(); await page.locator('[data-capture=audio]').click(); await page.locator('#record-track').selectOption({ label: 'Track 2' });
-    await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording', { timeout: 15000 }); console.log('Microphone recording now: make a brief test sound during the next 10 seconds.'); await page.waitForTimeout(10000); await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
+    await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording', { timeout: 15000 }); console.log('Microphone recording now: make a brief test sound during the next 10 seconds.'); await page.waitForTimeout(10000); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
     await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
     const project = (await records('projects')).find(p => p.sessionId === session), take = project.tabs.find((t: any) => t.audioAssetId);
     expect(take).toBeTruthy(); expect(project.clips.some((c: any) => c.takeId === take.audioAssetId)).toBe(true);

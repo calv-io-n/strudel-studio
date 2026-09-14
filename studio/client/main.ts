@@ -74,11 +74,10 @@ app.innerHTML = `
 <div id="record-bar" aria-label="Record" hidden>
   <div class="record-options">
     <div class="chips" role="group" aria-label="Capture source"><button data-capture="audio" aria-pressed="true">Audio input</button><button data-capture="midi" aria-pressed="false">MIDI</button></div>
-    <label class="inline record-track">Record to <select id="record-track" aria-label="Recording track"></select></label>
+    <label class="inline record-track"><span id="record-source-label">Record to</span> <select id="record-track" aria-label="Recording track"></select></label>
     <span id="midi-record-hint" class="hint" hidden>Choose a note() phrase, then press Record</span>
   </div>
   <div class="record-actions">
-    <button id="audio-record" class="record-button">Record audio input</button>
     <output id="record-status" role="status" aria-live="polite"></output>
     <button id="record-retry" hidden>Retry save</button><button id="record-download" hidden>Download recording</button><button id="record-discard" hidden>Discard recording…</button>
     <button id="record-settings" class="bare">Settings</button><button id="record-close" class="bare icon" aria-label="Close record bar">✕</button>
@@ -164,7 +163,7 @@ app.innerHTML = `
       <section class="sheet-section"><h2>Test on a recording</h2><div class="form-row"><select id="audio-test-take" aria-label="Test on recording"><option value="">Choose a recorded take…</option></select><button id="audio-test-play">Test vocal effects</button><button id="audio-test-stop" class="bare">Stop test</button></div><p class="hint">Testing changes the preview; your saved recording stays intact.</p></section>
     </section>
     <section data-sheet="record" data-title="Record" data-subtitle="Capture audio input onto the timeline" hidden>
-      <section class="sheet-section"><h2>Capture</h2><div class="field-grid"><label>Capture <select id="record-mode"><option value="wet">With vocal effects</option><option value="dry">Dry · editable effects</option></select></label><label>Latency compensation (seconds)<input id="record-latency" type="number" min="-2" max="2" step="0.001" value="0"></label><label class="check"><input id="record-countin" type="checkbox"> Four-beat count-in</label></div></section>
+      <section class="sheet-section"><h2>Capture</h2><div class="field-grid"><label>Capture <select id="record-mode"><option value="wet">With vocal effects</option><option value="dry">Dry · editable effects</option></select></label><label>Latency compensation (seconds)<input id="record-latency" type="number" min="-2" max="2" step="0.001" value="0"></label></div></section>
       <p class="hint">Choose a track under <b>Record to</b> in the record bar, then record. Stopping saves the take with your applied effects and drops a clip on that track. <button type="button" class="link" id="record-audio-settings">Audio input settings</button> control the device and monitoring.</p>
     </section>
     <section data-sheet="export" data-title="Export" data-subtitle="Full song render to stereo WAV" hidden><div id="export-content"></div></section>
@@ -198,6 +197,7 @@ const workspaceRegions = () => ['.topbar', '#record-bar', '.workspace', '.drawer
 const sheets = new Sheets($('#sheet'), $('#sheet-backdrop'), workspaceRegions, id => sheetOpened(id));
 let recordBarOpen = false;
 let captureMode: 'audio' | 'midi' = 'audio';
+let recordSource: 'external' | 'phrase' | 'instrument' = 'external';
 let midiPulseUntil = 0;
 
 let project: Project = newProject();
@@ -417,12 +417,12 @@ $('#audio-connect').onclick = $('#audio-sheet-connect').onclick = guard(connectA
 $('#audio-device').onchange = $('#audio-channel').onchange = () => { liveInput.disconnect(); renderAudioInput(); };
 function disconnectAudio() { if (timelineRecording?.pending) { void timelineRecording.stop(true); return; } liveInput.disconnect(); renderAudioInput(); }
 $('#audio-disconnect').onclick = $('#audio-cancel').onclick = disconnectAudio;
-$('#audio-record').onclick = guard(async () => {
-  if (timelineRecording!.pending) { await timelineRecording!.stop(); return; }
+const recordAudio = guard(async () => {
+  if (timelineRecording!.pending) { if (recordSource === 'phrase') performancePanel.globalStop(); await timelineRecording!.stop(); return; }
   if (recordingPanel.pending || midiComposition.pending || performancePanel.take?.notes.length) throw new Error('Finish the pending performance before recording.');
   stopTakePreview(); await persistSession();
   $('#play-target').value = 'composition'; setDrawer('composition');
-  await timelineRecording!.start({ trackId: $('#record-track').value, device: $('#audio-device').value, channel: $('#audio-channel').value, mode: $('#record-mode').value as 'wet' | 'dry', latency: Number($('#record-latency').value), countin: $('#record-countin').checked });
+  await timelineRecording!.start({ trackId: $('#record-track').value, device: $('#audio-device').value, channel: $('#audio-channel').value, mode: $('#record-mode').value as 'wet' | 'dry', latency: Number($('#record-latency').value), countin: engine.countIn.enabled, ...(recordSource === 'external' ? {} : { mode: 'wet' as const, internal: { name: recordSource === 'phrase' ? 'Highlighted phrase' : 'MIDI instrument', prepare: async () => { if (recordSource === 'phrase') { await performancePanel.prepare(); return engine.performanceAudio.output; } await engine.prepareInstrument(); return engine.instrumentAudio.output; } } }) });
 });
 $('#record-retry').onclick = guard(() => timelineRecording!.retry());
 $('#record-download').onclick = guard(() => timelineRecording!.download());
@@ -430,27 +430,26 @@ $('#record-discard').onclick = guard(async () => { if (await askEdit('Discard re
 $('#record-track').onchange = () => { selectedTrack = $('#record-track').value; };
 function renderRecording() {
   const recording = timelineRecording, pending = !!recording?.pending;
-  $('#audio-record').textContent = recording?.state === 'preparing' ? (engine.countIn.remaining ? 'Cancel count-in' : 'Cancel connection') : recording?.state === 'recording' ? 'Stop recording' : 'Record audio input';
-  $('#audio-record').classList.toggle('recording', recording?.state === 'recording');
-  $('#audio-record').disabled = !!recording && ['finishing', 'saving', 'failed'].includes(recording.state);
   $('#record-status').textContent = recording?.state === 'preparing' && engine.countIn.remaining ? `Count-in · ${engine.countIn.remaining}` : recording?.state === 'recording' ? `Recording · ${recording.elapsed.toFixed(1)} s` : recording?.message ?? '';
   $('#record-retry').hidden = $('#record-download').hidden = $('#record-discard').hidden = recording?.state !== 'failed';
-  for (const id of ['record-track', 'record-mode', 'record-countin', 'record-latency', 'audio-device', 'audio-channel', 'audio-connect', 'audio-sheet-connect', 'audio-disconnect', 'audio-track', 'new-tab']) $('#' + id).disabled = pending;
+  for (const id of ['record-track', 'record-mode', 'record-latency', 'audio-device', 'audio-channel', 'audio-connect', 'audio-sheet-connect', 'audio-disconnect', 'audio-track', 'new-tab']) $('#' + id).disabled = pending;
   if (pending) { for (const id of ['composition-play', 'bpm', 'play', 'add-track']) $('#' + id).disabled = true; document.querySelectorAll<HTMLButtonElement>('[data-play-target]').forEach(button => { button.disabled = true; }); }
   $('#composition-content').classList.toggle('capturing-audio', pending);
   // A pending take keeps the record bar open on the audio controls that can stop or recover it.
   const audio = captureMode === 'audio' || pending, midiArmed = midiComposition.armed || !!performancePanel.take;
-  $('#record-bar').hidden = !recordBarOpen && !pending && !performancePanel.running && !performancePanel.take?.notes.length && !midiComposition.pending && recording?.state !== 'failed';
+  $('#record-bar').hidden = !recordBarOpen && !pending && !performancePanel.running && !performancePanel.take?.notes.length && !midiComposition.pending && !recordingPanel.pending && recording?.state !== 'failed';
   $('#record-toggle').setAttribute('aria-pressed', String(!$('#record-bar').hidden));
   $('#record-toggle').classList.toggle('recording', recording?.state === 'recording');
   document.querySelectorAll<HTMLButtonElement>('[data-capture]').forEach(button => { button.setAttribute('aria-pressed', String((button.dataset.capture === 'audio') === audio)); button.disabled = pending; });
-  $('#audio-record').hidden = $('#record-status').hidden = $('.record-track').hidden = !audio;
+  $('#record-status').hidden = $('.record-track').hidden = !audio;
   $('#record-bar').dataset.mode = audio ? 'audio' : 'midi';
   $('#midi-record-hint').hidden = audio;
-  $('#record-settings').hidden = !audio;
-  $('#record-bar .chips').hidden = !audio && midiArmed;
-  $('#record-toggle').textContent = performancePanel.running ? (engine.countIn.remaining ? 'Cancel' : 'Stop') : 'Record';
-  $('#record-toggle').disabled = !audio && !!performancePanel.take?.notes.length && !performancePanel.running;
+  $('#record-settings').hidden = !audio || recordSource !== 'external';
+  $('#record-bar .chips').hidden = !audio && midiArmed || audio && recordSource !== 'external';
+  $('#record-source-label').textContent = recordSource === 'phrase' ? 'Highlighted phrase →' : recordSource === 'instrument' ? 'MIDI instrument →' : 'Record to';
+  $('.record-track').title = recordSource === 'phrase' ? 'Record highlighted phrase' : recordSource === 'instrument' ? 'Record MIDI instrument' : 'Record microphone';
+  $('#record-toggle').textContent = performancePanel.running || recording?.state === 'recording' ? 'Stop' : recording?.state === 'preparing' ? 'Cancel' : 'Record';
+  $('#record-toggle').disabled = recordingPanel.pending || midiComposition.pending || !audio && !performancePanel.take || !!recording && ['finishing', 'saving', 'failed'].includes(recording.state) || !audio && !!performancePanel.take?.notes.length && !performancePanel.running;
   performancePanel.root.hidden = audio || !performancePanel.owner && !performancePanel.take;
   $('#midi-record-hint').textContent = performancePanel.owner ? `${project.tabs.find(t => t.id === performancePanel.owner?.destination?.tabId)?.name ?? 'Missing pattern'} · ${performancePanel.accompaniment === 'pattern' ? 'With pattern' : 'Solo MIDI'}` : 'Select a note() phrase to record MIDI';
   $('#record-toggle').classList.toggle('recording', recording?.state === 'recording' || performancePanel.take?.state === 'capturing');
@@ -596,7 +595,7 @@ async function recallMidiPreset(id: string) {
 }
 const performancePanel = new PerformancePanel(() => editor, () => project.tabs.find(t => t.id === project.activeTabId)!, message => notice(message, true), engine, () => selectedProjectName || project.name, () => persistSession(), commitPatternTake);
 $('#record-bar').append(performancePanel.root);
-const recordingPanel = new RecordingPanel(engine, () => performancePanel.prepare(), async asset => { project.assetIds = [...new Set([...project.assetIds, asset.id])]; assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => performancePanel.stop(), liveInput, ensureAudioInput, async asset => {
+const recordingPanel = new RecordingPanel(engine, async asset => { project.assetIds = [...new Set([...project.assetIds, asset.id])]; assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, async asset => {
   const recording = asset.recording!, destination = recordingPanel.destination;
   if (!destination) throw new Error('Choose a recording destination before placing the retained audio.');
   const next = snapshot(), trackId = destination.trackId;
@@ -627,7 +626,7 @@ timelineRecording = new TimelineRecording(engine, liveInput, snapshot, ensureAud
   saveChain = operation; await operation;
 }, () => { renderRecording(); renderComposition(); renderAudioInput(); });
 performancePanel.pendingAudio = () => recordingPanel.pending || !!timelineRecording?.pending;
-$('#sound-import').append(recordingPanel.root);
+$('#record-bar').append(recordingPanel.root);
 const sampleImports = new SampleImports(async asset => { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
 const importPage = document.createElement('section'); importPage.id = 'sample-import-page'; importPage.hidden = true;
 importPage.innerHTML = `<header><a href="#/">← Back to Studio</a><span>YOUR SOUND LIBRARY</span></header><h1>Bring your own sounds.</h1><p>Import from a public GitHub repository, or choose files from your device. Selected sounds stay in this browser.</p><div class="import-columns"><div id="github-import-column"></div><div id="file-import-column"></div></div><section class="browser-storage"><h2>Saved on this device</h2><p id="storage-usage" role="status"></p><p>Browser data can be cleared. Download project backups to keep your music or move it to another device.</p><button id="persist-storage">Keep browser storage</button><button id="import-backup">Download current project backup</button></section>`;
@@ -650,9 +649,9 @@ window.addEventListener('hashchange', routePage);
 $('#persist-storage').onclick = guard(async () => { const kept = await navigator.storage?.persist?.(); notice(kept ? 'Persistent storage granted. Keep project backups too.' : 'The browser did not grant persistent storage. Project backups are still available.'); await updateStorageUsage(); });
 $('#import-backup').onclick = guard(downloadBackup);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
-recordButton.onclick = () => { setSounds(false); openRecordBar('audio'); }; $('#sound-import').prepend(recordButton);
+recordButton.onclick = () => { recordSource = 'external'; setSounds(false); openRecordBar('audio'); }; $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
-recordSelected.onclick = guard(async () => { if (timelineRecording?.pending) throw new Error('Finish recording first.'); performancePanel.stop(); await persistSession(); recordingPanel.destination = { tabId: crypto.randomUUID(), clipId: crypto.randomUUID(), trackId: $('#record-track').value || project.tracks[0].id }; await recordingPanel.open('internal'); let summary = recordingPanel.root.querySelector<HTMLElement>('[data-audio-destination]'); if (!summary) { summary = document.createElement('p'); summary.dataset.audioDestination = ''; recordingPanel.root.prepend(summary); } summary.textContent = `Recording into: new audio pattern → ${project.tracks.find(t => t.id === recordingPanel.destination!.trackId)?.name}. The highlighted phrase stays unchanged.`; setSounds(true); soundSource('import'); ($('#add-sounds') as HTMLDetailsElement).open = true; });
+recordSelected.onclick = guard(() => { if (timelineRecording?.pending || recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Finish the current recording first.'); performancePanel.stop(); recordSource = 'phrase'; setSounds(false); openRecordBar('audio'); });
 $('#sound-import').append(recordSelected);
 const recordMidi = guard(async () => {
   if (performancePanel.running) { performancePanel.globalStop(); renderTransport(); return; }
@@ -1246,16 +1245,13 @@ function settleSlots(stopped = !engine.started) {
 }
 
 function startPlayback() { stopTakePreview(); if (engine.started && engine.diagnostics.target !== project.activeTabId) engine.stop(); return engine.evaluate(true, project.activeTabId, true); }
-function stopPlayback() { engine.countIn.cancel(); stopTakePreview(); if (timelineRecording?.pending) { void timelineRecording.stop(); return; } liveInput.stop(); renderAudioInput(); midiComposition.finish(); document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
+function stopPlayback() { engine.countIn.cancel(); stopTakePreview(); if (timelineRecording?.pending) { if (recordSource === 'phrase') performancePanel.globalStop(); void timelineRecording.stop(); return; } liveInput.stop(); renderAudioInput(); midiComposition.finish(); document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
 function setCountIn(mode: MetronomeMode) {
   engine.countIn.mode = mode;
-  const enabled = mode !== 'off';
-  document.querySelectorAll<HTMLInputElement>('#record-countin, [data-countin]').forEach(input => { input.checked = enabled; });
   try { localStorage.setItem('studio.count-in', mode); } catch { /* still works for this launch */ }
   renderTransport();
 }
 $('#count-in').onclick = () => setCountIn(nextMetronomeMode(engine.countIn.mode));
-document.addEventListener('change', event => { const input = event.target as HTMLInputElement; if (input.matches('#record-countin, [data-countin]')) setCountIn(input.checked ? 'count-in' : 'off'); });
 $('#play-target').onchange = renderTransport;
 $('#dark-mode').checked = document.documentElement.dataset.appearance === 'dark';
 $('#dark-mode').onchange = () => {
@@ -1671,11 +1667,23 @@ function sheetOpened(id: string) {
 }
 function openRecordBar(mode: 'audio' | 'midi') {
   recordBarOpen = true; if (!timelineRecording?.pending) captureMode = mode;
-  renderRecording(); $(captureMode === 'audio' ? '#audio-record' : '#record-toggle').focus();
+  renderRecording(); $('#record-toggle').focus();
 }
-$('#record-toggle').onclick = () => { if (captureMode === 'midi' && performancePanel.take) { void recordMidi(); return; } if ($('#record-bar').hidden) openRecordBar(captureMode); else { recordBarOpen = false; renderRecording(); } };
+$('#record-toggle').onclick = guard(async () => {
+  if (timelineRecording?.pending) { if (recordSource === 'phrase') performancePanel.globalStop(); await timelineRecording.stop(); return; }
+  if (performancePanel.running) { await recordMidi(); return; }
+  if (instrumentOpen && (captureMode !== 'audio' || recordSource !== 'instrument' || $('#record-bar').hidden)) { performancePanel.close(); recordSource = 'instrument'; openRecordBar('audio'); return; }
+  if (audioOpen && (captureMode !== 'audio' || recordSource !== 'external' || $('#record-bar').hidden)) { performancePanel.close(); recordSource = 'external'; openRecordBar('audio'); return; }
+  if (captureMode === 'midi' && performancePanel.take && !instrumentOpen && !audioOpen) { await recordMidi(); return; }
+  if ($('#record-bar').hidden) {
+    if (instrumentOpen) { performancePanel.close(); recordSource = 'instrument'; }
+    else if (audioOpen) recordSource = 'external';
+    openRecordBar('audio'); return;
+  }
+  await recordAudio();
+});
 $('#record-close').onclick = guard(() => { if (captureMode === 'midi') { performancePanel.close(); captureMode = 'audio'; } recordBarOpen = false; renderRecording(); $('#record-toggle').focus(); });
-document.querySelectorAll<HTMLElement>('[data-capture]').forEach(button => button.onclick = () => { captureMode = button.dataset.capture === 'midi' ? 'midi' : 'audio'; renderRecording(); });
+document.querySelectorAll<HTMLElement>('[data-capture]').forEach(button => button.onclick = () => { captureMode = button.dataset.capture === 'midi' ? 'midi' : 'audio'; if (captureMode === 'audio') recordSource = 'external'; renderRecording(); });
 $('#record-settings').onclick = () => openSheet('record');
 $('#record-audio-settings').onclick = $('#audio-settings').onclick = () => openSheet('audio');
 $('#input-alert-settings').onclick = () => openSheet(audioOpen ? 'audio' : 'midi');
@@ -1768,7 +1776,7 @@ async function boot() {
   // One automatic opening per page load, after recovery has initialized.
   let optedOut = false; try { optedOut = guideOptedOut(localStorage); } catch { /* Show help when storage is unavailable. */ }
   try { setCountIn(savedMetronomeMode(localStorage.getItem('studio.count-in'))); } catch { /* default off */ }
-  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); if (midiComposition.pending || performancePanel.take?.notes.length) openRecordBar('midi'); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) notice('Recovered audio take in Sounds → Import. Review it before saving.'); } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
+  try { midiComposition.restore(getEditor); performancePanel.restore(getEditor); if (midiComposition.pending || performancePanel.take?.notes.length) openRecordBar('midi'); await recordingPanel.restore(); await timelineRecording!.restore(); if (timelineRecording!.pending) setDrawer('composition'); await sampleImports.restore(); if (recordingPanel.pending) { openRecordBar('audio'); notice('Recovered audio take in the Record bar. Review it before keeping it.'); } } catch (error) { notice(`Pending take recovery: ${(error as Error).message}`, true); }
   renderComposition();
   if (!optedOut) openQuickStart();
   setInterval(() => {

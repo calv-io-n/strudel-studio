@@ -75,11 +75,11 @@ Imported and recorded sounds are stored as browser-local audio files. AI generat
 **● Record** in the top bar opens the record bar. Choose **Audio input** or **MIDI**.
 
 **Audio input:**
-1. Pick a track under **Record to**, then choose **Record audio input**.
+1. Pick a track under **Record to**, then press the top **Record** button.
 2. Studio asks for microphone permission if it doesn't have it, rolls the composition from the playhead, and draws the take on the track as it records.
 3. Stop to save the take onto the timeline.
 
-**Settings** opens the Record sheet: wet or dry capture, latency compensation and a one-cycle count-in. If a save fails, the record bar stays open with **Retry save**, **Download recording** and **Discard recording…**.
+**Settings** opens the Record sheet: wet or dry capture and latency compensation; the top metronome controls count-in for every source. If a save fails, the record bar stays open with **Retry save**, **Download recording** and **Discard recording…**.
 
 **The Input tab** edits the live input's `AUDIO` effects chain. While no input is connected, a banner offers **Connect microphone**. Once connected, the input bar shows the device, a level meter and **Monitor input**. Monitoring starts off; use headphones to avoid feedback. **Audio input settings…** covers the rest:
 - device, channel and monitor track
@@ -138,3 +138,5 @@ Outside clicks/taps and Escape dismiss only the top transient surface. Gestures 
 The built-in session is **DEMO: Neon Drive**. Its storage ID remains `Neon-Drive`; the update changes only the default display name, preserving music and user-renamed sessions.
 
 Quick Start pairs focused actual-app videos with its existing illustrations and written instructions. Videos play deliberately, stay muted, and pause on topic changes or closing help. Capture recipes and virtual-MIDI fixture details are in [tutorial media](tutorial-media.md).
+
+Microphone input, highlighted-note audio, and the MIDI instrument use the same audio-take controller and top Record/Stop controls. From the MIDI instrument tab, Record first arms its output; press Record again to capture. Internal sources never request microphone permission and keep their performed effects. Note-to-code capture uses the same top controls and metronome, then Preview / Keep take / Discard.

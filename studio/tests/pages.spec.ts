@@ -106,7 +106,7 @@ test('Web MIDI input connects, plays, reconnects, and retains selection across s
 test('composition Record and Stop create a new take tab on the selected track automatically', async ({ page }) => {
   await fakeInput(page); await start(page); await page.locator('#add-track').click();
   await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording');
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
   await expect(page.locator('#sounds-panel')).toBeHidden(); await expect(page.locator('#recording-clip')).toBeVisible();
   await page.waitForTimeout(450); await page.locator('#composition-stop').click(); await page.locator('#composition-stop').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
@@ -204,8 +204,8 @@ for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited
   await page.locator('#editor .cm-content:visible').fill('AUDIO.gain(slider(0.25, 0, 1))'); await page.locator('#audio-apply').click();
   await page.locator('#audio-connect').click(); await expect(page.locator('#audio-state')).toContainText('Armed'); expect(await page.locator('#audio-monitor').isChecked()).toBe(false);
   await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' }); await command(page, 'Recording settings'); await page.locator('#record-mode').selectOption(mode); await closeSheet(page);
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(600);
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(600);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
   await expect.poll(async () => (await records(page, 'assets')).filter(a => a.provider === 'recording').length).toBe(mode === 'wet' ? 2 : 1);
   await expect(page.locator('#record-status')).toContainText('saved to the timeline');
   const saved = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive'); expect(saved.clips.some((c: any) => c.takeId)).toBeTruthy();
@@ -282,10 +282,10 @@ async function blankComposition(page: Page) {
 test('recording works in an empty timeline and permission denial leaves no take', async ({ page }) => {
   await fakeInput(page); await start(page); await blankComposition(page);
   await page.evaluate(() => { (window as any).getInput = navigator.mediaDevices.getUserMedia; navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); }; });
-  await openRecordBar(page); await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('denied'); expect((await records(page, 'projects'))[0].clips).toHaveLength(0);
+  await openRecordBar(page); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('denied'); expect((await records(page, 'projects'))[0].clips).toHaveLength(0);
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).getInput; });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(500);
-  await expect(page.locator('#composition-position')).not.toHaveText('0.00'); await page.locator('#audio-record').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(500);
+  await expect(page.locator('#composition-position')).not.toHaveText('0.00'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(1);
 });
@@ -293,7 +293,7 @@ test('recording works in an empty timeline and permission denial leaves no take'
 test('recording joins playing composition at its playhead and stops before an existing clip', async ({ page }) => {
   await fakeInput(page); await start(page); await playComposition(page); await page.waitForTimeout(600);
   const before = (Number((await page.locator('#composition-position').textContent())!.replace('Beat ', '')) - 1) / 4;
-  await openRecordBar(page); await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording');
+  await openRecordBar(page); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
   const project = (await records(page, 'projects'))[0], clip = project.clips.find((c: any) => c.takeId);
   expect(clip.start + clip.takeLeadSeconds * project.bpm / 240).toBeGreaterThan(before);
@@ -303,9 +303,9 @@ test('recording joins playing composition at its playhead and stops before an ex
 
 test('recording save failure retains audio and retry places exactly one pattern', async ({ page }) => {
   await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(400);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(400);
   await page.evaluate(() => { const put = IDBObjectStore.prototype.put; (window as any).restoreTakeWrites = () => IDBObjectStore.prototype.put = put; IDBObjectStore.prototype.put = function(value, key) { if (this.name === 'projects' && value.tabs.some((t: any) => t.audioAssetId)) throw new DOMException('Full', 'QuotaExceededError'); return put.call(this, value, key); }; });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-retry')).toBeVisible({ timeout: 15000 });
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-retry')).toBeVisible({ timeout: 15000 });
   expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.audioAssetId)).toHaveLength(0); expect((await records(page, 'assets')).filter(a => a.provider === 'recording')).toHaveLength(0);
   await page.evaluate(() => (window as any).restoreTakeWrites()); await page.locator('#record-retry').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline'); expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.audioAssetId)).toHaveLength(1);
@@ -313,7 +313,7 @@ test('recording save failure retains audio and retry places exactly one pattern'
 
 test('reload recovers an interrupted recording and effects testing keeps the saved take intact', async ({ page }) => {
   await installAudioCapture(page); await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(650);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(650);
   await expect.poll(async () => (await records(page, 'pending')).filter(value => value instanceof Object).length).toBeGreaterThan(1);
   await page.reload(); await expect(page.locator('#record-status')).toContainText('Recovered interrupted recording'); await openRecordBar(page); await page.locator('#record-retry').click();
   await expect(page.locator('#record-status')).toContainText('Interrupted recording saved');
@@ -330,12 +330,12 @@ test('reload recovers an interrupted recording and effects testing keeps the sav
 test('cancelled input permission does not create a take or stop the next recording', async ({ page }) => {
   await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
   await page.evaluate(() => { const get = navigator.mediaDevices.getUserMedia; (window as any).originalInput = get; navigator.mediaDevices.getUserMedia = () => new Promise((_resolve, reject) => { (window as any).rejectInput = reject; }); });
-  await page.locator('#audio-record').click(); await expect(page.locator('#audio-record')).toHaveText('Cancel connection'); await page.locator('#audio-record').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('cancelled');
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).originalInput; });
-  await page.locator('#audio-record').click(); await expect(page.locator('#record-status')).toContainText('Recording');
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
   await page.evaluate(() => (window as any).rejectInput(new DOMException('Denied after cancellation', 'NotAllowedError'))); await page.waitForTimeout(300);
-  await expect(page.locator('#record-status')).toContainText('Recording'); await page.locator('#audio-record').click();
+  await expect(page.locator('#record-status')).toContainText('Recording'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
 });
 

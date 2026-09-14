@@ -19,4 +19,4 @@ The shared `overlay.ts` handler tracks the top open surface. Native dialogs are 
 
 The composition timeline, editor/input tabs and Record bar are persistent workspace controls. They are not registered overlays and remain open when the editor is clicked. The full sample-import page is navigation rather than a modal; its draft/review state is retained by the existing import controllers. Closing a surface does not stop a MIDI take, save dialog edits, accept imports, or discard recovery data.
 
-The removed transcription sheet and slider-mapping panel have no remaining entry paths. Legacy clip-take recovery appears in the Record bar and cannot start new captures. Native form drafts remain in page memory, keyed by dialog identity and original field values; explicit submission clears that cached draft.
+The removed transcription sheet and slider-mapping panel have no remaining entry paths. Legacy clip-take and audio-take recovery appear in the Record bar and cannot start new captures. Native form drafts remain in page memory, keyed by dialog identity and original field values; explicit submission clears that cached draft.
