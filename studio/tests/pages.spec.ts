@@ -103,20 +103,17 @@ test('Web MIDI input connects, plays, reconnects, and retains selection across s
   await closeSheet(page); await page.locator('#saved-projects').selectOption('Neon-Drive'); await page.locator('#save-now').click(); await page.reload(); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); await command(page, 'MIDI & on-screen controller'); await expect(page.locator('.device-connection')).toContainText('Connected');
 });
 
-test('composition Record and Stop create a new take tab on the selected track automatically', async ({ page }) => {
-  await fakeInput(page); await start(page); await page.locator('#add-track').click();
-  await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
-  await expect(page.locator('#sounds-panel')).toBeHidden(); await expect(page.locator('#recording-clip')).toBeVisible();
+test('composition Record and Stop append audio to the selected placement without new tabs', async ({ page }) => {
+  await fakeInput(page); await start(page); await page.locator('[data-play-target=composition]').click();
+  await openRecordBar(page); await page.locator('#record-track').selectOption('track-2');
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
+  await expect(page.locator('[data-pending-tab]')).toHaveCount(0); await expect(page.locator('.pending-region')).toBeVisible();
   await page.waitForTimeout(450); await page.locator('#composition-stop').click(); await page.locator('#composition-stop').click();
-  await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
-  await expect(page.getByRole('tab', { name: 'Audio take 1', exact: true })).toHaveAttribute('aria-selected', 'true');
-  await expect(page.locator('#take-play')).toBeVisible(); await expect(page.locator('#editor')).toBeHidden();
+  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
   const saved = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive');
-  expect(saved.tracks).toHaveLength(3); expect(saved.tabs.filter((t: any) => t.audioAssetId)).toHaveLength(1);
-  expect(saved.clips.find((c: any) => c.takeId).trackId).toBe(saved.tracks[2].id);
-  await page.reload(); await expect(page.getByRole('tab', { name: 'Audio take 1', exact: true })).toBeVisible();
-  expect((await records(page, 'assets')).filter(a => a.provider === 'recording')).toHaveLength(2);
+  expect(saved.tabs).toHaveLength(4); expect(saved.clips).toHaveLength(6);
+  expect(saved.tabs.find((t:any)=>t.name==='Chords').code).toContain('// Recorded audio');
+  await page.reload(); expect((await records(page, 'assets')).filter(a => a.provider === 'recording')).toHaveLength(2);
 });
 
 test('storage exhaustion preserves the saved project and draft, then retry succeeds', async ({ page }) => {
@@ -203,12 +200,12 @@ for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited
   await page.getByRole('tab', { name: 'Audio input', exact: true }).click(); await command(page, 'Audio input settings'); await page.locator('#audio-track').selectOption({ label: 'Track 3' }); await closeSheet(page);
   await page.locator('#editor .cm-content:visible').fill('AUDIO.gain(slider(0.25, 0, 1))'); await page.locator('#audio-apply').click();
   await page.locator('#audio-connect').click(); await expect(page.locator('#audio-state')).toContainText('Armed'); expect(await page.locator('#audio-monitor').isChecked()).toBe(false);
-  await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' }); await command(page, 'Recording settings'); await page.locator('#record-mode').selectOption(mode); await closeSheet(page);
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(600);
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
+  await openRecordBar(page);  await command(page, 'Recording settings'); await page.locator('#record-mode').selectOption(mode); await closeSheet(page);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(600);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
   await expect.poll(async () => (await records(page, 'assets')).filter(a => a.provider === 'recording').length).toBe(mode === 'wet' ? 2 : 1);
-  await expect(page.locator('#record-status')).toContainText('saved to the timeline');
-  const saved = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive'); expect(saved.clips.some((c: any) => c.takeId)).toBeTruthy();
+  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
+  let saved = (await records(page, 'projects')).find(p => p.sessionId === 'Neon-Drive'); expect(saved.tabs.some((t: any) => t.code.includes('// Recorded audio'))).toBeTruthy();
   const wet = (await records(page, 'assets')).find(a => a.recording?.mode === mode); if (mode === 'wet') expect(wet.recording.dryAssetId).toBeTruthy();
   const capturedPeak = await page.evaluate(async id => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('strudel-studio'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });
@@ -218,6 +215,15 @@ for (const mode of ['dry', 'wet'] as const) test(`${mode} input take uses edited
   }, wet.id);
   expect(capturedPeak).toBeGreaterThan(mode === 'wet' ? .018 : .09); expect(capturedPeak).toBeLessThan(mode === 'wet' ? .035 : .11);
   await page.locator('#save-now').click(); await page.reload();
+  await page.evaluate(async ({ asset, mode }) => {
+    const db = await new Promise<IDBDatabase>(resolve => { const r=indexedDB.open('strudel-studio'); r.onsuccess=()=>resolve(r.result); });
+    const p:any = await new Promise(resolve => { const r=db.transaction('projects').objectStore('projects').get('Neon-Drive'); r.onsuccess=()=>resolve(r.result); });
+    const tab=p.tabs.find((t:any)=>t.name==='Lead'); tab.audioAssetId=asset.id; tab.anchors=[]; tab.appliedAnchors=[]; tab.code=`s("studio_${asset.id.replaceAll('-', '')}").gain(1)`; delete tab.appliedCode;
+    p.activeTabId=tab.id; p.clips=[{id:'legacy-take',tabId:tab.id,trackId:'track-3',start:0,length:Math.max(.25,Math.ceil(asset.duration*p.bpm/240*4)/4),takeId:asset.id,muted:false}];
+    p.clips[0].trackId=p.tracks[2].id;
+    await new Promise<void>(resolve=>{const tx=db.transaction('projects','readwrite');tx.objectStore('projects').put(p,'Neon-Drive');tx.oncomplete=()=>resolve();}); db.close(); localStorage.removeItem('studio.pending-session');
+  }, {asset:wet, mode});
+  await page.reload(); saved=(await records(page,'projects')).find(p=>p.sessionId==='Neon-Drive');
   const takeTab = saved.tabs.find((t: any) => t.audioAssetId === wet.id);
   await page.getByRole('tab', { name: takeTab.name, exact: true }).click(); await page.locator('#take-code').click();
   const content = page.locator('.tab-editor:not([hidden]) .cm-content'); await content.focus();
@@ -284,36 +290,35 @@ test('recording works in an empty timeline and permission denial leaves no take'
   await page.evaluate(() => { (window as any).getInput = navigator.mediaDevices.getUserMedia; navigator.mediaDevices.getUserMedia = async () => { throw new DOMException('Microphone denied', 'NotAllowedError'); }; });
   await openRecordBar(page); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('denied'); expect((await records(page, 'projects'))[0].clips).toHaveLength(0);
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).getInput; });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(500);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(500);
   await expect(page.locator('#composition-position')).not.toHaveText('0.00'); await page.locator('#record-toggle').click();
-  await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
-  const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(1);
+  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
+  const project = (await records(page, 'projects'))[0]; expect(project.tracks).toHaveLength(2); expect(project.clips).toHaveLength(0); expect(project.tabs[0].code).toContain('// Recorded audio');
 });
 
 test('recording joins playing composition at its playhead and stops before an existing clip', async ({ page }) => {
   await fakeInput(page); await start(page); await playComposition(page); await page.waitForTimeout(600);
   const before = (Number((await page.locator('#composition-position').textContent())!.replace('Beat ', '')) - 1) / 4;
-  await openRecordBar(page); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
-  await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
-  const project = (await records(page, 'projects'))[0], clip = project.clips.find((c: any) => c.takeId);
-  expect(clip.start + clip.takeLeadSeconds * project.bpm / 240).toBeGreaterThan(before);
-  expect(clip.start + clip.length).toBeLessThanOrEqual(4);
+  await openRecordBar(page); await page.locator('#record-track').selectOption('track-2'); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
+  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
+  const project = (await records(page, 'projects'))[0], asset = (await records(page,'assets')).find(a=>a.recording?.mode==='wet');
+  expect(asset.recording.offsetCycles).toBeGreaterThan(before); expect(project.clips).toHaveLength(6);
   expect(project.tracks).toHaveLength(2);
 });
 
 test('recording save failure retains audio and retry places exactly one pattern', async ({ page }) => {
-  await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(400);
-  await page.evaluate(() => { const put = IDBObjectStore.prototype.put; (window as any).restoreTakeWrites = () => IDBObjectStore.prototype.put = put; IDBObjectStore.prototype.put = function(value, key) { if (this.name === 'projects' && value.tabs.some((t: any) => t.audioAssetId)) throw new DOMException('Full', 'QuotaExceededError'); return put.call(this, value, key); }; });
+  await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(400);
+  await page.evaluate(() => { const put = IDBObjectStore.prototype.put; (window as any).restoreTakeWrites = () => IDBObjectStore.prototype.put = put; IDBObjectStore.prototype.put = function(value, key) { if (this.name === 'projects' && value.tabs.some((t: any) => t.code.includes('// Recorded audio'))) throw new DOMException('Full', 'QuotaExceededError'); return put.call(this, value, key); }; });
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-retry')).toBeVisible({ timeout: 15000 });
-  expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.audioAssetId)).toHaveLength(0); expect((await records(page, 'assets')).filter(a => a.provider === 'recording')).toHaveLength(0);
+  expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.code.includes('// Recorded audio'))).toHaveLength(0); expect((await records(page, 'assets')).filter(a => a.provider === 'recording')).toHaveLength(0);
   await page.evaluate(() => (window as any).restoreTakeWrites()); await page.locator('#record-retry').click();
-  await expect(page.locator('#record-status')).toContainText('saved to the timeline'); expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.audioAssetId)).toHaveLength(1);
+  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern'); expect((await records(page, 'projects'))[0].tabs.filter((t: any) => t.code.includes('// Recorded audio'))).toHaveLength(1);
 });
 
 test('reload recovers an interrupted recording and effects testing keeps the saved take intact', async ({ page }) => {
-  await installAudioCapture(page); await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording'); await page.waitForTimeout(650);
+  await installAudioCapture(page); await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page);
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording'); await page.waitForTimeout(650);
   await expect.poll(async () => (await records(page, 'pending')).filter(value => value instanceof Object).length).toBeGreaterThan(1);
   await page.reload(); await expect(page.locator('#record-status')).toContainText('Recovered interrupted recording'); await openRecordBar(page); await page.locator('#record-retry').click();
   await expect(page.locator('#record-status')).toContainText('Interrupted recording saved');
@@ -328,15 +333,15 @@ test('reload recovers an interrupted recording and effects testing keeps the sav
 
 
 test('cancelled input permission does not create a take or stop the next recording', async ({ page }) => {
-  await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page); await page.locator('#record-track').selectOption({ label: 'Track 3' });
+  await fakeInput(page); await start(page); await page.locator('#add-track').click(); await openRecordBar(page);
   await page.evaluate(() => { const get = navigator.mediaDevices.getUserMedia; (window as any).originalInput = get; navigator.mediaDevices.getUserMedia = () => new Promise((_resolve, reject) => { (window as any).rejectInput = reject; }); });
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.locator('#record-toggle').click();
   await expect(page.locator('#record-status')).toContainText('cancelled');
   await page.evaluate(() => { navigator.mediaDevices.getUserMedia = (window as any).originalInput; });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('recording');
   await page.evaluate(() => (window as any).rejectInput(new DOMException('Denied after cancellation', 'NotAllowedError'))); await page.waitForTimeout(300);
-  await expect(page.locator('#record-status')).toContainText('Recording'); await page.locator('#record-toggle').click();
-  await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
+  await expect(page.locator('#record-status')).toContainText('recording'); await page.locator('#record-toggle').click();
+  await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
 });
 
 test('two tabs can save unchanged content and a stale unchanged tab loads the newer session', async ({ page, context }) => {

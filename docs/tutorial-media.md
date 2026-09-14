@@ -14,6 +14,7 @@ Input capture creates a disposable browser profile and a clean MIDI practice ses
 | Asset basename in `studio/client/public/help` | Topic | Framing / outcome |
 | --- | --- | --- |
 | test-midi-browser | Record MIDI | 1000×570 crop from a 1000×820 browser; selected note menu, audition and Stop without capture |
+| record-both-browser | Record audio | Independent Audio Input + MIDI toggles, one count-in, shared Stop/Keep, both saved sections |
 | record-pattern-browser | Record MIDI | Same crop; arm owning phrase, Record, count-in, incoming notes, Stop and Keep take |
 | record-solo-browser | Record MIDI | Same crop; identical destination with solo accompaniment mode |
 | bind-slider-browser | Map a knob | Same crop; explicit function-name binding, virtual CC 20 and linked value changes |

@@ -78,11 +78,11 @@ test('Test MIDI produces audio without takes, code changes, or composition write
 
 test('pattern MIDI capture retains its destination across tabs and publishes only accepted code', async ({ page }) => {
   await midi(page); await replaceBody(page, 'note("c4").s("triangle").gain(.2)');
-  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click();
+  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
 
   await expect(page.locator('.performance-panel [data-destination]')).toContainText('Lead');
   await expect(page.locator('#midi-record')).toHaveCount(0); await expect(page.locator('#record-settings')).toBeHidden();
-  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).playNote(false));
+  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).playNote(false));
   expect(await page.evaluate(() => { const key = Object.keys(localStorage).find(key => key.startsWith('studio.midi-take:'))!; return JSON.parse(localStorage.getItem(key)!).length; })).toBeLessThan(2);
   await expect(page.locator('.pending-code')).toContainText('Recording'); await expect(page.locator('.performance-review')).toBeHidden(); await page.locator('#stop').click();
   await expect(page.locator('.performance-review')).toBeVisible();
@@ -97,8 +97,8 @@ test('pattern MIDI capture retains its destination across tabs and publishes onl
 
 test('pattern accompaniment records into the selected phrase without creating variations', async ({ page }) => {
   await installAudioCapture(page); await midi(page); await replaceBody(page, 'note("c4").s("triangle").gain(.2); note("g4").s("sawtooth").gain(.1)');
-  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI on pattern', exact: true }).click();
-  await expect(page.locator('#play-target')).toHaveValue('tab'); await expect(page.locator('#midi-record-hint')).toContainText('With pattern');
+  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI on pattern', exact: true }).click(); await page.locator('[data-capture=audio]').click();
+  await expect(page.locator('#play-target')).toHaveValue('tab'); await expect(page.locator('#midi-record-hint')).toContainText('MIDI → selected note');
   await expect(page.locator('#transport-state')).toContainText('Stopped');
   await page.evaluate(() => window.neonCapture.start()); await page.locator('#record-toggle').click();
   await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(300);
@@ -113,9 +113,9 @@ test('pattern accompaniment records into the selected phrase without creating va
 
 test('failed MIDI acceptance retains original code and a retryable take', async ({ page }) => {
   await midi(page); await replaceBody(page, 'note("c4").s("triangle").gain(.2)');
-  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click();
+  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
 
-  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording');
+  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75);
   await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(150); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
   await page.evaluate(() => { const put = IDBObjectStore.prototype.put; (window as any).restoreWrites = () => { IDBObjectStore.prototype.put = put; }; IDBObjectStore.prototype.put = function(...args: Parameters<typeof put>) { if (this.name === 'projects') throw new DOMException('Storage full', 'QuotaExceededError'); return Reflect.apply(put, this, args); }; });
   await page.locator('.performance-panel [data-accept]').click(); await expect(page.locator('#notice')).toContainText('Storage full');
@@ -161,26 +161,22 @@ test('source BPM changes trigger spacing consistently in live tab playback and o
 
 test('MIDI recovery reopens the shared bar and discard leaves original code intact', async ({ page }) => {
   await midi(page); await replaceBody(page, 'note("c4").s("triangle")');
-  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click();
-  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(150); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
+  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(150); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
   await page.reload(); await expect(page.locator('#record-bar')).toBeVisible(); await expect(page.locator('.performance-panel [data-state]')).toContainText('Recovered');
   await page.locator('.performance-panel [data-discard]').click(); await expect(page.locator('.pending-code')).toHaveCount(0);
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('note("c4")');
 });
 
-test('highlighted audio reserves a new pattern and saves one take on the chosen track', async ({ page }) => {
-  await installAudioCapture(page); await midi(page); await page.locator('#add-track').click();
+test('highlighted sound audio appends to the same pattern through the shared recorder', async ({ page }) => {
+  await installAudioCapture(page); await midi(page);
   await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click();
   await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill('Open Sample Catalogue'); await page.keyboard.press('Enter'); await page.locator('#add-sounds summary').click();
-  await page.getByRole('button', { name: 'Record highlighted sound', exact: true }).click();
-  await expect(page.locator('#sounds-panel')).toBeHidden();
-  await expect(page.locator('#record-source-label')).toHaveText('Highlighted phrase →');
-  await page.locator('#record-track').selectOption({ label: 'Track 3' }); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Recording');
-  await expect(page.locator('[data-pending-tab]')).toHaveCount(1); await expect(page.locator('.pending-region')).toBeVisible();
+  await page.getByRole('button', { name: 'Record highlighted sound', exact: true }).click(); await expect(page.locator('#sounds-panel')).toBeHidden();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(75);
   await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).playNote(false));
-  await page.locator('#composition-stop').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline');
-  await page.evaluate(() => window.neonCapture.start()); await page.locator('#take-play').click(); await page.waitForTimeout(700); expect((await page.evaluate(() => window.neonCapture.finish())).peak).toBeGreaterThan(.001); await page.locator('#stop').click();
-  const saved = await project(page); expect(saved.tabs.filter((t: any) => t.audioAssetId)).toHaveLength(1); expect(saved.clips.filter((c: any) => c.takeId)).toHaveLength(1); await expect(page.locator('[data-pending-tab]')).toHaveCount(0);
+  await page.locator('#stop').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take'); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern');
+  const saved = await project(page); expect(saved.tabs).toHaveLength(4); expect(saved.tabs.find((t:any) => t.name === 'Lead').code).toContain('// Recorded audio');
 });
 
 test('metronome toggles gold, counts in both playback targets, and Stop cancels the start', async ({ page }) => {
@@ -200,35 +196,28 @@ test('metronome toggles gold, counts in both playback targets, and Stop cancels 
 
 test('recording count-in waits before microphone capture and cancels without a take', async ({ page }) => {
   await page.addInitScript(() => { navigator.mediaDevices.getUserMedia = async () => { const context = new AudioContext(), oscillator = context.createOscillator(), destination = context.createMediaStreamDestination(); oscillator.connect(destination); oscillator.start(); await context.resume(); return destination.stream; }; });
-  await boot(page); await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click(); await page.locator('#add-track').click(); await page.locator('#record-toggle').click(); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#count-in-beat')).toHaveText('4'); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.locator('#composition-stop').click();
+  await boot(page); await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click(); await page.locator('#record-toggle').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#count-in-beat')).toHaveText('4'); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.locator('#stop').click();
   await expect(page.locator('#record-status')).toContainText('cancelled'); await page.waitForTimeout(1100); expect((await project(page)).tabs.some((t: any) => t.audioAssetId)).toBe(false);
-  await page.locator('#record-toggle').click(); await expect(page.locator('#transport-state')).toContainText('Count-in'); await expect(page.locator('#record-status')).toContainText('Recording', { timeout: 5000 }); await page.waitForTimeout(250); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline', { timeout: 15000 });
+  await page.locator('#record-toggle').click(); await expect(page.locator('#transport-state')).toContainText('Count-in'); await expect(page.locator('#record-status')).toContainText('recording', { timeout: 5000 }); await page.waitForTimeout(250); await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
 });
 
 test('MIDI phrase recording waits for the metronome and ignores notes during the countdown', async ({ page }) => {
   await midi(page); await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click();
-  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click();
+  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('#count-in-beat')).toHaveText('4'); await page.evaluate(() => { (window as any).playNote(true); (window as any).playNote(false); });
   await expect(page.locator('.pending-code')).toContainText('Preparing'); await expect(page.locator('#count-in-beat')).toBeEmpty({ timeout: 5000 });
-  await expect(page.locator('.pending-code')).toContainText('Recording'); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(120); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
+  await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(120); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
   expect(await page.evaluate(() => { const key = Object.keys(localStorage).find(key => key.startsWith('studio.midi-take:'))!; return JSON.parse(localStorage.getItem(key)!).notes.length; })).toBe(1); await page.locator('.performance-panel [data-discard]').click();
 });
 
-test('MIDI instrument records through the same top Record and Stop without microphone access', async ({ page }) => {
-  await page.addInitScript(() => { navigator.mediaDevices.getUserMedia = async () => { throw new Error('Microphone must not be requested for MIDI recording'); }; });
-  await installAudioCapture(page); await midi(page); await page.locator('#add-track').click();
-  await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click();
-  await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click();
-  await page.getByRole('tab', { name: 'MIDI instrument', exact: true }).click();
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-source-label')).toHaveText('MIDI instrument →'); await page.locator('#record-track').selectOption({ label: 'Track 3' });
-  await page.locator('#record-toggle').click(); await expect(page.locator('#count-in-beat')).toHaveText('4'); await expect(page.locator('#count-in-beat')).toBeEmpty(); await expect(page.locator('#record-status')).toContainText('Recording');
+test('MIDI can append instrument notes without requesting microphone access', async ({ page }) => {
+  await page.addInitScript(() => { navigator.mediaDevices.getUserMedia = async () => { throw new Error('Microphone must not be requested for MIDI-only recording'); }; });
+  await midi(page); await page.locator('#record-toggle').click(); await page.locator('[data-capture=audio]').click(); await page.locator('[data-capture=midi]').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(75);
   await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(250); await page.evaluate(() => (window as any).playNote(false));
-  await page.locator('#record-toggle').click(); await expect(page.locator('#record-status')).toContainText('saved to the timeline');
-  while (await page.locator('#count-in').getAttribute('data-mode') !== 'off') await page.locator('#count-in').click();
-  await page.evaluate(() => window.neonCapture.start()); await page.locator('#take-play').click(); await page.waitForTimeout(700); expect((await page.evaluate(() => window.neonCapture.finish())).peak).toBeGreaterThan(.001); await page.locator('#stop').click();
-  const saved = await project(page); expect(saved.tabs.filter((t: any) => t.audioAssetId)).toHaveLength(1); expect(saved.clips.filter((c: any) => c.takeId)).toHaveLength(1);
-  await page.reload(); await expect(page.getByRole('tab', { name: 'Audio take 1', exact: true })).toBeVisible();
+  await page.locator('#stop').click(); await page.locator('.performance-panel [data-accept]').click(); await expect(page.locator('.performance-panel')).toBeHidden();
+  const saved = await project(page); expect(saved.tabs).toHaveLength(4); expect(saved.tabs.find((t:any) => t.name === 'Lead').code).toContain('// Recorded MIDI');
 });
 
 test('legacy audio recovery uses the Record bar without exposing another capture form', async ({ page }) => {

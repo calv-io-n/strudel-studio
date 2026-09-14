@@ -2,6 +2,7 @@
 export type CaptureView = {
   state: 'preparing' | 'recording' | 'finishing' | 'review' | 'saving' | 'failed';
   tabId: string;
+  audio?: boolean;
   kind: 'phrase' | 'append' | 'new-pattern';
   label: string;
   trackId?: string;

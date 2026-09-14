@@ -35,12 +35,14 @@ export function takePattern(clip: Clip, asset: Asset, cps: number, sourcePattern
     const begin = Math.max(sourceOffset, lead * cps, -cycleOffset);
     const end = Math.min(sourceOffset + clip.length, (lead + Math.max(0, (asset.duration ?? 0) - offset)) * cps);
     const a = Math.max(begin, Number(state.span.begin)), b = Math.min(end, Number(state.span.end));
-    if (a >= b) return [];
+    const sound = `studio_${asset.id.replaceAll('-', '')}`;
+    // A legacy take may now share its pattern with new MIDI/audio sections.
+    const extras = sourcePattern?.query(state).filter((hap: any) => hap.value?.s !== sound) ?? [];
+    if (a >= b) return extras;
     // Read the take's effects once at its onset. Its source expression must not
     // retrigger a long recording every cycle or replace clip timing and trims.
-    const sound = `studio_${asset.id.replaceAll('-', '')}`;
     const source = sourcePattern?.query(state.setSpan(new core.TimeSpan(0, 1e-6))).find((hap: any) => hap.value?.s === sound);
-    if (sourcePattern && !source) return [];
-    return [new core.Hap(new core.TimeSpan(begin, end), new core.TimeSpan(a, b), { gain: 1, attack: 0, release: 0, sustain: 1, ...source?.value, s: `studio_take_${asset.id.replaceAll('-', '')}`, studioTakeOffset: offset + Math.max(0, begin / cps - lead), studioTakeDuration: (end - begin) / cps }, source?.context)];
+    if (sourcePattern && !source) return extras;
+    return [...extras, new core.Hap(new core.TimeSpan(begin, end), new core.TimeSpan(a, b), { gain: 1, attack: 0, release: 0, sustain: 1, ...source?.value, s: `studio_take_${asset.id.replaceAll('-', '')}`, studioTakeOffset: offset + Math.max(0, begin / cps - lead), studioTakeDuration: (end - begin) / cps }, source?.context)];
   });
 }

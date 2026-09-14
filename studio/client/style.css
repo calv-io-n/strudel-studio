@@ -608,7 +608,7 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 #midi-record-hint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #record-bar .chips { flex-shrink: 0; gap: 2px; }
 #record-bar .chips button { border-color: transparent; border-radius: 5px; padding: 5px 9px; }
-#record-bar .chips button[aria-pressed=true]::before { content: none; }
+#record-bar .chips button[aria-pressed=true]::before { content: "✓"; margin-right: 5px; }
 #record-bar button { white-space: nowrap; }
 @media (max-width: 700px) {
   #record-bar { grid-template-columns: minmax(0, 1fr); gap: 8px; }
@@ -631,3 +631,5 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 #record-bar[data-mode=midi] .record-actions { grid-column: 2; grid-row: 1; }
 
 #record-bar .recording-recovery { grid-column: 1 / -1; max-height: 32vh; overflow: auto; }
+
+.pending-code code { display: block; white-space: pre-wrap; font-size: 12px; opacity: .7; margin-top: 4px; }

@@ -22,6 +22,9 @@ export class StudioEditor {
   private managing = false;
   private inputLabels = new Map<string, string>();
   private pending?: { label: string; append: boolean };
+  private audioPending?: string;
+  setAudioPending(label?: string) { if (label === this.audioPending) return; this.audioPending = label; this.view.dispatch({ effects: this.repaint.of(null) }); }
+  revealRecording(append = false) { this.view.dispatch({ effects: EditorView.scrollIntoView(append ? this.code.length : this.destination?.from ?? this.code.length, { y: 'center' }) }); }
   private repaint = StateEffect.define<null>();
   setInputLabels(labels: Map<string, string>) { this.inputLabels = labels; this.view.dispatch({ effects: this.repaint.of(null) }); }
   setPending(label?: string, append = false) {
@@ -80,7 +83,7 @@ export class StudioEditor {
     class PendingWidget extends WidgetType {
       constructor(readonly label: string) { super(); }
       eq(other: PendingWidget) { return this.label === other.label; }
-      toDOM() { const el = document.createElement('div'); el.className = 'pending-code'; el.setAttribute('role', 'status'); el.textContent = this.label; for (let i = 0; i < 3; i++) { const line = document.createElement('i'); el.append(line); } return el; }
+      toDOM() { const el = document.createElement('div'); el.className = 'pending-code'; el.setAttribute('role', 'status'); el.textContent = this.label; if (this.label.startsWith('Audio →') || owner.destination?.append) { const code = document.createElement('code'); code.textContent = this.label.startsWith('Audio →') ? '$: s(…audio being captured…).gain(1)' : `$: note(…notes being captured…)${owner.destination?.soundCode ?? ''}`; el.append(code); } for (let i = 0; i < 2; i++) { const line = document.createElement('i'); el.append(line); } return el; }
       ignoreEvent() { return true; }
     }
     const cues = (code: string, destination?: Destination | null) => {
@@ -108,6 +111,7 @@ export class StudioEditor {
         const at = owner.pending.append ? code.length : Math.min(code.length, destination?.to ?? code.length);
         ranges.push(Decoration.widget({ widget: new PendingWidget(owner.pending.label), side: 1 }).range(at));
       }
+      if (owner.audioPending) ranges.push(Decoration.widget({ widget: new PendingWidget(`Audio → appended section · ${owner.audioPending}`), side: 2 }).range(code.length));
       return Decoration.set(ranges, true);
     };
     const cueField = StateField.define<DecorationSet>({
@@ -204,6 +208,17 @@ export class StudioEditor {
     this.view.dispatch({ changes: { from: slider.from, to: slider.to, insert: String(Number(next.toFixed(8))) } });
     this.liveWrite = false;
     return true;
+  }
+  publishRecording(project: Tab) {
+    const previous = this.code, next = project.code;
+    let from = 0, suffix = 0;
+    while (from < previous.length && from < next.length && previous[from] === next[from]) from++;
+    while (suffix < previous.length - from && suffix < next.length - from && previous[previous.length - suffix - 1] === next[next.length - suffix - 1]) suffix++;
+    const scroll = this.view.scrollDOM.scrollTop;
+    this.managing = true;
+    try { this.view.dispatch({ changes: { from, to: previous.length - suffix, insert: next.slice(from, next.length - suffix) }, annotations: isolateHistory.of('full') }); }
+    finally { this.managing = false; }
+    this.view.requestMeasure({ read: () => scroll, write: value => { this.view.scrollDOM.scrollTop = value; } });
   }
   load(project: Tab) {
     this.replacing = true;

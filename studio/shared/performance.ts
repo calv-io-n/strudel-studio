@@ -65,6 +65,8 @@ export function transcribe(notes: CapturedNote[], length: number, grid: number, 
 }
 
 export const PendingMidiSchema = z.object({
+  sharedOffset: z.number().finite().min(0).max(4096).default(0),
+  sharedTarget: z.object({ context: z.enum(['tab', 'composition']), tabId: z.string(), trackId: z.string().optional(), clipId: z.string().optional(), position: z.number().finite().nonnegative(), offset: z.number().finite().nonnegative(), end: z.number().finite().optional() }).optional(),
   destination: z.object({ tabId: z.string(), from: z.number().int().nonnegative(), to: z.number().int().nonnegative(), original: z.string().max(200000), soundCode: z.string().max(200000), valid: z.boolean(), append: z.boolean().optional() }),
   notes: z.array(z.object({ key: z.string(), pitch: z.number().int().min(0).max(127), velocity: z.number().int().min(1).max(127), start: z.number().min(0).max(4096), end: z.number().min(0).max(4096).optional() })).min(1).max(10000),
   length: z.number().positive().max(4096), grid: z.number().min(0).max(1), cps: z.number().positive(), fallback: z.boolean().default(false),

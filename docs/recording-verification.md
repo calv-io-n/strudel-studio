@@ -16,3 +16,5 @@ The MIDI/browser-audio fixtures are deterministic application tests, not physica
 Run `npm run studio:build`, `npm run studio:test`, and `npm run studio:e2e`. The Playwright configuration starts the built static application and exercises its visible controls. Real-app tutorial captures are reproducible with scripts/record-input-guides.ts; see tutorial-media.md.
 
 Final local verification: production build passed, 78 unit tests passed, and all 53 Playwright tests passed. Refreshed tutorial media passed a separate playback/close check.
+
+The subsequent #51 change replaces the exclusive source selection and new-audio-tab workflow with independent Audio Input/MIDI toggles and same-pattern recording. See [combined recording](combined-recording.md) and `combined.spec.ts` for the current destination and simultaneous-input checks. The release above was deployed through PR #52 before this follow-up.

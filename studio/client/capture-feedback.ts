@@ -4,7 +4,8 @@ import type { StudioEditor } from './editor';
 /** Updates only the pending surfaces, leaving the editor and audio graph mounted. */
 export function paintCaptureFeedback(views: CaptureView[], editors: Map<string, StudioEditor>) {
   for (const [id, owner] of editors) {
-    const view = views.find(v => v.tabId === id && v.kind !== 'new-pattern');
+    const view = views.find(v => v.tabId === id && v.kind !== 'new-pattern' && !v.audio);
+    owner.setAudioPending(views.find(v => v.tabId === id && v.audio)?.label);
     owner.setPending(view?.label, view?.kind === 'append');
   }
   const ids = new Set(views.map(v => v.tabId));
