@@ -6,8 +6,8 @@ export function paintCaptureFeedback(views: CaptureView[], editors: Map<string, 
   for (const [id, owner] of editors) {
     const view = views.find(v => v.tabId === id && v.kind !== 'new-pattern' && !v.audio);
     const audio = views.find(v => v.tabId === id && v.audio);
-    owner.setAudioPending(audio?.label, audio?.code);
-    owner.setPending(view?.label, view?.kind === 'append', view?.code);
+    owner.setAudioPending(audio?.label, audio?.code, audio?.state);
+    owner.setPending(view?.label, view?.kind === 'append', view?.code, view?.state);
   }
   const ids = new Set(views.map(v => v.tabId));
   document.querySelectorAll<HTMLElement>('[data-pending-for]').forEach(el => { if (!ids.has(el.dataset.pendingFor!)) el.remove(); });

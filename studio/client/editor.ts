@@ -1,3 +1,6 @@
+import { highlightingFor } from '@codemirror/language';
+import { highlightCode } from '@lezer/highlight';
+import type { CaptureView } from '../shared/capture-state';
 import { parser } from '@lezer/javascript';
 import { headerEnd, reconcileTempo } from '../shared/tempo';
 import { isolateHistory } from '@codemirror/commands';
@@ -21,17 +24,19 @@ export class StudioEditor {
   private managedTempo = false;
   private managing = false;
   private inputLabels = new Map<string, string>();
-  private pending?: { label: string; append: boolean; code?: string };
+  private pending?: { label: string; append: boolean; code?: string; state?: CaptureView['state'] };
   private audioPending?: string;
   private audioCode?: string;
-  setAudioPending(label?: string, code?: string) { if (label === this.audioPending && code === this.audioCode) return; this.audioPending = label; this.audioCode = code; this.view.dispatch({ effects: this.repaint.of(null) }); }
+  private appearanceVersion = 0;
+  private audioState?: CaptureView['state'];
+  setAudioPending(label?: string, code?: string, state?: CaptureView['state']) { if (label === this.audioPending && code === this.audioCode && state === this.audioState) return; this.audioPending = label; this.audioCode = code; this.audioState = state; this.view.dispatch({ effects: this.repaint.of(null) }); }
   revealRecording(append = false) { this.view.dispatch({ effects: EditorView.scrollIntoView(append ? this.code.length : this.destination?.from ?? this.code.length, { y: 'center' }) }); }
   private repaint = StateEffect.define<null>();
   setInputLabels(labels: Map<string, string>) { this.inputLabels = labels; this.view.dispatch({ effects: this.repaint.of(null) }); }
-  setPending(label?: string, append = false, code?: string) {
-    if (this.pending?.label === label && this.pending?.append === append && this.pending?.code === code || !this.pending && !label) return;
+  setPending(label?: string, append = false, code?: string, state?: CaptureView['state']) {
+    if (this.pending?.label === label && this.pending?.append === append && this.pending?.code === code && this.pending?.state === state || !this.pending && !label) return;
     if (label) this.view.dom.dataset.captureState = label; else delete this.view.dom.dataset.captureState;
-    this.pending = label ? { label, append, code } : undefined;
+    this.pending = label ? { label, append, code, state } : undefined;
     this.view.dispatch({ effects: this.repaint.of(null) });
   }
   syncTempo(bpm: number, override?: number) {
@@ -82,12 +87,22 @@ export class StudioEditor {
   constructor(root: HTMLElement, project: Tab, callbacks: { change: (live: boolean) => void; select: (id: string) => void; evaluate: () => void; stop: () => void; sounds: () => SoundEntry[]; functions: () => string[] }) {
     const owner = this;
     class PendingWidget extends WidgetType {
-      constructor(readonly label: string, readonly code?: string, readonly inline = false) { super(); }
-      eq(other: PendingWidget) { return this.label === other.label && this.code === other.code && this.inline === other.inline; }
-      toDOM() {
-        const el = document.createElement(this.inline ? 'span' : 'div'); el.className = this.inline ? 'pending-code pending-inline' : 'pending-code';
-        el.setAttribute('aria-label', this.label); el.title = this.label;
-        el.textContent = this.code?.trim() || `// ${this.label}`;
+      constructor(readonly label: string, readonly code?: string, readonly inline = false, readonly state?: CaptureView['state'], readonly audio = false, readonly appearanceVersion = owner.appearanceVersion) { super(); }
+      eq(other: PendingWidget) { return this.label === other.label && this.code === other.code && this.inline === other.inline && this.state === other.state && this.audio === other.audio && this.appearanceVersion === other.appearanceVersion; }
+      toDOM(view: EditorView) {
+        const creating = this.state === 'preparing' || this.state === 'recording' || this.state === 'finishing';
+        const el = document.createElement(this.inline ? 'span' : 'div');
+        el.className = `pending-code${this.inline ? ' pending-inline' : ''}${creating ? ' creating-code' : ''}`;
+        el.setAttribute('aria-label', this.label); el.setAttribute('aria-busy', String(creating)); el.title = this.label;
+        const putCode = (code: string) => highlightCode(code, parser.parse(code), { style: tags => highlightingFor(view.state, tags) }, (text, classes) => {
+          const span = document.createElement('span'); span.className = classes; span.textContent = text; el.append(span);
+        }, () => el.append(document.createTextNode('\n')));
+        if (this.code?.trim()) putCode(this.code.trim());
+        else {
+          putCode(this.audio ? '// Recorded audio\n$: s(' : `${this.inline ? '' : '// Recorded MIDI\n$: '}note(`);
+          const placeholder = document.createElement('span'); placeholder.className = 'code-placeholder'; placeholder.setAttribute('aria-hidden', 'true'); placeholder.textContent = '\u00a0'.repeat(this.audio ? 20 : 12); el.append(placeholder);
+          putCode(this.audio ? ').gain(1)' : `)${this.inline ? '' : owner.destination?.soundCode ?? ''}`);
+        }
         return el;
       }
       ignoreEvent() { return true; }
@@ -115,11 +130,11 @@ export class StudioEditor {
       }
       if (owner.pending) {
         const at = owner.pending.append ? code.length : Math.min(code.length, destination?.to ?? code.length);
-        if (owner.pending.code && destination?.valid && !destination.append) {
-          ranges.push(Decoration.replace({ widget: new PendingWidget(owner.pending.label, owner.pending.code, true) }).range(destination.from, destination.to));
-        } else ranges.push(Decoration.widget({ widget: new PendingWidget(owner.pending.label, owner.pending.code), side: 1 }).range(at));
+        if (destination?.valid && !destination.append) {
+          ranges.push(Decoration.replace({ widget: new PendingWidget(owner.pending.label, owner.pending.code, true, owner.pending.state) }).range(destination.from, destination.to));
+        } else ranges.push(Decoration.widget({ widget: new PendingWidget(owner.pending.label, owner.pending.code, false, owner.pending.state), side: 1 }).range(at));
       }
-      if (owner.audioPending) ranges.push(Decoration.widget({ widget: new PendingWidget(`Audio · ${owner.audioPending}`, owner.audioCode), side: 2 }).range(code.length));
+      if (owner.audioPending) ranges.push(Decoration.widget({ widget: new PendingWidget(`Audio · ${owner.audioPending}`, owner.audioCode, false, owner.audioState, true), side: 2 }).range(code.length));
       return Decoration.set(ranges, true);
     };
     const cueField = StateField.define<DecorationSet>({
@@ -192,6 +207,7 @@ export class StudioEditor {
     this.onSelect = callbacks.select;
   }
   setAppearance(dark: boolean) {
+    this.appearanceVersion++;
     const name = dark ? 'githubDark' : 'githubLight';
     codemirrorSettings.set({ ...codemirrorSettings.get(), theme: name });
     this.view.dispatch({ effects: compartments.theme.reconfigure(extensions.theme(name)) });

@@ -7,11 +7,11 @@ class BrowserMidi {
   private selected: string[] = [];
   private sequence = 0;
   private listeners = new Set<(message: Message) => void>();
-  status: BridgeStatus = { ready: false, message: 'Choose Enable MIDI to grant browser access. On-screen controls work without permission.', ports: [], connected: [] };
+  status: BridgeStatus = { ready: false, message: 'Choose Connect MIDI to grant browser access. On-screen controls work without permission.', ports: [], connected: [] };
   subscribe(fn: (message: Message) => void) { this.listeners.add(fn); fn({ type: 'status', ...this.status }); fn({ type: 'midi-connections', ports: this.selected }); return () => this.listeners.delete(fn); }
   private emit(message: Message) { this.listeners.forEach(fn => fn(message)); }
   async init() { this.selected = await read<string[]>('settings', 'midi-connections') ?? []; if (!navigator.requestMIDIAccess) this.status.message = 'Web MIDI is unavailable in this browser. Use on-screen controls or a browser with Web MIDI support.';
-    else if (this.selected.length) { try { const permission = await navigator.permissions.query({ name: 'midi' as PermissionName }); if (permission.state === 'granted') await this.enable(); } catch { /* Keep explicit Enable MIDI available. */ } } }
+    else if (this.selected.length) { try { const permission = await navigator.permissions.query({ name: 'midi' as PermissionName }); if (permission.state === 'granted') await this.enable(); } catch { /* Keep explicit Connect MIDI available. */ } } }
   async enable() {
     if (!navigator.requestMIDIAccess) throw new Error(this.status.message);
     try { this.access ??= await navigator.requestMIDIAccess({ sysex: false }); this.access.onstatechange = () => this.refresh(); this.refresh(); }

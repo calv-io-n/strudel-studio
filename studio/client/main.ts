@@ -1,3 +1,4 @@
+import { MidiConnections } from './midi-connections';
 import { recordingTarget, validateRecordingTarget, retainPatternOutput, type RecordingTarget } from '../shared/recording-target';
 import { nextMetronomeMode, savedMetronomeMode, type MetronomeMode } from './count-in';
 import { registerOverlay } from './overlay';
@@ -87,7 +88,7 @@ app.innerHTML = `
 <main class="workspace">
   <section class="editor-panel">
     <div id="midi-learning" class="alert" hidden><span class="alert-dot" aria-hidden="true"></span><span id="learn-status" role="status"></span><button id="cancel-learn" class="alert-action" hidden>Cancel learning</button></div>
-    <div id="input-alert" class="alert" hidden><span class="alert-dot" aria-hidden="true"></span><span id="input-alert-text" role="status"></span><button id="audio-connect" class="alert-action">Connect microphone</button><button id="audio-cancel" class="alert-action" hidden>Cancel</button><button id="midi-enable" class="alert-action" hidden>Enable MIDI</button><button id="input-alert-settings" class="bare">Settings</button></div>
+    <div id="input-alert" class="alert" hidden><span class="alert-dot" aria-hidden="true"></span><span id="input-alert-text" role="status"></span><button id="audio-connect" class="alert-action">Connect microphone</button><button id="audio-cancel" class="alert-action" hidden>Cancel</button><button id="input-alert-settings" class="bare">Settings</button></div>
     <div id="audio-toolbar" class="input-bar" hidden>
       <span class="input-source"><span class="live-dot" aria-hidden="true"></span><span id="audio-source-label">Default input</span></span>
       <span class="level-bar" aria-hidden="true"><span></span></span>
@@ -95,6 +96,7 @@ app.innerHTML = `
       <button id="audio-settings" class="bare">Settings</button>
       <p id="monitor-warning" hidden>Monitoring is live — use headphones, or the microphone will capture your own output.</p>
     </div>
+    <div id="midi-editor-connection" hidden></div>
     <div id="instrument-toolbar" class="input-bar" hidden>
       <div id="midi-output-controls"><input id="midi-output-search" type="search" aria-label="Find MIDI output sound" placeholder="Find sound"><select id="midi-output-sound" aria-label="MIDI output sound"></select><button id="clear-midi-sound" class="bare" hidden>Clear sound</button></div>
       <span class="divider" aria-hidden="true"></span>
@@ -135,9 +137,7 @@ app.innerHTML = `
   <div class="sheet-body">
     <section data-sheet="midi" data-title="MIDI" data-subtitle="Hardware and the on-screen controller" hidden>
       <section id="devices-content" class="sheet-section" aria-label="MIDI devices"><h2>Devices</h2><p class="hint">Connect an external keyboard or controller. Connections stay active when you switch sessions.</p>
-        <div class="form-row"><button id="reconnect" class="primary">Enable MIDI</button><p id="bridge-status" class="hint"></p></div>
-        <div id="profiles"></div>
-        <div class="form-row"><select id="available-ports" aria-label="Available MIDI inputs"></select><button id="add-profile">Connect</button></div>
+        <div id="midi-settings-connection"></div>
         <p id="device-activity" role="status">Play a key or move a control to check input.</p>
         <div class="form-row"><button id="edit-midi-instrument" class="bare">Edit MIDI instrument</button></div>
       </section>
@@ -295,6 +295,7 @@ async function toggleLive(name: string) {
 }
 function paintLibraryLive() {
   $('#library-keys').hidden = !libraryMidi;
+  $('#library-midi-connection').hidden = !libraryMidi;
 
   const label = selectedSound ? engine.soundEntries.find(s => s.name === selectedSound)?.label ?? selectedSound : '';
   $('#library-midi-status').textContent = libraryMidi ? `Live · ${label} · play your controller or the keys below · nothing is recorded` : 'Choose Live on a sound to play it from your controller';
@@ -485,17 +486,20 @@ function renderRecording() {
   $('#record-toggle').disabled = !running && pending || recordingPanel.pending || midiComposition.pending;
   document.querySelectorAll<HTMLButtonElement>('[data-capture]').forEach(button => { button.setAttribute('aria-pressed', String(button.dataset.capture === 'audio' ? recordAudioEnabled : recordMidiEnabled)); button.disabled = busy; });
   $('#record-bar .chips').hidden = false;
+  $('#record-midi-connection').hidden = !recordMidiEnabled || instrumentOpen || !!learning;
   $('#record-bar').dataset.mode = recordAudioEnabled && recordMidiEnabled ? 'both' : recordMidiEnabled ? 'midi' : 'audio';
   $('#record-settings').hidden = !recordAudioEnabled;
   $('#record-close').disabled = busy;
   $('#record-status').hidden = !audioPending && !recording?.message;
-  $('#record-status').textContent = recording?.state === 'recording' ? `Audio · recording ${recording.elapsed.toFixed(1)} s` : recording?.message ?? '';
+  const midiNotes = performancePanel.take?.notes.length ?? 0;
+  $('#record-status').textContent = (recording?.state === 'review' ? 'Take ready · audio' : recording?.state === 'recording' ? `Audio · recording ${recording.elapsed.toFixed(1)} s` : recording?.message ?? '') + (audioPending && midiNotes ? ` · ${midiNotes} MIDI ${midiNotes === 1 ? 'note' : 'notes'}` : '');
   $('#record-preview').hidden = $('#record-retry').hidden = $('#record-download').hidden = $('#record-discard').hidden = !['review', 'failed'].includes(recording?.state ?? '');
   $('#record-preview').textContent = previewSource ? 'Stop preview' : 'Preview take';
   $('#record-download').hidden = recording?.state !== 'failed';
   $('#record-retry').textContent = recording?.state === 'review' ? 'Keep take' : 'Retry save';
-  performancePanel.root.hidden = !performancePanel.running && !performancePanel.take?.notes.length;
-  if (audioPending) performancePanel.root.querySelector<HTMLElement>('.performance-review')!.hidden = true;
+  const midiRecoveryVisible = [...performancePanel.root.querySelectorAll<HTMLElement>('[data-retarget], [data-fallback]')].some(button => !button.hidden);
+  performancePanel.root.hidden = !midiRecoveryVisible && (audioPending || !performancePanel.running && !performancePanel.take?.notes.length);
+  if (audioPending) { performancePanel.root.querySelector<HTMLElement>('.performance-review')!.hidden = true; performancePanel.root.querySelector<HTMLElement>('.performance-feedback')!.hidden = true; }
   let target = busy ? recording?.identity?.target ?? activeRecordingTarget : undefined;
   let problem = '';
   if (!target) try { target = resolveRecordTarget(); } catch (error) { problem = (error as Error).message; }
@@ -975,12 +979,12 @@ function renderTransport() {
 /** Input tabs explain what is missing before offering their controls: a banner while disconnected, the input bar once live. */
 function renderInputAlert() {
   const live = liveInput.active, requesting = liveInput.pending, midiReady = bridge.ready && bridge.connected.length > 0;
-  const audioAlert = audioOpen && !live, midiAlert = instrumentOpen && !midiReady;
-  $('#input-alert').hidden = !audioAlert && !midiAlert;
+  const audioAlert = audioOpen && !live;
+  $('#input-alert').hidden = !audioAlert;
   $('#audio-connect').hidden = !audioAlert || requesting; $('#audio-cancel').hidden = !audioAlert || !requesting;
-  $('#midi-enable').hidden = !midiAlert || bridge.ready;
-  $('#input-alert-text').textContent = audioAlert ? (requesting ? 'Waiting for microphone permission…' : 'No audio input connected. Choose a device and grant microphone permission to monitor or record.') : midiAlert ? (bridge.ready ? 'No MIDI input connected. Choose your keyboard or controller in MIDI settings.' : bridge.message) : '';
-  $('#input-alert-settings').textContent = midiAlert && bridge.ready ? 'Choose input' : 'Settings';
+  $('#midi-editor-connection').hidden = !!learning || !instrumentOpen && !(performancePanel.auditioning && (!recordBarOpen || !recordMidiEnabled) && !audioOpen);
+  $('#input-alert-text').textContent = requesting ? 'Waiting for microphone permission…' : 'No audio input connected. Choose a device and grant microphone permission to monitor or record.';
+  $('#input-alert-settings').textContent = 'Settings';
   $('#audio-toolbar').hidden = !audioOpen || !live;
   $('#monitor-warning').hidden = !liveInput.monitoring;
   const tabs = $('#input-tabs');
@@ -997,20 +1001,16 @@ function renderBindings() {
   }).join('') : '<p class="empty small">No mappings yet.<br>Click slider() and choose Bind MIDI control to get started.</p>';
 
 }
+const midiConnections = new MidiConnections(() => { openSheet('midi'); $('.controller-panel').scrollIntoView({ block: 'nearest' }); document.querySelector<HTMLElement>('#controls .keys button')?.focus(); }, () => { ensureDeviceProfiles(); renderBindings(); dirty(); });
+$('#midi-settings-connection').append(midiConnections.mount('MIDI connections'));
+$('#midi-learning').append(midiConnections.mount('MIDI control connection'));
+$('#midi-editor-connection').append(midiConnections.mount('MIDI instrument connection'));
+const libraryMidiConnection = midiConnections.mount('Sound preview MIDI connection', () => $('#library-keys button').focus());
+libraryMidiConnection.id = 'library-midi-connection'; libraryMidiConnection.hidden = true; $('.library-test').prepend(libraryMidiConnection);
+const recordMidiConnection = midiConnections.mount('Recording MIDI connection');
+recordMidiConnection.id = 'record-midi-connection'; $('#record-bar').append(recordMidiConnection);
 function renderProfiles() {
-  ensureDeviceProfiles();
-  const available = $('#available-ports').value;
-  $('#bridge-status').textContent = bridge.ready ? 'Choose an input below. Unplugged devices reconnect automatically when available.' : bridge.message;
-  $('#profiles').innerHTML = devicePorts.map(port => {
-    const connected = bridge.connected.includes(port);
-    const status = connected ? 'Connected' : !bridge.ready ? 'MIDI unavailable' : bridge.ports.includes(port) ? 'Connecting…' : 'Waiting for device';
-    return `<div class="device-connection"><div><strong>${escape(port)}</strong><span>${status}</span></div><button data-disconnect-port="${escape(port)}" aria-label="Disconnect ${escape(port)}">Disconnect</button></div>`;
-  }).join('') || '<p class="hint">No external devices connected. Plug in your controller, then choose its MIDI input.</p>';
-  $('#available-ports').innerHTML = '<option value="">Choose MIDI input…</option>' + bridge.ports.filter(port => !devicePorts.includes(port)).map(port => `<option>${escape(port)}</option>`).join('');
-  if (bridge.ports.includes(available) && !devicePorts.includes(available)) $('#available-ports').value = available;
-  $('#available-ports').disabled = !bridge.ready;
-  $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value;
-  renderRoute();
+  ensureDeviceProfiles(); midiConnections.update(bridge, devicePorts); renderRoute();
 }
 function renderRoute() {
   const simulation = $('#route').value === 'simulation';
@@ -1128,7 +1128,7 @@ async function receive(event: MidiEvent) {
   if (!event.source.startsWith('studio:') && !devicePorts.includes(event.source)) return;
   ensureDeviceProfiles();
   const profile = project.profiles.find(p => p.port === event.source && (p.enabled || !p.port.startsWith('studio:')));
-  if (profile) midiPulseUntil = performance.now() + 250;
+  if (profile) { midiPulseUntil = performance.now() + 250; midiConnections.activity(midi.kind === 'note' ? `Note ${midi.number}` : `CC ${midi.number} · ${midi.value}`); }
   if (profile && !event.source.startsWith('studio:')) $('#device-activity').textContent = `${event.source} · Channel ${midi.channel} · ${midi.kind === 'note' ? 'Note' : 'CC'} ${midi.number} · ${midi.value}`;
   if (!profile) return;
   if (learning?.kind === 'midi-preset' && midi.on) { bind(learning, profile.id, midi.channel, midi.kind, midi.number); return; }
@@ -1181,22 +1181,6 @@ $('#project-name').oninput = () => dirty();
 $('#cancel-learn').onclick = () => { learning = undefined; $('#midi-learning').hidden = true; $('#cancel-learn').hidden = true; $('#drawer-learning').hidden = true; $('#learn-status').textContent = 'Learning cancelled.'; };
 $('#drawer-cancel-learn').onclick = () => $('#cancel-learn').click();
 $('#route').onchange = renderRoute;
-$('#reconnect').onclick = $('#midi-enable').onclick = guard(() => browserMidi.enable());
-$('#available-ports').onchange = () => { $('#add-profile').disabled = !bridge.ready || !$('#available-ports').value; };
-$('#add-profile').onclick = guard(async () => {
-  const port = $('#available-ports').value; if (!port) throw new Error('Select a MIDI input port.');
-  const result = await browserMidi.connect({ port, connected: true });
-  devicePorts = result.ports; ensureDeviceProfiles(); renderProfiles(); renderBindings(); dirty();
-});
-$('#profiles').onclick = e => {
-  const port = (e.target as HTMLElement).closest<HTMLElement>('[data-disconnect-port]')?.dataset.disconnectPort;
-  if (!port) return;
-  void guard(async () => {
-    const result = await browserMidi.connect({ port, connected: false });
-    devicePorts = result.ports; engine.releaseInputNotes(); releaseNotes(); renderProfiles(); pickup.reset();
-    $('#device-activity').textContent = 'Device disconnected.';
-  })();
-};
 const removeBinding = (e: MouseEvent) => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-remove-binding]')?.dataset.removeBinding; if (id) { project.bindings = project.bindings.filter((b) => b.id !== id); renderBindings(); dirty(); } };
 $('#bindings').onclick = removeBinding;
 $('#refresh-assets').onclick = guard(async () => { assets = await workspace.assets(); await engine.registerAssets(assets); renderAssets(); renderSlots(); });

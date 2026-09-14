@@ -43,7 +43,7 @@ test('slider values and function-name binding remain separate and mappings survi
     Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => ({ inputs: new Map([['knobs', input]]), onstatechange: null }) });
     (window as any).turnKnob = (value: number) => input.onmidimessage?.({ data: new Uint8Array([176, 20, value]) });
   });
-  await boot(page); await command(page, 'MIDI & on-screen controller'); await page.locator('#reconnect').click(); await page.locator('#available-ports').selectOption('Knobs [knobs]'); await page.locator('#add-profile').click(); await page.keyboard.press('Escape');
+  await boot(page); await command(page, 'MIDI & on-screen controller'); await page.locator('#midi-settings-connection [data-midi-enable]').click(); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await page.keyboard.press('Escape');
   const slider = page.locator('.tab-editor:not([hidden]) .inline-slider').first(); await slider.focus(); await page.keyboard.press('ArrowRight'); await slider.click();
   await expect(page.locator('#mapping-context')).toHaveCount(0); await expect(page.locator('.context-menu')).toBeHidden(); await expect(page.locator('#midi-learning')).toBeHidden();
   const fn = page.locator('.tab-editor:not([hidden]) [data-input-function=slider]').first(); await fn.click(); await page.getByRole('menuitem', { name: 'Unbind MIDI control', exact: true }).click(); await fn.click(); await page.getByRole('menuitem', { name: 'Bind MIDI control', exact: true }).click();
@@ -106,7 +106,7 @@ test('transient menus, new-pattern drafts and native clip/color dialogs share ou
 
 test('tutorial videos have focused assets, deliberate playback and pause when dismissed', async ({ page }) => {
   await boot(page); await command(page, 'Quick start guide');
-  for (const topic of ['Record MIDI', 'Map a knob', 'Tempo', 'Arrange']) {
+  for (const topic of ['Connect', 'Record MIDI', 'Map a knob', 'Tempo', 'Arrange']) {
     await page.getByRole('link', { name: topic, exact: true }).click();
     const videos = page.locator('#quick-start section:not([hidden]) video');
     for (const video of await videos.all()) {

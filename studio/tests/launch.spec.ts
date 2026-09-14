@@ -24,8 +24,8 @@ async function midi(page: Page) {
     Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => ({ inputs: new Map([['keyboard', input]]), onstatechange: null }) });
     (window as any).playNote = (on: boolean) => input.onmidimessage?.({ data: new Uint8Array([on ? 144 : 128, 64, on ? 100 : 0]) });
   });
-  await boot(page); await action(page, 'MIDI & on-screen controller'); await page.locator('#reconnect').click();
-  await page.locator('#available-ports').selectOption('Test Keys [keyboard]'); await page.locator('#add-profile').click(); await expect(page.locator('.device-connection')).toContainText('Connected'); await page.keyboard.press('Escape');
+  await boot(page); await action(page, 'MIDI & on-screen controller'); await page.locator('#midi-settings-connection [data-midi-enable]').click();
+  await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await expect(page.locator('#midi-settings-connection [data-midi-inputs]')).toContainText('Connected'); await page.keyboard.press('Escape');
 }
 
 test('Quick Start dismissal, legacy migration, explicit preference and restoration', async ({ page }) => {
@@ -82,9 +82,9 @@ test('pattern MIDI capture retains its destination across tabs and publishes onl
 
   await expect(page.locator('.performance-panel [data-destination]')).toContainText('Lead');
   await expect(page.locator('#midi-record')).toHaveCount(0); await expect(page.locator('#record-settings')).toBeHidden();
-  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).playNote(false));
+  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).playNote(false));
   expect(await page.evaluate(() => { const key = Object.keys(localStorage).find(key => key.startsWith('studio.midi-take:'))!; return JSON.parse(localStorage.getItem(key)!).length; })).toBeLessThan(2);
-  await expect(page.locator('.pending-code')).toContainText('Recording'); await expect(page.locator('.performance-review')).toBeHidden(); await page.locator('#stop').click();
+  await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await expect(page.locator('.performance-review')).toBeHidden(); await page.locator('#stop').click();
   await expect(page.locator('.performance-review')).toBeVisible();
   await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', 'Ready to review'); await expect(page.locator('.pending-code')).toContainText('note(64)');
   await page.keyboard.press('Escape'); await page.getByRole('tab', { name: 'Rhythm', exact: true }).click();
@@ -101,7 +101,7 @@ test('pattern accompaniment records into the selected phrase without creating va
   await expect(page.locator('#play-target')).toHaveValue('tab'); await expect(page.locator('#midi-record-hint')).toContainText('MIDI replaces selected note');
   await expect(page.locator('#transport-state')).toContainText('Stopped');
   await page.evaluate(() => window.neonCapture.start()); await page.locator('#record-toggle').click();
-  await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(300);
+  await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(300);
   expect((await page.evaluate(() => window.neonCapture.finish())).peak).toBeGreaterThan(.001);
   await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(200); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
   await page.locator('.performance-panel [data-accept]').click();
@@ -115,7 +115,7 @@ test('failed MIDI acceptance retains original code and a retryable take', async 
   await midi(page); await replaceBody(page, 'note("c4").s("triangle").gain(.2)');
   await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
 
-  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75);
+  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(75);
   await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(150); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
   await page.evaluate(() => { const put = IDBObjectStore.prototype.put; (window as any).restoreWrites = () => { IDBObjectStore.prototype.put = put; }; IDBObjectStore.prototype.put = function(...args: Parameters<typeof put>) { if (this.name === 'projects') throw new DOMException('Storage full', 'QuotaExceededError'); return Reflect.apply(put, this, args); }; });
   await page.locator('.performance-panel [data-accept]').click(); await expect(page.locator('#notice')).toContainText('Storage full');
@@ -162,7 +162,7 @@ test('source BPM changes trigger spacing consistently in live tab playback and o
 test('MIDI recovery reopens the shared bar and discard leaves original code intact', async ({ page }) => {
   await midi(page); await replaceBody(page, 'note("c4").s("triangle")');
   await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
-  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(150); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
+  await page.locator('#record-toggle').click(); await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(150); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
   await page.reload(); await expect(page.locator('#record-bar')).toBeVisible(); await expect(page.locator('.performance-panel [data-state]')).toContainText('Recovered');
   await page.locator('.performance-panel [data-discard]').click(); await expect(page.locator('.pending-code')).toHaveCount(0);
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('note("c4")');
@@ -206,8 +206,8 @@ test('MIDI phrase recording waits for the metronome and ignores notes during the
   await midi(page); await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click();
   await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem', { name: 'Record MIDI solo', exact: true }).click(); await page.locator('[data-capture=audio]').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('#count-in-beat')).toHaveText('4'); await page.evaluate(() => { (window as any).playNote(true); (window as any).playNote(false); });
-  await expect(page.locator('.pending-code')).toContainText('Preparing'); await expect(page.locator('#count-in-beat')).toBeEmpty({ timeout: 5000 });
-  await expect(page.locator('.pending-code')).toContainText('Recording'); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(120); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
+  await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Preparing/); await expect(page.locator('#count-in-beat')).toBeEmpty({ timeout: 5000 });
+  await expect(page.locator('.pending-code')).toHaveAttribute('aria-label', /Recording/); await page.waitForTimeout(75); await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(120); await page.evaluate(() => (window as any).playNote(false)); await page.locator('#stop').click();
   expect(await page.evaluate(() => { const key = Object.keys(localStorage).find(key => key.startsWith('studio.midi-take:'))!; return JSON.parse(localStorage.getItem(key)!).notes.length; })).toBe(1); await page.locator('.performance-panel [data-discard]').click();
 });
 

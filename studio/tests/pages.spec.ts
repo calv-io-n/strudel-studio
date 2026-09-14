@@ -81,7 +81,7 @@ test('static renderer exports audible synth WAV', async ({ page }) => {
 test('Web MIDI permission is requested only by action; denial leaves virtual controls usable', async ({ page }) => {
   await page.addInitScript(() => { (window as any).midiRequests = 0; Object.defineProperty(navigator, 'requestMIDIAccess', { value: async () => { (window as any).midiRequests++; throw new DOMException('Denied', 'NotAllowedError'); } }); });
   await start(page); expect(await page.evaluate(() => (window as any).midiRequests)).toBe(0);
-  await command(page, 'MIDI & on-screen controller'); await page.locator('#reconnect').click(); await expect(page.locator('#bridge-status')).toContainText('denied');
+  await command(page, 'MIDI & on-screen controller'); await page.locator('#midi-settings-connection [data-midi-enable]').click(); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('denied');
   await page.locator('[data-control=knob-0]').fill('50'); await expect(page.locator('[data-value=knob-0]')).toHaveText('50');
 });
 
@@ -95,12 +95,12 @@ test('Web MIDI input connects, plays, reconnects, and retains selection across s
     navigator.permissions.query = ((descriptor: PermissionDescriptor) => descriptor.name === ('midi' as PermissionName) ? Promise.resolve({ state: 'granted' } as PermissionStatus) : query(descriptor)) as typeof navigator.permissions.query;
     (window as any).testMidi = { note: (on: boolean) => input.onmidimessage?.({ data: new Uint8Array([on ? 144 : 128, 60, on ? 100 : 0]) }), connected: (yes: boolean) => { input.state = yes ? 'connected' : 'disconnected'; access.onstatechange?.(); } };
   });
-  await start(page); await command(page, 'MIDI & on-screen controller'); await page.locator('#reconnect').click(); await page.locator('#available-ports').selectOption('Test Keyboard [keyboard-1]'); await page.locator('#add-profile').click(); await expect(page.locator('.device-connection')).toContainText('Connected');
+  await start(page); await command(page, 'MIDI & on-screen controller'); await page.locator('#midi-settings-connection [data-midi-enable]').click(); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await expect(page.locator('#midi-settings-connection [data-midi-inputs]')).toContainText('Connected');
   await page.evaluate(() => { window.neonCapture.start(); (window as any).testMidi.note(true); }); await expect.poll(() => page.evaluate(() => window.neonCapture.frames)).toBeGreaterThan(12000); const audio = await page.evaluate(() => { (window as any).testMidi.note(false); return window.neonCapture.finish(); }); expect(audio.peak).toBeGreaterThan(.001);
   await expect(page.locator('#device-activity')).toContainText('Note 60');
-  await page.evaluate(() => (window as any).testMidi.connected(false)); await expect(page.locator('.device-connection')).toContainText('Waiting for device');
-  await page.evaluate(() => (window as any).testMidi.connected(true)); await expect(page.locator('.device-connection')).toContainText('Connected');
-  await closeSheet(page); await page.locator('#saved-projects').selectOption('Neon-Drive'); await page.locator('#save-now').click(); await page.reload(); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); await command(page, 'MIDI & on-screen controller'); await expect(page.locator('.device-connection')).toContainText('Connected');
+  await page.evaluate(() => (window as any).testMidi.connected(false)); await expect(page.locator('#midi-settings-connection [data-midi-inputs]')).toContainText('Waiting for device');
+  await page.evaluate(() => (window as any).testMidi.connected(true)); await expect(page.locator('#midi-settings-connection [data-midi-inputs]')).toContainText('Connected');
+  await closeSheet(page); await page.locator('#saved-projects').selectOption('Neon-Drive'); await page.locator('#save-now').click(); await page.reload(); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); await command(page, 'MIDI & on-screen controller'); await expect(page.locator('#midi-settings-connection [data-midi-inputs]')).toContainText('Connected');
 });
 
 test('composition Record and Stop append audio to the selected placement without new tabs', async ({ page }) => {

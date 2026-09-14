@@ -638,3 +638,25 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 
 
 .cm-editor .pending-code.pending-inline { display: inline; }
+
+.cm-editor .creating-code { opacity: .6; }
+.cm-editor .code-placeholder { display: inline-block; height: .75em; vertical-align: baseline; border-radius: 2px; background: currentColor; opacity: .16; animation: code-forming 1.4s ease-in-out infinite; }
+.cm-editor .creating-code > span:not(.code-placeholder) { animation: code-arrival .22s ease-out; }
+@keyframes code-forming { 50% { opacity: .35; } }
+@keyframes code-arrival { from { opacity: .65; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cm-editor .code-placeholder, .cm-editor .creating-code > span { animation: none; } }
+
+.midi-connection { font-size: 12px; min-width: 0; }
+.midi-connection-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.midi-connection [data-midi-status] { color: var(--muted); }
+.midi-connection[data-connected=true] [data-midi-status]::before { content: '●'; color: var(--teal, #298f83); margin-right: 6px; }
+.midi-connection [data-midi-inputs] { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; }
+.midi-device-option { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.midi-device-option small { color: var(--muted); }
+#midi-editor-connection { padding: 8px 16px; border-bottom: 1px solid var(--line); }
+#record-midi-connection { grid-column: 1 / -1; }
+
+@media (max-width: 700px) {
+  #record-status { flex-basis: 100%; max-width: none; text-align: right; }
+  #record-bar[data-mode=midi] .record-actions { grid-column: 1; grid-row: auto; }
+}

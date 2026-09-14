@@ -7,6 +7,7 @@ import type { StudioEditor } from './editor';
 export class PerformancePanel {
   take?: MidiTake;
   accompaniment: 'pattern' | 'solo' = 'solo';
+  get auditioning() { return this.audition; }
   get running() { return this.preparing || this.take?.state === 'capturing'; }
   sharedTarget?: RecordingTarget;
   sharedOffset = 0;
@@ -40,7 +41,7 @@ export class PerformancePanel {
   private fallback = false;
   get captureView(): CaptureView | undefined {
     if (!this.take || !this.owner?.destination || !this.preparing && (this.take.state === 'armed' || this.take.state === 'review' && !this.take.notes.length)) return;
-    return { code: this.take.state === 'review' ? this.proposal : undefined, state: this.preparing ? 'preparing' : this.saving ? 'saving' : this.take?.state === 'capturing' ? 'recording' : 'review', tabId: this.take.destination.tabId, trackId: this.sharedTarget?.trackId, clipId: this.sharedTarget?.clipId, start: this.sharedTarget?.position, end: this.sharedTarget ? this.sharedTarget.position + (this.take.state === 'capturing' ? Math.max(0, this.elapsed) : this.length) : undefined, kind: this.take.destination.append ? 'append' : 'phrase', label: this.preparing ? 'Preparing recording' : this.saving ? 'Saving' : this.take?.state === 'capturing' ? `Recording · ${this.take.notes.length} notes${this.take.notes.length ? ' · ' + this.take.notes.slice(-8).map(n => n.pitch).join(' ') : ''}` : 'Ready to review' };
+    return { code: this.take.notes.length ? this.proposal : undefined, state: this.preparing ? 'preparing' : this.saving ? 'saving' : this.take?.state === 'capturing' ? 'recording' : 'review', tabId: this.take.destination.tabId, trackId: this.sharedTarget?.trackId, clipId: this.sharedTarget?.clipId, start: this.sharedTarget?.position, end: this.sharedTarget ? this.sharedTarget.position + (this.take.state === 'capturing' ? Math.max(0, this.elapsed) : this.length) : undefined, kind: this.take.destination.append ? 'append' : 'phrase', label: this.preparing ? 'Preparing recording' : this.saving ? 'Saving' : this.take?.state === 'capturing' ? `Recording · ${this.take.notes.length} notes${this.take.notes.length ? ' · ' + this.take.notes.slice(-8).map(n => n.pitch).join(' ') : ''}` : 'Ready to review' };
   }
   private recoveryKey = '';
   private values?: Record<string, any>;
@@ -98,7 +99,7 @@ export class PerformancePanel {
     return true;
   }
   private get elapsed() { return (this.engine.performanceAudio.time - this.startedAt) * this.cps; }
-  private code() { if (!this.take) return ''; const code = transcribe(this.take.notes.map(n => ({ ...n, start: n.start + this.sharedOffset, end: n.end === undefined ? undefined : n.end + this.sharedOffset })), Math.min(4096, this.length + this.sharedOffset), this.grid, Math.max(0, this.elapsed) + this.sharedOffset); const rate = this.engine.patternRate(this.take.destination.tabId); return !code || rate === 1 ? code : `(${code}).slow(${rate})`; }
+  private code() { if (!this.take) return ''; const code = transcribe(this.take.notes.map(n => ({ ...n, start: n.start + this.sharedOffset, end: n.end === undefined ? undefined : n.end + this.sharedOffset })), Math.min(4096, (this.take.state === 'capturing' ? Math.max(.25, Math.ceil(Math.max(0, this.elapsed) * 4) / 4) : this.length) + this.sharedOffset), this.grid, Math.max(0, this.elapsed) + this.sharedOffset); const rate = this.engine.patternRate(this.take.destination.tabId); return !code || rate === 1 ? code : `(${code}).slow(${rate})`; }
   private paint() {
     this.persist();
     const capturing = this.take?.state === 'capturing', pending = !!this.take?.notes.length;

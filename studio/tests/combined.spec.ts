@@ -11,7 +11,7 @@ async function setup(page: Page) {
   });
   await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
   await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill('MIDI & on-screen controller'); await page.keyboard.press('Enter');
-  await page.locator('#reconnect').click(); await page.locator('#available-ports').selectOption('Combined keys [keys]'); await page.locator('#add-profile').click(); await page.keyboard.press('Escape');
+  await page.locator('#midi-settings-connection [data-midi-enable]').click(); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await page.keyboard.press('Escape');
   await page.getByRole('tab',{name:'Lead',exact:true}).click();
   await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
 }
