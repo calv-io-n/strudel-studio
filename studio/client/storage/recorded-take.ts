@@ -11,7 +11,7 @@ export async function takeAsset(id: string, label: string, recording: NonNullabl
 export async function commitRecordedTake(project: Project, identity: TakeIdentity, audio: { asset: Asset; blob: Blob }[], pendingMeta: string, base: Project = project): Promise<SaveOutcome> {
   return exclusive(async () => {
     if (!project.sessionId) throw new Error('Save this session before recording.');
-    const existing = (await all<Project>('projects')).find(p => p.tabs.some(t => t.id === identity.tabId));
+    const existing = (await all<Project>('projects')).find(p => identity.target ? p.assetIds.includes(identity.assetId) : p.tabs.some(t => t.id === identity.tabId));
     if (existing) return { kind: 'unchanged', project: existing };
     const result = await prepareSessionSave(placeRecordedTake(project, audio[0].asset, identity), base);
     const entries: Write[] = audio.flatMap(({ asset, blob }) => [{ collection: 'assets' as const, key: asset.id, value: asset }, { collection: 'audio' as const, key: asset.id, value: blob }, { collection: 'originals' as const, key: asset.id, value: blob }]);
