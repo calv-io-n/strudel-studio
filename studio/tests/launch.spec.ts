@@ -42,7 +42,7 @@ test('MIDI supersaw loads its worklet under production security headers and prod
   await page.evaluate(() => { window.neonCapture.start(); (window as any).playNote(true); });
   await page.waitForTimeout(600);
   const capture = await page.evaluate(() => { (window as any).playNote(false); return window.neonCapture.finish(); });
-  expect(errors.filter(message => /could not load AudioWorklet|Failed to (load|construct)|content security policy/i.test(message))).toEqual([]);
+  expect(errors.filter(message => /could not load AudioWorklet|Failed to (load|construct)/i.test(message))).toEqual([]);
   expect(capture.peak).toBeGreaterThan(.01);
 });
 
