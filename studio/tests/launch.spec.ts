@@ -29,6 +29,23 @@ async function midi(page: Page) {
   await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await expect(page.locator('#midi-settings-connection [data-midi-inputs]')).toContainText('Connected'); await page.keyboard.press('Escape');
 }
 
+test('MIDI supersaw loads its worklet under production security headers and produces audio', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('console', message => { if (message.type() === 'error' || message.type() === 'warning') errors.push(message.text()); });
+  await installAudioCapture(page);
+  await midi(page);
+  await page.getByRole('tab', { name: 'MIDI instrument', exact: true }).click();
+  await page.locator('#editor-midi-instrument .cm-content').fill('MIDI.s("supersaw").gain(0.4)');
+  await page.getByRole('button', { name: 'Apply instrument', exact: true }).click();
+  await expect(page.locator('#instrument-state')).toHaveText('Ready for MIDI');
+  await page.evaluate(() => { window.neonCapture.start(); (window as any).playNote(true); });
+  await page.waitForTimeout(600);
+  const capture = await page.evaluate(() => { (window as any).playNote(false); return window.neonCapture.finish(); });
+  expect(errors.filter(message => /could not load AudioWorklet|Failed to (load|construct)|content security policy/i.test(message))).toEqual([]);
+  expect(capture.peak).toBeGreaterThan(.01);
+});
+
 test('Quick Start dismissal, legacy migration, explicit preference and restoration', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('studio.quick-start', 'seen'));
   await boot(page, true); const guide = page.locator('#quick-start'); await expect(guide).toBeVisible();
