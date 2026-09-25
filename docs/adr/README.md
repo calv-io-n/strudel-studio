@@ -26,3 +26,5 @@ Architecture decision records document intentional changes from the [target desi
 | [0008](0008-browser-audio-pipeline.md) | Accepted | Opt-in catalogue, OPFS audio, track-routed input/takes, and precision-preserving snapshot rendering |
 
 | [0009](0009-launch-timing-and-capture.md) | Accepted | Project clock, source-window trimming, explicit capture destinations and reversible Quick Start opt-out |
+
+| [0010](0010-clip-anchors.md) | Accepted | One non-destructive anchor model for sample alignment, lazy rendering, Smart snap; schema v8 |
