@@ -17,7 +17,7 @@ async function recorded(id: TakeIdentity) {
 test('a recorded take creates a tab on the selected track, preserves timing and references after clip deletion', async () => {
   const id = identity(), { asset } = await recorded(id), next = placeRecordedTake(newProject(), asset, id);
   assert.equal(next.tracks.length, 2); assert.equal(next.clips[0].trackId, 'track-2'); assert.equal(next.tabs.at(-1)?.audioAssetId, asset.id);
-  const clip = next.clips[0]; assert.ok(Math.abs(clip.start + clip.takeLeadSeconds! * .5 - 2.12) < 1e-10);
+  const clip = next.clips[0]; assert.ok(Math.abs(clip.start + clip.anchors![0].beat / 4 - 2.12) < 1e-10); assert.equal(clip.anchors![0].source, 0); assert.equal(clip.length, .25);
   next.clips = []; next.assetIds = []; next.tabs.at(-1)!.code = 'silence'; assert.ok(assetReferences(next).includes(asset.id));
   assert.equal(placeRecordedTake(next, asset, id), next);
   assert.throws(() => checkTakeCapacity({ ...newProject(), tabs: Array.from({ length: 50 }, (_, i) => ({ ...newProject().tabs[0], id: `tab-${i}` })) }), /50-tab/);

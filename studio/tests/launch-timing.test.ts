@@ -26,7 +26,7 @@ test('tempo normalization preserves expressions and comments and maps slider ide
 
 test('v7 inherits old project tempo and round-trips explicit source overrides', () => {
   const project = ProjectSchema.parse({ ...newProject(), version: 6 });
-  assert.equal(project.version, 7); assert.equal(project.tabs[0].tempoBpm, undefined);
+  assert.equal(project.version, 8); assert.equal(project.tabs[0].tempoBpm, undefined);
   project.tabs[0].tempoBpm = 90;
   assert.equal(tempoRate(project.tabs[0], 120), .75);
   project.appliedPatterns = { [project.tabs[0].id]: 'setcpm(50)\nnote(60)' };
@@ -59,11 +59,12 @@ test('Quick Start only honors explicit opt-out and reports failed persistence', 
   assert.equal(saveGuidePreference({ setItem: () => { throw Error('quota'); } }, true), false);
 });
 
-test('recorded take left trims retain seconds when project tempo later changes', () => {
-  const clip = { id: 'take', tabId: 'p', trackId: 't', start: 0, length: 4, takeId: 'audio', takeLeadSeconds: .1, muted: false };
-  const trimmed = trimLeft(clip, .25, 1, .5);
-  assert.equal(trimmed.takeOffsetSeconds, .4); assert.equal(trimmed.takeLeadSeconds, 0); assert.equal(trimmed.sourceOffset, 0);
+test('recorded take left trims keep the audio on its beat and extending left adds silence', () => {
+  const clip = { id: 'take', tabId: 'p', trackId: 't', start: 0, length: 4, takeId: 'audio', anchors: [{ source: 0, beat: .2 }], muted: false };
+  const trimmed = trimLeft(clip, .25, 1, 120);
+  assert.deepEqual(trimmed.anchors, [{ source: .4, beat: 0 }]); assert.equal('sourceOffset' in trimmed, false);
   assert.equal(trimmed.start + trimmed.length, 4);
-  const restored = trimLeft(trimmed, 0, 1, .5);
-  assert.equal(canPlace([], restored), false); // Would extend before recorded source zero.
+  const restored = trimLeft(trimmed, 0, 1, 120);
+  assert.deepEqual(restored.anchors, [{ source: .4, beat: 1 }]); assert.equal(canPlace([], restored), true);
+  assert.equal(canPlace([], { ...clip, anchors: [{ source: 1, beat: 0 }, { source: .5, beat: 1 }] }), false);
 });

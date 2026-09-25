@@ -4,11 +4,12 @@ export type TimedClip = { start: number; length: number; anchors?: ClipAnchor[] 
 export const ANCHOR_LIMIT = 128, STRETCH_SOURCE_LIMIT = 60, STRETCH_OUTPUT_LIMIT = 120;
 const RATIO_TOLERANCE = 1e-6;
 const spb = (bpm: number) => 60 / bpm;
-export function clipAnchors(clip: { anchors?: ClipAnchor[] }): ClipAnchor[] { return clip.anchors?.length ? clip.anchors : [{ source: 0, beat: 0 }]; }
+export type Anchored = { anchors?: ClipAnchor[] };
+export function clipAnchors(clip: TimedClip | Anchored): ClipAnchor[] { return clip.anchors?.length ? clip.anchors : [{ source: 0, beat: 0 }]; }
 /** Drop the anchors key when it only restates the default. */
-export function withAnchors<T extends { anchors?: ClipAnchor[] }>(clip: T, anchors: ClipAnchor[]): T {
-  const { anchors: _, ...rest } = clip;
-  return anchors.length === 1 && !anchors[0].source && !anchors[0].beat ? rest as T : { ...rest, anchors } as T;
+export function withAnchors<T extends object>(clip: T, anchors: ClipAnchor[]): T & Anchored {
+  const { anchors: _, ...rest } = clip as T & Anchored;
+  return (anchors.length === 1 && !anchors[0].source && !anchors[0].beat ? rest : { ...rest, anchors }) as T & Anchored;
 }
 export function isStretched(anchors: ClipAnchor[], bpm: number) {
   return anchors.some((a, i) => i && Math.abs((a.beat - anchors[i - 1].beat) * spb(bpm) - (a.source - anchors[i - 1].source)) > 1e-9);
@@ -49,7 +50,7 @@ export function beatAtSource(anchors: ClipAnchor[], bpm: number, source: number)
 }
 export function endBeat(anchors: ClipAnchor[], bpm: number, duration: number) { return beatAtSource(anchors, bpm, duration) ?? anchors[0].beat; }
 /** Move the clip's left edge without moving audio on the timeline; extending left adds silence. */
-export function trimClipStart<T extends TimedClip>(clip: T, start: number, bpm: number): T {
+export function trimClipStart<T extends TimedClip>(clip: T, start: number, bpm: number): T & Anchored {
   const shift = (start - clip.start) * 4, anchors = clipAnchors(clip);
   const first = shift > 0 ? sourceAtBeat(anchors, bpm, shift) : undefined;
   const kept = anchors.filter(a => shift <= 0 || a.beat - shift > 1e-9).map(a => ({ source: a.source, beat: a.beat - shift }));
