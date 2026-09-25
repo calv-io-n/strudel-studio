@@ -62,8 +62,8 @@ app.innerHTML = `
   <div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" class="bare icon" aria-label="Add session" title="Add session">+</button></div>
   <input id="project-name" aria-label="Project name" value="Untitled project">
   <div class="transport">
-    <div class="segmented" role="group" aria-label="Playback target"><button data-play-target="tab" aria-pressed="true">Tab</button><button data-play-target="composition" aria-pressed="false">Composition</button></div>
-    <select id="play-target" aria-label="Playback target" hidden><option value="tab">Current tab</option><option value="composition">Composition</option></select>
+    <div class="segmented" role="group" aria-label="Playback target"><button data-play-target="composition" aria-pressed="true">Composition</button><button data-play-target="tab" aria-pressed="false">Tab</button></div>
+    <select id="play-target" aria-label="Playback target" hidden><option value="composition">Composition</option><option value="tab">Current tab</option></select>
     <button id="skip-beginning" class="bare icon" aria-label="Skip to beginning" title="Stop and return to the beginning"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M5 5h2v14H5zM19 5v14L8 12z"/></svg></button><button id="play" class="primary pill" aria-label="Play pattern">Play</button><button id="composition-play" class="primary pill" aria-label="Play composition" hidden>Play</button>
     <button id="composition-loop" class="bare" aria-label="Loop composition range" aria-pressed="false">Loop</button><button id="stop" class="bare" aria-label="Stop playback">Stop</button><button id="composition-stop" class="bare" aria-label="Stop playback" hidden>Stop</button>
     <span class="divider" aria-hidden="true"></span>
