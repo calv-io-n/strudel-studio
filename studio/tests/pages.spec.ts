@@ -11,7 +11,7 @@ test.beforeEach(async ({ page }) => {
 });
 test.afterEach(async ({ page }) => { expect(forbidden.get(page)).toEqual([]); });
 const wave = Buffer.from(encodeWav(Float32Array.from({ length: 4410 }, (_, i) => Math.sin(i / 10) * .2), Float32Array.from({ length: 4410 }, (_, i) => Math.sin(i / 10) * .2), 44100).buffer);
-async function start(page: Page, route = '/') { await page.goto(route); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); }
+async function start(page: Page, route = '/') { await page.goto(route); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); if (route === '/') await page.locator('[data-play-target=tab]').click(); }
 async function records(page: Page, store: string) { return page.evaluate(async store => { const db = await new Promise<IDBDatabase>((resolve, reject) => { const r = indexedDB.open('strudel-studio'); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); }); return new Promise<any[]>((resolve, reject) => { const r = db.transaction(store).objectStore(store).getAll(); r.onsuccess = () => { resolve(r.result); db.close(); }; r.onerror = () => reject(r.error); }); }, store); }
 /** Runs a command palette entry by name, the route to project, export and settings actions. */
 async function command(page: Page, name: string) {

@@ -46,6 +46,12 @@ test('MIDI supersaw loads its worklet under production security headers and prod
   expect(capture.peak).toBeGreaterThan(.01);
 });
 
+test('playback target lists Composition first and selects it by default', async ({ page }) => {
+  await boot(page); await expect(page.locator('[data-play-target]')).toHaveText(['Composition', 'Tab']);
+  await expect(page.locator('#play-target')).toHaveValue('composition'); await expect(page.locator('[data-play-target=composition]')).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('#composition-play')).toBeVisible(); await expect(page.locator('#play')).toBeHidden();
+});
+
 test('Quick Start dismissal, legacy migration, explicit preference and restoration', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('studio.quick-start', 'seen'));
   await boot(page, true); const guide = page.locator('#quick-start'); await expect(guide).toBeVisible();
@@ -214,7 +220,7 @@ test('metronome toggles gold, counts in both playback targets, and Stop cancels 
 
 test('recording count-in waits before microphone capture and cancels without a take', async ({ page }) => {
   await page.addInitScript(() => { navigator.mediaDevices.getUserMedia = async () => { const context = new AudioContext(), oscillator = context.createOscillator(), destination = context.createMediaStreamDestination(); oscillator.connect(destination); oscillator.start(); await context.resume(); return destination.stream; }; });
-  await boot(page); await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click(); await page.locator('#record-toggle').click();
+  await boot(page); await page.locator('[data-play-target=tab]').click(); await page.locator('#bpm').fill('240'); await page.locator('#bpm').press('Tab'); await page.locator('#count-in').click(); await page.locator('#record-toggle').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('#count-in-beat')).toHaveText('4'); await expect(page.locator('#record-toggle')).toHaveText('Cancel'); await page.locator('#stop').click();
   await expect(page.locator('#record-status')).toContainText('cancelled'); await page.waitForTimeout(1100); expect((await project(page)).tabs.some((t: any) => t.audioAssetId)).toBe(false);
   await page.locator('#record-toggle').click(); await expect(page.locator('#transport-state')).toContainText('Count-in'); await expect(page.locator('#record-status')).toContainText('recording', { timeout: 5000 }); await page.waitForTimeout(250); await page.locator('#record-toggle').click(); await expect(page.locator('#record-retry')).toHaveText('Keep take', { timeout: 15000 }); await page.locator('#record-retry').click(); await expect(page.locator('#record-status')).toContainText('Audio saved in pattern', { timeout: 15000 });
@@ -231,7 +237,7 @@ test('MIDI phrase recording waits for the metronome and ignores notes during the
 
 test('MIDI can append instrument notes without requesting microphone access', async ({ page }) => {
   await page.addInitScript(() => { navigator.mediaDevices.getUserMedia = async () => { throw new Error('Microphone must not be requested for MIDI-only recording'); }; });
-  await midi(page); await page.locator('#record-toggle').click(); await page.locator('[data-capture=audio]').click(); await page.locator('[data-capture=midi]').click();
+  await midi(page); await page.locator('[data-play-target=tab]').click(); await page.locator('#record-toggle').click(); await page.locator('[data-capture=audio]').click(); await page.locator('[data-capture=midi]').click();
   await page.locator('#record-toggle').click(); await expect(page.locator('#record-toggle')).toHaveText('Stop'); await page.waitForTimeout(75);
   await page.evaluate(() => (window as any).playNote(true)); await page.waitForTimeout(250); await page.evaluate(() => (window as any).playNote(false));
   await page.locator('#stop').click(); await page.locator('.performance-panel [data-accept]').click(); await expect(page.locator('.performance-panel')).toBeHidden();

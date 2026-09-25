@@ -805,7 +805,7 @@ $('#import-backup').onclick = guard(downloadBackup);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
 recordButton.onclick = () => { recordSource = 'external'; setSounds(false); openRecordBar('audio'); }; $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
-recordSelected.onclick = guard(() => { if (timelineRecording?.pending || recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Finish the current recording first.'); performancePanel.stop(); recordSource = 'phrase'; setSounds(false); openRecordBar('audio'); });
+recordSelected.onclick = guard(() => { if (timelineRecording?.pending || recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Finish the current recording first.'); performancePanel.stop(); recordSource = 'phrase'; $('#play-target').value = 'tab'; setSounds(false); openRecordBar('audio'); });
 $('#sound-import').append(recordSelected);
 let selectedMidiClip: string | undefined;
 const midiComposition = new MidiComposition(engine, () => snapshot(), async next => {
@@ -843,7 +843,7 @@ async function armPatternMidi(accompaniment: 'pattern' | 'solo') {
   if (midiComposition.pending || midiComposition.running || performancePanel.take?.notes.length || timelineRecording?.pending) throw new Error('Keep or discard the current take first.');
   midiComposition.close();
   performancePanel.arm(); performancePanel.accompaniment = accompaniment;
-  recordMidiEnabled = true; openRecordBar('midi'); renderTransport();
+  $('#play-target').value = 'tab'; recordMidiEnabled = true; openRecordBar('midi'); renderTransport();
 }
 async function testMidi() {
   if (midiComposition.running || midiComposition.pending) throw new Error('Resolve the current take before testing another phrase.');
