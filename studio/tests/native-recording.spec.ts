@@ -16,7 +16,7 @@ async function boot(page: Page, names = ['Keys']) {
   }, names);
   await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
 }
-async function recordBar(page: Page) { await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click(); }
+async function recordBar(page: Page) { await page.locator('[data-play-target=tab]').click(); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click(); }
 async function editor(page:Page) { await page.getByRole('tab',{name:'MIDI instrument',exact:true}).click(); }
 
 test('connect once beside recording; instrument, settings and hotplug share the connection', async ({page}) => {
@@ -91,7 +91,7 @@ test('reduced motion keeps the creating-code placeholders still', async ({page})
 
 
 test('phrase testing and knob binding offer connection at the point of use', async ({page}) => {
-  await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await page.locator('#record-toggle').click();
+  await boot(page); await page.getByRole('tab',{name:'Lead',exact:true}).click(); await page.locator('[data-play-target=tab]').click(); await page.locator('#record-toggle').click();
   await page.locator('.tab-editor:not([hidden]) [data-input-function=note]').first().click(); await page.getByRole('menuitem',{name:'Test MIDI',exact:true}).click();
   await expect(page.locator('#midi-editor-connection [data-midi-enable]')).toBeVisible(); await page.locator('#stop').click();
   const slider = page.locator('.tab-editor:not([hidden]) [data-input-function=slider]').first(); await slider.click(); await page.getByRole('menuitem',{name:'Bind MIDI control',exact:true}).click();

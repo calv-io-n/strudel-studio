@@ -15,7 +15,7 @@ async function setup(page: Page) {
       source.frequency.value = 330; source.connect(output); source.start(); await context.resume(); return output.stream;
     };
   });
-  await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
+  await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); await page.locator('[data-play-target=tab]').click();
   await page.locator('[data-play-target=composition]').click();
   await page.locator('#record-toggle').click();
   await page.locator('[data-capture=midi]').click();
@@ -42,7 +42,7 @@ test('MIDI quantization defaults on, persists choices, and records the selected 
   await expect(grid).toHaveValue('0.0625');
   await expect(grid.locator('option')).toHaveCount(5);
   await grid.selectOption('0');
-  await page.reload(); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click();
+  await page.reload(); await page.locator('[data-play-target=tab]').click(); await page.locator('#record-toggle').click(); await page.locator('[data-capture=midi]').click();
   await expect(grid).toHaveValue('0');
   await grid.selectOption('0.03125');
   if (await page.locator('[data-capture=audio]').getAttribute('aria-pressed') === 'true') await page.locator('[data-capture=audio]').click();
@@ -330,7 +330,7 @@ test('a large legacy MIDI transcription saves and stays audible on repeated play
   await expect(page.locator('.tab-editor:not([hidden]) .cm-content')).toContainText('slider(0.2');
   await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser', { timeout: 30000 });
   const reloaded = Date.now();
-  await page.reload(); await expect(page.getByRole('tab', { name: 'Lead', exact: true })).toBeVisible({ timeout: 30000 });
+  await page.reload(); await expect(page.getByRole('tab', { name: 'Lead', exact: true })).toBeVisible({ timeout: 30000 }); await page.locator('[data-play-target=tab]').click();
   console.log('Legacy take reload ms', Date.now() - reloaded);
   for (let pass = 0; pass < 2; pass++) {
     await page.evaluate(() => window.neonCapture.start());

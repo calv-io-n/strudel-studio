@@ -4,7 +4,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function boot(page: Page) {
   await page.addInitScript(() => localStorage.setItem('studio.quick-start.opt-out', 'true'));
   const errors: string[] = []; page.on('pageerror', e => errors.push(e.message));
-  await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
+  await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); await page.locator('[data-play-target=tab]').click();
   expect(errors).toEqual([]);
 }
 async function command(page: Page, name: string) { await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill(name); await page.keyboard.press('Enter'); }

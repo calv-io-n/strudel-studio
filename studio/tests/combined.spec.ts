@@ -10,7 +10,7 @@ async function setup(page: Page) {
     (window as any).combinedNote=(on:boolean)=>input.onmidimessage?.({data:new Uint8Array([on?144:128,67,on?100:0])});
     navigator.mediaDevices.getUserMedia=async()=> { const c=new AudioContext(), o=c.createOscillator(), d=c.createMediaStreamDestination(); o.frequency.value=330; o.connect(d); o.start(); await c.resume(); return d.stream; };
   });
-  await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive');
+  await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); await page.locator('[data-play-target=tab]').click();
   await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill('MIDI & on-screen controller'); await page.keyboard.press('Enter');
   await page.locator('#midi-settings-connection [data-midi-enable]').click(); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await page.keyboard.press('Escape');
   await page.getByRole('tab',{name:'Lead',exact:true}).click();

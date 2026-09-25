@@ -62,8 +62,8 @@ app.innerHTML = `
   <div class="session-actions"><select id="saved-projects" class="session-picker" aria-label="Sessions"><option value="">Sessions…</option></select><button id="add-session" class="bare icon" aria-label="Add session" title="Add session">+</button></div>
   <input id="project-name" aria-label="Project name" value="Untitled project">
   <div class="transport">
-    <div class="segmented" role="group" aria-label="Playback target"><button data-play-target="tab" aria-pressed="true">Tab</button><button data-play-target="composition" aria-pressed="false">Composition</button></div>
-    <select id="play-target" aria-label="Playback target" hidden><option value="tab">Current tab</option><option value="composition">Composition</option></select>
+    <div class="segmented" role="group" aria-label="Playback target"><button data-play-target="composition" aria-pressed="true">Composition</button><button data-play-target="tab" aria-pressed="false">Tab</button></div>
+    <select id="play-target" aria-label="Playback target" hidden><option value="composition">Composition</option><option value="tab">Current tab</option></select>
     <button id="skip-beginning" class="bare icon" aria-label="Skip to beginning" title="Stop and return to the beginning"><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M5 5h2v14H5zM19 5v14L8 12z"/></svg></button><button id="play" class="primary pill" aria-label="Play pattern">Play</button><button id="composition-play" class="primary pill" aria-label="Play composition" hidden>Play</button>
     <button id="composition-loop" class="bare" aria-label="Loop composition range" aria-pressed="false">Loop</button><button id="stop" class="bare" aria-label="Stop playback">Stop</button><button id="composition-stop" class="bare" aria-label="Stop playback" hidden>Stop</button>
     <span class="divider" aria-hidden="true"></span>
@@ -805,7 +805,7 @@ $('#import-backup').onclick = guard(downloadBackup);
 const recordButton = document.createElement('button'); recordButton.textContent = 'Record audio';
 recordButton.onclick = () => { recordSource = 'external'; setSounds(false); openRecordBar('audio'); }; $('#sound-import').prepend(recordButton);
 const recordSelected = document.createElement('button'); recordSelected.textContent = 'Record highlighted sound';
-recordSelected.onclick = guard(() => { if (timelineRecording?.pending || recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Finish the current recording first.'); performancePanel.stop(); recordSource = 'phrase'; setSounds(false); openRecordBar('audio'); });
+recordSelected.onclick = guard(() => { if (timelineRecording?.pending || recordingPanel.pending || performancePanel.take?.notes.length) throw new Error('Finish the current recording first.'); performancePanel.stop(); recordSource = 'phrase'; $('#play-target').value = 'tab'; setSounds(false); openRecordBar('audio'); });
 $('#sound-import').append(recordSelected);
 let selectedMidiClip: string | undefined;
 const midiComposition = new MidiComposition(engine, () => snapshot(), async next => {
@@ -843,7 +843,7 @@ async function armPatternMidi(accompaniment: 'pattern' | 'solo') {
   if (midiComposition.pending || midiComposition.running || performancePanel.take?.notes.length || timelineRecording?.pending) throw new Error('Keep or discard the current take first.');
   midiComposition.close();
   performancePanel.arm(); performancePanel.accompaniment = accompaniment;
-  recordMidiEnabled = true; openRecordBar('midi'); renderTransport();
+  $('#play-target').value = 'tab'; recordMidiEnabled = true; openRecordBar('midi'); renderTransport();
 }
 async function testMidi() {
   if (midiComposition.running || midiComposition.pending) throw new Error('Resolve the current take before testing another phrase.');
