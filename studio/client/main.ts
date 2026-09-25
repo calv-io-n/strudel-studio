@@ -200,7 +200,7 @@ app.innerHTML = `
   <div class="library-test"><span id="library-midi-status" role="status">Choose Live on a sound to play it from your controller</span><div id="library-keys" aria-label="Test keyboard" hidden>${libraryKeys}</div></div>
 </aside>
 <dialog id="edit-dialog"><form method="dialog"><h2 id="edit-title"></h2><label id="edit-label">Name<input id="edit-name" maxlength="80" required></label><p id="edit-description"></p><div class="form-row"><button type="button" value="cancel">Cancel</button><button type="submit" value="confirm" class="primary">Confirm</button></div></form></dialog>
-<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Position (beat)<input id="clip-start" step="1" type="number" min="1" max="16385" required></label><label>Duration (beats)<input id="clip-length" step="1" type="number" min="1" max="16384" required></label></div><label id="clip-playback-label" hidden>Sample playback<select id="clip-playback"><option value="once">Play once</option><option value="pattern">Repeat pattern</option></select></label><p id="clip-playback-help" hidden>Plays once at the selected sample speed. Extending adds silence; trimming shortens the playback window. Duplicate the clip to repeat it.</p><div id="clip-audio-controls" hidden><fieldset><legend>Timing</legend><button type="button" id="clip-align" class="primary">Align…</button><p>Place syllables on beats, fit the phrase to bars, or Smart snap its attacks to the grid while listening with the song.</p></fieldset></div><details id="clip-offset-details"><summary>Source timing</summary><label>Source offset (cycles)<input id="clip-offset" type="number" min="0" max="4096" step="any"></label><p>Edges trim the playback window. Extending does not loop or stretch audio.</p></details><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
+<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Position (beat)<input id="clip-start" step="1" type="number" min="1" max="16385" required></label><label>Duration (beats)<input id="clip-length" step="1" type="number" min="1" max="16384" required></label></div><label id="clip-playback-label" hidden>Sample playback<select id="clip-playback"><option value="once">Play once</option><option value="pattern">Repeat pattern</option></select></label><p id="clip-playback-help" hidden>Plays once from its anchors. Extending adds silence; trimming shortens the playback window. Duplicate the clip to repeat it.</p><div id="clip-audio-controls" hidden><fieldset><legend>Timing</legend><button type="button" id="clip-align" class="primary">Align…</button><p>Place syllables on beats, fit the phrase to bars, or Smart snap its attacks to the grid while listening with the song.</p></fieldset></div><details id="clip-offset-details"><summary>Source timing</summary><label>Source offset (cycles)<input id="clip-offset" type="number" min="0" max="4096" step="any"></label><p>Edges trim the playback window. Extending does not loop or stretch audio.</p></details><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>
 <input type="file" id="import-file" accept=".strudel,.str,.js" hidden><input id="backup-file" type="file" accept=".zip" hidden>`;
@@ -364,7 +364,7 @@ function notice(message: string, error = false) {
   $('#notice').textContent = message; $('#notice').classList.toggle('error', error); $('#notice').classList.add('visible');
   clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').classList.remove('visible'), error ? 12000 : 5000);
 }
-function guard(fn: () => unknown | Promise<unknown>) { return async () => { try { await fn(); } catch (error) { notice(error instanceof Error ? error.message : 'Something went wrong', true); } }; }
+function guard(fn: () => unknown | Promise<unknown>) { return async () => { try { await fn(); } catch (error) { if ((error as Error)?.name === 'AbortError') return; notice(error instanceof Error ? error.message : 'Something went wrong', true); } }; }
 const editors = new Map<string, StudioEditor>();
 let editor: StudioEditor;
 let instrumentOpen = false;
@@ -799,7 +799,7 @@ document.body.append(sampleEditor.root);
 regionEditor = new SampleEditor(async asset => { assets=[asset,...assets.filter(a=>a.id!==asset.id)];await engine.registerAssets(assets); },async()=>{},()=>project.bpm);
 regionEditor.root.id='chop-region-editor';regionEditor.root.classList.add('embedded-sample-editor');
 $('#chop-region').append(regionEditor.root);
-const advanced=document.createElement('details');advanced.className='chop-advanced';advanced.innerHTML='<summary>Beat alignment and stretch</summary>';
+const advanced=document.createElement('details');advanced.className='chop-advanced';advanced.innerHTML='<summary>Beat grid and click track</summary>';
 for(const field of regionEditor.root.querySelectorAll('fieldset'))advanced.append(field);
 regionEditor.root.querySelector('.sample-editor-save')!.before(advanced);
 function renderChopSounds(){
@@ -833,7 +833,7 @@ $('#chop-use').onclick=guard(async()=>{
     validateChopTarget();if(!asset && project.clips.some(c=>c.tabId===target.tabId&&c.playback==='once'))throw new Error('Choose a saved sample for a one-shot audio clip.');const change=replaceBinding(target.owner.code,target.binding!.id,target.binding!.sound,name);
     await engine.replaceSound(target.tabId!,target.binding!.id,target.binding!.sound,name);
     target.owner.view.dispatch({changes:change,userEvent:'input.sample',annotations:isolateHistory.of('full')});
-    if(asset){for(const clip of project.clips)if(clip.tabId===target.tabId&&clip.playback==='once'){clip.takeId=asset.id;delete clip.anchors;}if(!project.assetIds.includes(asset.id))project.assetIds.push(asset.id);}
+    if(asset){for(const clip of project.clips)if(clip.tabId===target.tabId&&clip.playback==='once'){clip.takeId=asset.id;if(clip.anchors){delete clip.anchors;notice('Replaced the sample; its previous alignment was removed. Right-click the clip to align it again.');}}if(!project.assetIds.includes(asset.id))project.assetIds.push(asset.id);}
     engine.syncSoundRevision(target.tabId!);dirty();renderChopSounds();replacingSound=false;setSounds(false);target.owner.view.focus();notice(engine.started?'Sound queued for the next cycle.':'Sound replaced.');
   }catch(error){$('#chop-status').textContent=(error as Error).message;throw error;}finally{replacingSound=false;$('#chop-use').disabled=false;}
 });
@@ -1874,11 +1874,11 @@ $('#clip-dialog').addEventListener('close', () => void guard(async () => {
       playback = $('#clip-playback').value === 'once' ? { playback: 'once', takeId: clip.playback==='once'&&clip.takeId?clip.takeId:placementFor(clip.tabId).takeId } : { playback: 'pattern', takeId: undefined, anchors: undefined };
     }
     const next: Clip = { ...clip, ...playback, trackId: $('#clip-lane').value, start: (Number($('#clip-start').value) - 1) / 4, length: Number($('#clip-length').value) / 4, sourceOffset: Number($('#clip-offset').value) };
-    if (next.takeId) delete next.sourceOffset; else delete next.anchors;
+    if (next.takeId) delete next.sourceOffset; else { delete next.anchors; delete next.takeId; }
     putClip(next);notice('Clip saved.');
   }
 })());
-$('#bpm').onchange = guard(() => { editArrangement(); if (recordingPanel.pending) throw new Error('Resolve the audio take before changing tempo.'); const bpm = Number($('#bpm').value); if (!Number.isFinite(bpm) || bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); const issue = tempoChangeIssue(project.clips.map(c => ({ ...c, name: project.tabs.find(t => t.id === c.tabId)?.name })), takeId => assetById(takeId).duration ?? 0, bpm); if (issue) throw new Error(issue); project.bpm = bpm; syncProjectTempo(); dirty(); });
+$('#bpm').onchange = guard(() => { editArrangement(); if (recordingPanel.pending) throw new Error('Resolve the audio take before changing tempo.'); const bpm = Number($('#bpm').value); if (!Number.isFinite(bpm) || bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); const issue = tempoChangeIssue(project.clips.map(c => ({ ...c, name: project.tabs.find(t => t.id === c.tabId)?.name })), takeId => assets.find(a => a.id === takeId)?.duration ?? Infinity, bpm); if (issue) { $('#bpm').value = String(project.bpm); throw new Error(issue); } project.bpm = bpm; syncProjectTempo(); dirty(); });
 installCompositionGestures({ reveal: () => setDrawer('composition'), project: () => project, placement: placementFor, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
 
 const contextMenu = new ContextMenu();

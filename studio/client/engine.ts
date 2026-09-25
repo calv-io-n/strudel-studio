@@ -461,8 +461,8 @@ export class Engine {
     if(this.busy)throw new Error('Wait for playback preparation.');
     if(!draft.takeId)throw new Error('Choose an audio clip.');
     validateAnchors(clipAnchors(draft),(await storedAsset(draft.takeId)).duration??0,this.project().bpm);
-    const updating=!!this.clipPreview&&this.started;
-    if(!updating){const previous={...this.transport};this.stop();this.previewTransport=previous;this.transport={position:draft.start,begin:draft.start,end:draft.start+draft.length,loop:true};this.transportStart=draft.start;}
+    const updating=!!this.clipPreview&&this.started&&this.transport.begin===draft.start&&this.transport.end===draft.start+draft.length;
+    if(!updating){const previous=this.previewTransport??{...this.transport};this.stop();this.previewTransport=previous;this.transport={position:draft.start,begin:draft.start,end:draft.start+draft.length,loop:true};this.transportStart=draft.start;}
     this.clipPreview=draft;
     try{await this.compile('composition',updating);}catch(error){this.stop();throw error;}
   }

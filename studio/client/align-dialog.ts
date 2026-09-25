@@ -14,13 +14,13 @@ export class AlignDialog {
  private dialog=document.createElement('dialog');
  private clip?:Clip;private asset?:Asset;private bpm=120;private draft?:Draft;private analysis?:Analysis;
  private epoch=0;private selected?:number;private drag?:number;private timer?:ReturnType<typeof setTimeout>;
- private playing=false;private original=false;private applying=false;private animation?:number;
+ private playing=false;private original=false;private applying=false;private animation?:number;private history:Draft[]=[];
  constructor(private engine:Engine,private commit:(clip:Clip)=>void){
   this.dialog.className='align-dialog';this.dialog.setAttribute('aria-label','Align');
   this.dialog.innerHTML=`<h2>Align</h2><p data-title></p>
 <div class="align-toolbar"><button type="button" data-play>Play with song</button><div role="group" aria-label="Compare timing"><button type="button" data-mode="original" aria-pressed="false">Original</button><button type="button" data-mode="aligned" aria-pressed="true">Aligned</button></div><label><input type="checkbox" data-suggestions checked> Suggest attacks</label></div>
-<div class="align-toolbar"><span>Fit phrase to</span><button type="button" data-fit="1">1 bar</button><button type="button" data-fit="2">2 bars</button><button type="button" data-fit="4">4 bars</button><button type="button" data-fit="8">8 bars</button><span class="align-spacer"></span><label>Grid <select data-snap-grid aria-label="Smart snap grid"><option value="1">Beat</option><option value=".5" selected>1/8</option><option value=".25">1/16</option></select></label><button type="button" data-snap>Smart snap</button><button type="button" data-reset>Reset</button></div>
-<p>Drag an attack or anchor onto a beat. Double-click to add an anchor. Alt: free timing · Arrows: 1/16 note · Delete: remove anchor.</p>
+<div class="align-toolbar"><span>Fit phrase to</span><button type="button" data-fit="1">1 bar</button><button type="button" data-fit="2">2 bars</button><button type="button" data-fit="4">4 bars</button><button type="button" data-fit="8">8 bars</button><span class="align-spacer"></span><label>Grid <select data-snap-grid aria-label="Smart snap grid"><option value="1">Beat</option><option value=".5" selected>1/8</option><option value=".25">1/16</option></select></label><button type="button" data-snap>Smart snap</button><button type="button" data-undo disabled>Undo</button><button type="button" data-reset>Reset</button></div>
+<p>Drag an attack or anchor onto a beat. Double-click to add an anchor. Alt: free timing · Arrows: 1/16 note · Delete: remove anchor · Ctrl+Z: undo.</p>
 <div class="align-scroll"><div class="align-grid" tabindex="0" aria-label="Waveform and beat anchors"><canvas></canvas><div class="align-ruler"></div><div class="align-interval-error" hidden></div><div class="align-markers"></div><div class="align-playhead" hidden></div></div></div>
 <p data-status role="status">Loading audio…</p>
 <div class="align-toolbar"><span data-summary></span><span class="align-spacer"></span><button type="button" data-cancel>Cancel</button><button type="button" data-apply class="primary">Apply</button></div>`;
@@ -33,31 +33,33 @@ export class AlignDialog {
   this.el('[data-suggestions]').onchange=()=>this.draw();
   for(const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-fit]'))button.onclick=()=>this.fit(Number(button.dataset.fit));
   this.el('[data-snap]').onclick=()=>this.snap();
-  this.el('[data-reset]').onclick=()=>{if(!this.draft||!this.clip)return;const first=this.draft.anchors[0];this.draft={anchors:[{source:first.source,beat:first.beat}],length:this.clip.length};this.selected=undefined;this.changed();this.status('Reset to the original timing.');};
+  this.el('[data-undo]').onclick=()=>this.undo();
+  this.dialog.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!this.applying){e.preventDefault();this.undo();}});
+  this.el('[data-reset]').onclick=()=>{if(!this.draft||!this.clip)return;this.remember();const first=this.draft.anchors[0];this.draft={anchors:[{source:first.source,beat:first.beat}],length:this.clip.length};this.selected=undefined;this.changed();this.status('Reset to the original timing.');};
   this.el('[data-apply]').onclick=()=>void this.apply();
   const grid=this.el('.align-grid');
   grid.addEventListener('pointerdown',e=>{
    if(this.applying||!this.draft)return;const marker=(e.target as HTMLElement).closest<HTMLElement>('[data-source]');if(!marker)return;
-   const source=Number(marker.dataset.source);e.preventDefault();this.selected=source;this.drag=source;
+   const source=Number(marker.dataset.source);e.preventDefault();this.remember();this.selected=source;this.drag=source;
    if(!this.draft.anchors.some(a=>a.source===source))this.add(source);
    grid.setPointerCapture(e.pointerId);this.draw();
   });
   grid.addEventListener('pointermove',e=>{if(this.drag===undefined||!this.draft)return;this.move(this.drag,this.pointerBeat(e),e.altKey);});
   const end=()=>{if(this.drag!==undefined){this.drag=undefined;this.schedule();}};grid.addEventListener('pointerup',end);grid.addEventListener('pointercancel',end);
-  grid.addEventListener('dblclick',e=>{if(this.applying||!this.draft||(e.target as HTMLElement).closest('[data-source]'))return;const beat=this.pointerBeat(e),source=sourceAtBeat(this.draft.anchors,this.bpm,beat);if(source===undefined){this.status('Add anchors after the phrase starts.');return;}this.add(source);this.selected=source;this.changed();});
+  grid.addEventListener('dblclick',e=>{if(this.applying||!this.draft||(e.target as HTMLElement).closest('[data-source]'))return;const beat=this.pointerBeat(e),source=sourceAtBeat(this.draft.anchors,this.bpm,beat);if(source===undefined){this.status('Add anchors after the phrase starts.');return;}this.remember();this.add(source);this.selected=source;this.changed();});
   grid.addEventListener('focusin',e=>{const marker=(e.target as HTMLElement).closest<HTMLElement>('[data-source]');if(marker)this.selected=Number(marker.dataset.source);});
   grid.addEventListener('keydown',e=>{
    if(this.applying||this.selected===undefined||!this.draft)return;
    const source=this.selected,anchor=this.draft.anchors.find(a=>a.source===source);
-   if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();if(!anchor||this.draft.anchors.length<2)return;this.draft.anchors=this.draft.anchors.filter(a=>a.source!==source);this.selected=undefined;this.changed();grid.focus();}
-   if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();if(!anchor)this.add(source);const beat=anchor?.beat??beatAtSource(this.draft.anchors,this.bpm,source)!;this.move(source,beat+(e.key==='ArrowLeft'?-1:1)*(e.altKey?.01:STEP),e.altKey);this.schedule();this.el(`[data-source="${source}"]`)?.focus();}
+   if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();if(!anchor||this.draft.anchors.length<2)return;this.remember();this.draft.anchors=this.draft.anchors.filter(a=>a.source!==source);this.selected=undefined;this.changed();grid.focus();}
+   if(['ArrowLeft','ArrowRight'].includes(e.key)){e.preventDefault();this.remember();if(!anchor)this.add(source);const beat=anchor?.beat??beatAtSource(this.draft.anchors,this.bpm,source)!;this.move(source,beat+(e.key==='ArrowLeft'?-1:1)*(e.altKey?.01:STEP),e.altKey);this.schedule();this.el(`[data-source="${source}"]`)?.focus();}
   });
  }
  private el<T extends HTMLElement=HTMLElement>(selector:string){return this.dialog.querySelector<T>(selector)!;}
  private status(text:string){this.el('[data-status]').textContent=text;}
  async open(clip:Clip,asset:Asset,bpm:number){
   this.stop();this.epoch++;const epoch=this.epoch;this.clip={...clip};this.asset=asset;this.bpm=bpm;this.analysis=undefined;this.selected=undefined;this.drag=undefined;this.original=false;this.paintModes();
-  this.draft={anchors:clipAnchors(clip).map(a=>({...a})),length:clip.length};
+  this.draft={anchors:clipAnchors(clip).map(a=>({...a})),length:clip.length};this.history=[];this.el<HTMLButtonElement>('[data-undo]').disabled=true;
   this.el('.align-markers').replaceChildren();this.el('canvas').setAttribute('width','0');this.status('Loading audio…');this.el<HTMLButtonElement>('[data-apply]').disabled=true;
   this.el('[data-title]').textContent=`${asset.label??'Audio'} · ${bpm} BPM`;
   this.dialog.showModal();
@@ -67,7 +69,7 @@ export class AlignDialog {
    const info=wavInfo(new Uint8Array(bytes)),end=Math.min(info.frames,Math.round(ANALYSIS_SECONDS*info.rate));
    const result=await audioJob<{rate:number;duration:number;peaks:Float32Array;attacks:number[]}>({kind:'analyze',start:0,end,bins:16384,attacks:true},bytes);if(epoch!==this.epoch)return;
    this.analysis={...result,region:[0,end/result.rate]};
-   this.draw();if(this.validate())this.status('Hollow markers are suggested attacks. Drag the syllables you want to lock to the groove, or use Smart snap.');
+   this.draw();if(this.validate())this.status(`Hollow markers are suggested attacks. Drag the syllables you want to lock to the groove, or use Smart snap.${result.duration>ANALYSIS_SECONDS?` Only the first ${ANALYSIS_SECONDS/60} minutes are analysed.`:''}`);
   }catch(error){if(epoch===this.epoch)this.report(error);}
  }
  private get duration(){return this.analysis?.duration??this.asset?.duration??0;}
@@ -84,15 +86,18 @@ export class AlignDialog {
  }
  private fit(bars:number){
   if(!this.draft||!this.clip)return;
+  this.remember();
   try{const fitted=fitToBeats({start:this.clip.start,length:this.draft.length,anchors:this.draft.anchors},this.duration,this.bpm,bars*4);this.draft={anchors:fitted.anchors,length:fitted.length};this.selected=undefined;this.changed();this.status(`Fitted the phrase to ${bars} ${bars===1?'bar':'bars'} (${fitted.length*4} beats). Play with the song to check it.`);}
   catch(error){this.report(error);}
  }
  private snap(){
   if(!this.draft||!this.analysis)return;
   const grid=Number(this.el<HTMLSelectElement>('[data-snap-grid]').value) as 1|.5|.25,result=smartSnap(this.analysis.attacks,this.draft.anchors,this.bpm,{grid});
-  this.draft.anchors=result.anchors;this.changed();
-  this.status(result.snapped?`${result.snapped} ${result.snapped===1?'attack':'attacks'} snapped to the grid${result.skipped?`, ${result.skipped} skipped (stretch limit)`:''}. Play with the song to check the groove.`:'No attacks close enough to a grid line. Try a coarser grid or drag attacks by hand.');
+  this.remember();this.draft.anchors=result.anchors;this.changed();
+  this.status(result.snapped?`${result.snapped} ${result.snapped===1?'attack':'attacks'} snapped to the grid${result.skipped?`, ${result.skipped} skipped (would cross or over-stretch a neighbour)`:''}. Play with the song to check the groove, or undo.`:'No attacks close enough to a grid line. Try a coarser grid or drag attacks by hand.');
  }
+ private remember(){if(!this.draft)return;this.history.push({anchors:this.draft.anchors.map(a=>({...a})),length:this.draft.length});if(this.history.length>50)this.history.shift();this.el<HTMLButtonElement>('[data-undo]').disabled=false;}
+ private undo(){const previous=this.history.pop();if(!previous||!this.draft)return;this.draft=previous;this.selected=undefined;this.el<HTMLButtonElement>('[data-undo]').disabled=!this.history.length;this.changed();this.status('Undone.');}
  private validate(){
   this.el('.align-interval-error').hidden=true;
   try{if(!this.draft||!this.analysis)throw new Error('Wait for the waveform.');validateAnchors(this.draft.anchors,this.duration,this.bpm);this.el<HTMLButtonElement>('[data-apply]').disabled=this.applying;if(this.el('[data-status]').textContent?.startsWith('Interval'))this.status('Anchor aligned. Play with the song to check its groove.');return true;}

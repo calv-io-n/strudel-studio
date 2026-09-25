@@ -69,17 +69,11 @@ export function fitToBeats(clip: TimedClip, duration: number, bpm: number, beats
   }
   return { anchors: [first, { source: end, beat: first.beat + beats }], length: Math.ceil(first.beat + beats - 1e-9) / 4 };
 }
-/** Suggest a musical phrase length near the audible duration; not beat detection. */
-export function suggestedFit(clip: TimedClip, duration: number, bpm: number) {
-  const anchors = clipAnchors(clip), current = Math.min(clip.length * 4, endBeat(anchors, bpm, duration)) - anchors[0].beat;
-  const candidates = Array.from({ length: 15 }, (_, i) => 2 ** i).flatMap(beats => { try { return [{ beats, ...fitToBeats(clip, duration, bpm, beats) }]; } catch { return []; } });
-  candidates.sort((a, b) => Math.abs(Math.log2(a.beats / current)) - Math.abs(Math.log2(b.beats / current)) || a.beats - b.beats);
-  if (!candidates.length) throw new Error('Crop a phrase in the sample editor before fitting it.');
-  return candidates[0];
-}
 export type SmartSnapOptions = { grid?: 1 | .5 | .25; toleranceSeconds?: number };
 /** Snap detected attacks (sample seconds) that sit near grid lines onto them; nearest first, stretch limits kept. */
 export function smartSnap(attacks: number[], anchors: ClipAnchor[], bpm: number, { grid = .5, toleranceSeconds = .07 }: SmartSnapOptions = {}) {
+  // Never reach past a third of the grid interval, or a fine grid at a fast tempo would quantise everything.
+  toleranceSeconds = Math.min(toleranceSeconds, grid * spb(bpm) / 3);
   const candidates = attacks.flatMap(source => {
     const beat = beatAtSource(anchors, bpm, source); if (beat === undefined) return [];
     const target = Math.round(beat / grid) * grid, displacement = Math.abs(beat - target) * spb(bpm);
@@ -99,7 +93,8 @@ export function takeWindow(clip: TimedClip, duration: number, bpm: number, cycle
   const anchors = clipAnchors(clip), lead = anchors[0].beat / 4;
   const begin = Math.max(lead, -cycleOffset), end = Math.min(clip.length, endBeat(anchors, bpm, duration) / 4);
   if (begin >= end) return;
-  return { begin, end, offset: (begin - lead) * 240 / bpm, seconds: (end - begin) * 240 / bpm };
+  // Rendered audio starts at the first anchor; raw audio starts at the sample's first frame.
+  return { begin, end, offset: (begin - lead) * 240 / bpm + (isStretched(anchors, bpm) ? 0 : anchors[0].source), seconds: (end - begin) * 240 / bpm };
 }
 /** Why a tempo change must wait: the first anchored clip whose stretch would leave 0.5×–2× at the new tempo. */
 export function tempoChangeIssue(clips: { id: string; name?: string; takeId?: string; anchors?: ClipAnchor[] }[], duration: (takeId: string) => number, bpm: number) {

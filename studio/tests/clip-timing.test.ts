@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {clipAnchors,validateAnchors,isStretched,renderKey,sourceAtBeat,beatAtSource,endBeat,trimClipStart,fitToBeats,suggestedFit,smartSnap,type ClipAnchor} from '../shared/clip-timing';
+import {clipAnchors,validateAnchors,isStretched,renderKey,sourceAtBeat,beatAtSource,endBeat,trimClipStart,fitToBeats,smartSnap,type ClipAnchor} from '../shared/clip-timing';
 const bpm=120; // 0.5 s per beat
 const clip={start:2,length:4};
 const warp:ClipAnchor[]=[{source:1,beat:2},{source:2,beat:5},{source:3,beat:6}]; // 1 s → 1.5 s, then 1 s → 0.5 s
@@ -54,11 +54,6 @@ test('fit to beats stretches the audible window uniformly and sets the clip leng
  assert.throws(()=>fitToBeats({start:0,length:2},4,bpm,1.5),/whole number/);
  assert.throws(()=>fitToBeats({start:0,length:2,anchors:[{source:10,beat:0}]},4,bpm,4),/no audio/);
 });
-test('suggested fit picks the power of two nearest the audible length',()=>{
- assert.equal(suggestedFit({start:0,length:2},1.8,bpm).beats,4);
- assert.equal(suggestedFit({start:0,length:2},.7,bpm).beats,1);
- assert.throws(()=>suggestedFit({start:0,length:2},0,bpm));
-});
 test('smart snap pulls attacks near grid lines onto them and skips anchors that would over-stretch',()=>{
  const base:ClipAnchor[]=[{source:0,beat:0},{source:4,beat:8}];
  const result=smartSnap([.52,1.4,2.03,3.5,3.55],base,bpm,{grid:.5,toleranceSeconds:.07});
@@ -85,4 +80,18 @@ test('a tempo change is refused while it would push an anchored clip past the st
  assert.equal(tempoChangeIssue(clips,()=>4,120),undefined);
  assert.match(tempoChangeIssue(clips,()=>4,110)!,/Vocal hook.*110 BPM/);
  assert.equal(tempoChangeIssue(clips,()=>4,130),undefined);
+});
+
+test('raw playback offsets include the first anchor so trimmed duplicates play different audio',()=>{
+ assert.deepEqual(takeWindow({...clip,anchors:[{source:.4,beat:.2}]},4,bpm,0),{begin:.05,end:1.85,offset:.4,seconds:3.6});
+ assert.deepEqual(takeWindow({...clip,anchors:[{source:1,beat:0},{source:2,beat:2}]},4,bpm,0),{begin:0,end:1.5,offset:1,seconds:3});
+ assert.equal(takeWindow({...clip,anchors:warp},4,bpm,-1)!.offset,1);
+});
+test('smart snap tolerance never exceeds a third of the grid interval',()=>{
+ const base:ClipAnchor[]=[{source:0,beat:0},{source:4,beat:8}]; // 1:1 at 120 BPM
+ // sixteenth = 125 ms → tolerance 41.7 ms: a 50 ms displacement stays put, 30 ms snaps; eighth keeps the 70 ms default.
+ assert.equal(smartSnap([.55],base,bpm,{grid:.25}).snapped,0);
+ assert.equal(smartSnap([.53],base,bpm,{grid:.25}).snapped,1);
+ assert.equal(smartSnap([.56],base,bpm,{grid:.5}).snapped,1);
+ assert.equal(smartSnap([.03],base,bpm,{grid:.25}).skipped,1); // would land on the first anchor's beat
 });

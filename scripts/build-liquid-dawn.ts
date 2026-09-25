@@ -158,7 +158,7 @@ clip('saws','saws',24,40,8);clip('saws','saws',80,40,32);
 // Each phrase clip starts so its source downbeat lands on a bar line; the answer's pickup leads in from the previous bar.
 for (const [id,key,bars] of [['phrases','hook',[8,48,64,104,112]],['answer','answer',[16,56,72,96,120]]] as const) {
  const phrase=phrases[key],lead=phrase.pickup*beatRatio/4,length=(phrase.to-phrase.from)*beatRatio/4;
- for (const bar of bars) {clip(id,id,bar-lead,length);Object.assign(project.clips.at(-1)!,{takeId:uuid(key),playback:'once',anchors:anchors[key].map(a=>({...a}))});}
+ for (const bar of bars) {clip(id,id,bar-lead,length);delete project.clips.at(-1)!.sourceOffset;Object.assign(project.clips.at(-1)!,{takeId:uuid(key),playback:'once',anchors:anchors[key].map(a=>({...a}))});}
 }
 clip('chops','chops',24,24);clip('chops','chops',80,16);
 clip('sparkle','sparkle',40,24,8);clip('sparkle','sparkle',88,32,8);

@@ -30,7 +30,7 @@ export function suggestAttacks(audio: EditableAudio, start: number, end: number)
   return candidates.sort((a, b) => b.score - a.score).slice(0, 96).sort((a, b) => a.frame - b.frame).map(a => a.frame);
 }
 const PART_SECONDS = 20;
-/** Timeline-linear audio from the first anchor: stretched intervals, then the rest of the sample at 1×. */
+/** Timeline-linear audio from the first anchor to the last; playback continues from the raw sample after it. */
 export async function renderAnchoredAudio(audio: EditableAudio, anchors: ClipAnchor[], bpm: number) {
   const rate = audio.rate, total = audio.left.length; validateAnchors(anchors, total / rate, bpm);
   const spb = 60 / bpm, first = anchors[0], toFrame = (s: number) => Math.min(total, Math.round(s * rate)), toOut = (b: number) => Math.round((b - first.beat) * spb * rate);
@@ -38,10 +38,7 @@ export async function renderAnchoredAudio(audio: EditableAudio, anchors: ClipAnc
   const points: { frame: number; out: number }[] = [{ frame: toFrame(first.source), out: 0 }];
   const extend = (frame: number, out: number) => { const from = points[points.length - 1], parts = Math.max(1, Math.ceil((frame - from.frame) / (rate * PART_SECONDS))); for (let j = 1; j <= parts; j++) points.push({ frame: Math.round(from.frame + (frame - from.frame) * j / parts), out: Math.round(from.out + (out - from.out) * j / parts) }); };
   for (let i = 1; i < anchors.length; i++) extend(toFrame(anchors[i].source), toOut(anchors[i].beat));
-  const stretched = points[points.length - 1], budget = Math.floor((SAMPLE_LIMIT - 56) / (audio.channels * 4));
-  if (stretched.out > budget) throw new Error('Aligned audio exceeds 64 MB.');
-  const tail = Math.min(total - stretched.frame, budget - stretched.out);
-  if (tail > 0) extend(stretched.frame + tail, stretched.out + tail);
+  if (points[points.length - 1].out * audio.channels * 4 + 56 > SAMPLE_LIMIT) throw new Error('Aligned audio exceeds 64 MB.');
   const frames = points[points.length - 1].out, left = new Float32Array(frames), right = new Float32Array(frames), weights = new Float32Array(frames), overlap = Math.round(rate * .01);
   for (let i = 1; i < points.length; i++) {
     const begin = points[i - 1].out, end = points[i].out, length = end - begin, count = points[i].frame - points[i - 1].frame;

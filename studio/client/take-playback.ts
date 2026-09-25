@@ -19,26 +19,42 @@ export function takeSoundName(id: string, variant = 'raw') { return `studio_take
 /** Register one playable variant of a take: raw audio, or audio rendered for the clip's anchors at the project tempo. Returns the sound name. */
 export async function prepareTake(asset: Asset, project: Project, context: BaseAudioContext, blob: Blob, clip?: Clip, signal?: AbortSignal) {
   const code = takeEffects(asset, project); compileAudioEffects(code);
-  const anchors = clipAnchors(clip ?? {}), bpm = project.bpm, variant = renderKey(anchors, bpm);
-  const buffer = await takeBuffer(context, asset, blob, anchors, bpm, signal), name = takeSoundName(asset.id, variant);
-  // A rendered buffer already starts at the first anchor; raw audio starts at the sample's first frame.
-  const skip = isStretched(anchors, bpm) ? 0 : anchors[0].source;
+  const anchors = clipAnchors(clip ?? {}), bpm = project.bpm, variant = renderKey(anchors, bpm), stretched = isStretched(anchors, bpm);
+  const rendered = await takeBuffer(context, asset, blob, anchors, bpm, signal), name = takeSoundName(asset.id, variant);
+  // A rendered buffer covers the first to the last anchor; the rest of the sample plays from the raw buffer.
+  const raw = stretched ? await takeBuffer(context, asset, blob, [{ source: 0, beat: 0 }], bpm, signal) : rendered;
+  const last = anchors[anchors.length - 1], renderedSeconds = stretched ? (last.beat - anchors[0].beat) * 60 / bpm : 0;
   registeredTakes.add(name);
   audio.registerSound(name, (time: number, value: any, onended: () => void) => {
-    const source = context.createBufferSource(); source.buffer = buffer;
     // Plain sample clips get their effects from the source pattern downstream.
     // Avoid allocating a second, inaudible delay/convolution chain per onset.
     const dry = code.trim() === 'AUDIO' ? context.createGain() : undefined;
     const effects = dry ? { input: dry, output: dry, disconnect: () => dry.disconnect() } : createInputEffects(context, code);
-    const offset = skip + Math.max(0, Number(value.studioTakeOffset) || 0);
-    const duration = Math.min(buffer.duration - offset, Number(value.studioTakeDuration));
-    if (duration <= 0) { effects.disconnect(); return; }
-    source.connect(effects.input); source.start(time, offset, duration);
+    const offset = Math.max(0, Number(value.studioTakeOffset) || 0), wanted = Number(value.studioTakeDuration);
+    const parts: { buffer: AudioBuffer; offset: number; duration: number; at: number }[] = [];
+    if (!stretched) parts.push({ buffer: raw, offset, duration: Math.min(raw.duration - offset, wanted), at: 0 });
+    else {
+      const first = Math.max(0, Math.min(wanted, renderedSeconds - offset));
+      if (first > 0) parts.push({ buffer: rendered, offset, duration: first, at: 0 });
+      const from = last.source + Math.max(0, offset - renderedSeconds);
+      if (wanted - first > 0) parts.push({ buffer: raw, offset: from, duration: Math.min(raw.duration - from, wanted - first), at: first });
+    }
+    const playable = parts.filter(p => p.duration > 0);
+    if (!playable.length) { effects.disconnect(); return; }
+    const sources: AudioBufferSourceNode[] = []; let duration = 0; const ramp = .003;
+    for (const part of playable) {
+      const source = context.createBufferSource(), gain = context.createGain(); source.buffer = part.buffer;
+      // Crossfade the join between rendered and raw audio to avoid a click.
+      if (part.at > 0) { gain.gain.setValueAtTime(0, time + part.at); gain.gain.linearRampToValueAtTime(1, time + part.at + ramp); }
+      if (stretched && part.buffer === rendered && playable.length > 1) { gain.gain.setValueAtTime(1, time + part.duration - ramp); gain.gain.linearRampToValueAtTime(0, time + part.duration); }
+      source.connect(gain).connect(effects.input); source.start(time + part.at, part.offset, part.duration + (part.at > 0 ? 0 : (stretched && playable.length > 1 ? ramp : 0)));
+      sources.push(source); duration = Math.max(duration, part.at + part.duration);
+    }
     // A silent scheduled node owns cleanup in both real-time and offline contexts.
     const clock = context.createConstantSource(), silent = context.createGain(); silent.gain.value = 0; clock.connect(silent).connect(context.destination);
     clock.start(time); clock.stop(time + duration + 3);
-    clock.onended = () => { source.disconnect(); effects.disconnect(); silent.disconnect(); clock.disconnect(); onended(); };
-    return { node: effects.output, stop: (at: number) => { try { source.stop(at); } catch { /* already ended */ } clock.stop(at + 3); } };
+    clock.onended = () => { for (const source of sources) source.disconnect(); effects.disconnect(); silent.disconnect(); clock.disconnect(); onended(); };
+    return { node: effects.output, stop: (at: number) => { for (const source of sources) { try { source.stop(at); } catch { /* already ended */ } } clock.stop(at + 3); } };
   }, { type: 'sample', tag: 'recorded-take' });
   return name;
 }

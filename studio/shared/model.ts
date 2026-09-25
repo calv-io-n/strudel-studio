@@ -152,7 +152,7 @@ export const ProjectSchema = z.union([ProjectV8Schema, z.union([ProjectV7Schema,
   for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
   return z.NEVER;
 });
-export const PROJECT_FORMAT = 7;
+export const PROJECT_FORMAT = 8;
 /** Why a project payload was rejected, with field paths from the schema that matches its declared version instead of the union's generic message. */
 export function describeProjectIssues(value: unknown) {
   const schema = (value as { version?: unknown } | null)?.version === 8 ? ProjectV8Schema : (value as { version?: unknown } | null)?.version === 7 ? ProjectV7Schema : (value as { version?: unknown } | null)?.version === 6 ? ProjectV6Schema : (value as { version?: unknown } | null)?.version === 4 ? ProjectV4Schema : ProjectV5Schema;

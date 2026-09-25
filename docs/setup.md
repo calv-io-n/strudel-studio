@@ -93,7 +93,7 @@ Timeline waveforms show each audio clip's source through its anchors, including 
 
 ### Swapping a named chop
 
-Click a marked sound name in a pattern, such as `opening` in `opening.struct(...)`, or its name above the editor. The catalogue opens for that destination. Select a sound and play your connected MIDI controller or the test keys. For a sample, drag a region of the waveform to audition a smaller cut; beat alignment and pitch-preserving stretch are under the collapsed advanced controls.
+Click a marked sound name in a pattern, such as `opening` in `opening.struct(...)`, or its name above the editor. The catalogue opens for that destination. Select a sound and play your connected MIDI controller or the test keys. For a sample, drag a region of the waveform to audition a smaller cut; the beat grid, snapping and click track are under the collapsed advanced controls; fit or align the saved cut from its clip.
 
 Choose **Use for Opening** to save the selected cut and replace that chop's source. Its rhythm and effects remain in the pattern. During playback, the confirmed replacement is queued for the next cycle; unrelated code drafts remain unapplied. Cancel leaves the pattern unchanged. If the destination changed or does not exist in the playing version, stop playback and select it again. Undo restores the previous source in the editor; use Apply to hear an undo during playback.
 
