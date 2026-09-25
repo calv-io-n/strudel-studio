@@ -68,3 +68,13 @@ test('smart snap pulls attacks near grid lines onto them and skips anchors that 
  const wide=smartSnap([.51],[{source:0,beat:0}],bpm,{grid:1,toleranceSeconds:.05});
  assert.deepEqual(wide.anchors,[{source:0,beat:0},{source:.51,beat:1}]);
 });
+
+import {takeWindow} from '../shared/clip-timing';
+test('playback window covers the lead silence, the transport start and the audible end in rendered-buffer seconds',()=>{
+ const anchored={...clip,anchors:warp};
+ assert.deepEqual(takeWindow(anchored,4,bpm,0),{begin:.5,end:2,offset:0,seconds:3});
+ assert.deepEqual(takeWindow(anchored,4,bpm,-1),{begin:1,end:2,offset:1,seconds:2});
+ assert.deepEqual(takeWindow(clip,1.5,bpm,0),{begin:0,end:.75,offset:0,seconds:1.5});
+ assert.equal(takeWindow(anchored,4,bpm,-2),undefined);
+ assert.equal(takeWindow({...clip,anchors:[{source:10,beat:0}]},4,bpm,0),undefined);
+});

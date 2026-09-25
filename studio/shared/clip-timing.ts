@@ -94,3 +94,10 @@ export function smartSnap(attacks: number[], anchors: ClipAnchor[], bpm: number,
   }
   return { anchors: result, snapped, skipped };
 }
+/** What a take clip plays, clip-local: cycles on the timeline and seconds into the timeline-linear rendered buffer. */
+export function takeWindow(clip: TimedClip, duration: number, bpm: number, cycleOffset: number) {
+  const anchors = clipAnchors(clip), lead = anchors[0].beat / 4;
+  const begin = Math.max(lead, -cycleOffset), end = Math.min(clip.length, endBeat(anchors, bpm, duration) / 4);
+  if (begin >= end) return;
+  return { begin, end, offset: (begin - lead) * 240 / bpm, seconds: (end - begin) * 240 / bpm };
+}
