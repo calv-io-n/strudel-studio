@@ -1,3 +1,4 @@
+import { singleSampleId } from '../shared/sample-placement';
 import { installPreciseQueries } from '../shared/pattern-time';
 import { optimizeRecordedMidi } from '../shared/optimize-midi';
 import { tempoRate } from '../shared/tempo';
@@ -14,6 +15,7 @@ import { slotName } from '../shared/slots';
 import { RenderOptionsSchema, renderMemory, assertRenderBudget } from '../shared/render-options';
 import { encodeAudio } from './encode';
 import { prepareTake, takePattern, takeTabClip } from './take-playback';
+import { clipAnchors, renderKey } from '../shared/clip-timing';
 const send = (message: object) => parent.postMessage(message, location.origin);
 let started = false;
 window.addEventListener('message', async event => {
@@ -49,7 +51,7 @@ window.addEventListener('message', async event => {
       await core.evalScope({ setCpm: () => core.silence, setcpm: () => core.silence, setCps: () => core.silence, setcps: () => core.silence });
     } });
     const patterns = new Map<string, Pattern>(), clips = project.clips.map(c => ({ ...c, muted: isClipMuted(c, project.tracks, project.soloTrackId) }));
-    const ids = target === 'composition' ? [...new Set(clips.filter(c => !c.muted && (!c.takeId || project.tabs.find(t => t.id === c.tabId)?.audioAssetId)).map(c => c.tabId))] : [target];
+    const ids = target === 'composition' ? [...new Set(clips.filter(c => !c.muted && (!c.takeId || c.playback === 'once' || project.tabs.find(t => t.id === c.tabId)?.audioAssetId)).map(c => c.tabId))] : [target];
     let cps = project.bpm / 240;
     for (const id of ids) {
       const tab = project.tabs.find(tab => tab.id === id)!;
@@ -71,13 +73,19 @@ window.addEventListener('message', async event => {
     const offline = new OfflineAudioContext(2, Math.ceil(seconds * options.rate), options.rate);
     audio.setAudioContext(offline); audio.setSuperdoughAudioController(null); audio.resetGlobalEffects(); await audio.initAudio();
     let takeVoices = 0;
+    const preparedTakes = new Map<string, string>();
     if (target === 'composition') for (const clip of clips.filter(c => !c.muted && c.takeId)) {
       const snapshot = snapshots.get(clip.takeId!); if (!snapshot) throw new Error(`Take ${clip.takeId} is missing. Restore its backup.`);
-      await prepareTake(snapshot.asset, project, offline, snapshot.blob); patterns.set(clip.id, takePattern(clip, snapshot.asset, cps, project.tabs.find(t => t.id === clip.tabId)?.audioAssetId ? patterns.get(clip.tabId) : undefined)); takeVoices++;
+      const sampleId = singleSampleId(project.tabs.find(t => t.id === clip.tabId)!.code);
+      if (clip.playback === 'once' && sampleId !== clip.takeId && sampleId !== snapshot.asset.extraction?.assetId) throw new Error('This one-shot clip needs a single sample. Switch its playback to Repeat pattern after editing its rhythm.');
+      const preparationKey=`${snapshot.asset.id}:${renderKey(clipAnchors(clip), project.bpm)}`;
+      let name = preparedTakes.get(preparationKey);
+      if (!name) { name = await prepareTake(snapshot.asset, project, offline, snapshot.blob, clip); preparedTakes.set(preparationKey, name); takeVoices++; }
+      patterns.set(clip.id, takePattern(clip, snapshot.asset, project.bpm, name, (clip.playback === 'once' || project.tabs.find(t => t.id === clip.tabId)?.audioAssetId) ? patterns.get(clip.tabId) : undefined));
     }
     if (tabTake) {
-      await prepareTake(tabTake.asset, project, offline, tabTake.blob);
-      patterns.set(target, takePattern(takeTabClip(target, tabTake.asset, cps), tabTake.asset, cps, patterns.get(target))); takeVoices++;
+      const name = await prepareTake(tabTake.asset, project, offline, tabTake.blob);
+      patterns.set(target, takePattern(takeTabClip(target, tabTake.asset, cps), tabTake.asset, project.bpm, name, patterns.get(target))); takeVoices++;
     }
     const pattern = target === 'composition' ? arrangement(clips, patterns, undefined, undefined, new Map(project.tabs.map(t => [t.id, tempoRate(t, project.bpm)]))) : ratePattern(patterns.get(target)!, tempoRate(project.tabs.find(t => t.id === target)!, project.bpm));
     const windows: { value: any; at: number; duration: number }[][] = [];

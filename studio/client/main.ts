@@ -1,4 +1,5 @@
 import { recordedTakePlacement } from '../shared/recorded-take';
+import { tempoChangeIssue } from '../shared/clip-timing';
 import { wavInfo } from '../shared/wav';
 import { VocalAligner } from './vocal-aligner';
 import { AssetSchema } from '../shared/model';
@@ -1957,7 +1958,7 @@ $('#clip-dialog').addEventListener('close', () => void guard(async () => {
     putClip(next);notice('Clip saved.');
   }
 })());
-$('#bpm').onchange = guard(() => { editArrangement(); if (recordingPanel.pending) throw new Error('Resolve the audio take before changing tempo.'); const bpm = Number($('#bpm').value); if (!Number.isFinite(bpm) || bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); project.bpm = bpm; syncProjectTempo(); dirty(); });
+$('#bpm').onchange = guard(() => { editArrangement(); if (recordingPanel.pending) throw new Error('Resolve the audio take before changing tempo.'); const bpm = Number($('#bpm').value); if (!Number.isFinite(bpm) || bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); const issue = tempoChangeIssue(project.clips.map(c => ({ ...c, name: project.tabs.find(t => t.id === c.tabId)?.name })), takeId => assetById(takeId).duration ?? 0, bpm); if (issue) throw new Error(issue); project.bpm = bpm; syncProjectTempo(); dirty(); });
 installCompositionGestures({ reveal: () => setDrawer('composition'), project: () => project, placement: placementFor, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
 
 const contextMenu = new ContextMenu();

@@ -78,3 +78,11 @@ test('playback window covers the lead silence, the transport start and the audib
  assert.equal(takeWindow(anchored,4,bpm,-2),undefined);
  assert.equal(takeWindow({...clip,anchors:[{source:10,beat:0}]},4,bpm,0),undefined);
 });
+
+import {tempoChangeIssue} from '../shared/clip-timing';
+test('a tempo change is refused while it would push an anchored clip past the stretch limit',()=>{
+ const clips=[{id:'a',name:'Vocal hook',takeId:'x',anchors:[{source:0,beat:0},{source:1,beat:3.8}]},{id:'b',name:'Take',takeId:'x'}];
+ assert.equal(tempoChangeIssue(clips,()=>4,120),undefined);
+ assert.match(tempoChangeIssue(clips,()=>4,110)!,/Vocal hook.*110 BPM/);
+ assert.equal(tempoChangeIssue(clips,()=>4,130),undefined);
+});

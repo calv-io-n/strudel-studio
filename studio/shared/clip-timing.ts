@@ -101,3 +101,11 @@ export function takeWindow(clip: TimedClip, duration: number, bpm: number, cycle
   if (begin >= end) return;
   return { begin, end, offset: (begin - lead) * 240 / bpm, seconds: (end - begin) * 240 / bpm };
 }
+/** Why a tempo change must wait: the first anchored clip whose stretch would leave 0.5×–2× at the new tempo. */
+export function tempoChangeIssue(clips: { id: string; name?: string; takeId?: string; anchors?: ClipAnchor[] }[], duration: (takeId: string) => number, bpm: number) {
+  for (const clip of clips) {
+    if (!clip.takeId || !clip.anchors) continue;
+    try { validateAnchors(clip.anchors, duration(clip.takeId), bpm); }
+    catch { return `Clip ${clip.name ?? clip.id}: its stretch would leave the 0.5×–2× limit at ${bpm} BPM. Open Align… to adjust it first.`; }
+  }
+}
