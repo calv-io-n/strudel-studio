@@ -6,7 +6,7 @@ import { zipSync, strToU8 } from 'fflate';
 import { decodeWav, encodeWav } from '../studio/shared/wav';
 import { newProject, parseProject, AssetSchema, palette, type Asset } from '../studio/shared/model';
 import { suggestAttacks } from '../studio/shared/anchor-render';
-import { smartSnap, type ClipAnchor } from '../studio/shared/clip-timing';
+import { paceFit, type ClipAnchor } from '../studio/shared/clip-timing';
 import { tempoHeader } from '../studio/shared/tempo';
 const source = resolve(process.argv[2] ?? `${process.env.HOME}/.config/StemKit/songs/ngZiYEJgJnU/stems`);
 const out = resolve(process.argv[3] ?? '.local/liquid-dawn');
@@ -15,8 +15,8 @@ const digest = (b: Uint8Array | string) => createHash('sha256').update(b).digest
 const uuid = (name: string) => { const h = digest(`liquid-dawn-v1:${name}`); return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}`; };
 const rate=44100, bpm=172, bar=240/bpm;
 // Source grid measured from the stems: the frame-exact hook cut is 16 source beats and its start sits on a beat.
-// One source beat becomes two beats at 172 BPM (half-time feel), a 1.27x stretch with pitch preserved.
-const sourceBpm=108.9, downbeat=3455042/rate, sourceBeat=60/sourceBpm, beatRatio=2;
+// Phrases ship at natural pace, snapped to whole bars at 172 BPM; Pace: half time is one right-click away in Studio.
+const sourceBpm=108.9, downbeat=3455042/rate, sourceBeat=60/sourceBpm;
 const atBeat=(n:number)=>downbeat+n*sourceBeat;
 const assets: Asset[]=[]; const audio=new Map<string,Uint8Array>(); const names: Record<string,string>={}; const cuts: any[]=[];
 const sourceIds={vocals:'cdebdd7f-b075-4d06-a68d-d1cd7480e8f8',other:'86fd66ba-ab15-4064-bc93-fef5ac6ad001'};
@@ -35,16 +35,16 @@ async function cut(key:string,label:string,stem:'vocals'|'other',start:number,en
  cuts.push({key,label,stem,start,end,fadeMs:8});
  await saveSound(key,label,d.left.slice(a,z),d.right.slice(a,z),{name:`When It's Cold I'd Like To Die · ${stem}`,assetId:sourceIds[stem],hash:hashes.get(stem),rate,startFrame:a,endFrame:z});
 }
-// Phrases start on source beats: the hook on its downbeat, the answer 2.5 beats before its own (a pickup).
-const phrases={hook:{label:'Original vocal hook',from:0,to:16,pickup:0},answer:{label:'Vocal answer phrase',from:17.5,to:31,pickup:2.5}} as const;
-const anchors:Record<string,ClipAnchor[]>={};
+// Phrases start on source beats; each is played at natural pace and its length snapped to whole bars (two anchors).
+const phrases={hook:{label:'Original vocal hook',from:0,to:16},answer:{label:'Vocal answer phrase',from:17.5,to:31}} as const;
+const anchors:Record<string,ClipAnchor[]>={},bars:Record<string,number>={};
 for (const [key,phrase] of Object.entries(phrases)) {
  await cut(key,phrase.label,'vocals',atBeat(phrase.from),atBeat(phrase.to));
- const decoded=decodeWav(audio.get(uuid(key))!),beats=(phrase.to-phrase.from)*beatRatio;
- const uniform:ClipAnchor[]=[{source:0,beat:0},{source:decoded.left.length/rate,beat:beats}];
+ const decoded=decodeWav(audio.get(uuid(key))!),seconds=decoded.left.length/rate;
+ const paced=paceFit({start:0,length:64,anchors:[{source:0,beat:0}]},seconds,bpm,1,'bar');
+ anchors[key]=paced.anchors;bars[key]=paced.bars;
  const attacks=suggestAttacks(decoded,0,decoded.left.length).map(f=>f/rate);
- const snapped=smartSnap(attacks,uniform,bpm,{grid:.5,toleranceSeconds:.07});
- anchors[key]=snapped.anchors;cuts.at(-1)!.grid={sourceBpm,sourceBeats:[phrase.from,phrase.to],beatRatio,anchors:snapped.anchors,snapped:snapped.snapped,skipped:snapped.skipped};
+ cuts.at(-1)!.grid={sourceBpm,sourceBeats:[phrase.from,phrase.to],pace:Number(paced.speed.toFixed(3)),bars:paced.bars,anchors:paced.anchors,attacks};
 }
 
 await cut('opening','Opening syllable','vocals',78.65,79.17);
@@ -155,10 +155,9 @@ clip('drums','march',32,32);clip('drums','march',80,32);
 clip('hats','hats',16,48);clip('hats','hats',76,40);
 clip('sub','sub',24,40,8);clip('sub','sub',80,40);
 clip('saws','saws',24,40,8);clip('saws','saws',80,40,32);
-// Each phrase clip starts so its source downbeat lands on a bar line; the answer's pickup leads in from the previous bar.
-for (const [id,key,bars] of [['phrases','hook',[8,48,64,104,112]],['answer','answer',[16,56,72,96,120]]] as const) {
- const phrase=phrases[key],lead=phrase.pickup*beatRatio/4,length=(phrase.to-phrase.from)*beatRatio/4;
- for (const bar of bars) {clip(id,id,bar-lead,length);delete project.clips.at(-1)!.sourceOffset;Object.assign(project.clips.at(-1)!,{takeId:uuid(key),playback:'once',anchors:anchors[key].map(a=>({...a}))});}
+// Each phrase clip starts on a bar line and lasts its natural-pace bar count.
+for (const [id,key,starts] of [['phrases','hook',[8,48,64,104,112]],['answer','answer',[16,56,72,96,120]]] as const) {
+ for (const start of starts) {clip(id,id,start,bars[key]);delete project.clips.at(-1)!.sourceOffset;Object.assign(project.clips.at(-1)!,{takeId:uuid(key),playback:'once',anchors:anchors[key].map(a=>({...a}))});}
 }
 clip('chops','chops',24,24);clip('chops','chops',80,16);
 clip('sparkle','sparkle',40,24,8);clip('sparkle','sparkle',88,32,8);
@@ -168,5 +167,5 @@ const parsed=parseProject(project);await writeFile(join(out,'project.json'),JSON
 const files:Record<string,Uint8Array>={'project.json':strToU8(JSON.stringify(parsed)),'manifest.json':strToU8(JSON.stringify({version:1,missing:[],externalUrls:[]}))};
 for(const a of assets){files[`assets/${a.id}.json`]=strToU8(JSON.stringify(a));files[`assets/${a.id}.wav`]=audio.get(a.id)!;files[`assets/${a.id}.original.wav`]=audio.get(a.id)!;}
 await writeFile(join(out,'Liquid-Dawn.strudel.zip'),zipSync(files,{level:0}));
-await writeFile(join(out,'README.md'),`# When It's Cold — Liquid Dawn\n\n172 BPM · 128 bars · ${Math.round(128*bar)} seconds plus effect tail.\n\nOpen this project in local Studio and press Composition Play. Select any named tab and press tab Play to audition it alone. Your earlier composition is separate.\n\n## Explore the sounds\n\n- Vocal Syncopation: change named chops or move the 1s in their rhythms (0 means rest). Four bracketed bars alternate.\n- Vocal Hook / Vocal Answer: the original phrases, placed as one-shot clips whose anchors map source beats (about 109 BPM) onto the 172 BPM grid at half time, with attacks Smart-snapped to eighths. Right-click a clip → Align… to move syllables, refit bars or re-snap; the audio files stay untouched.\n- Wide Saws: start with the brightness slider, then level.\n- Reese Bass replaces Warm Sub; Trance Pluck replaces Sparkle; Chopped Breaks replaces Liquid Drums. Remove/mute the original lane clip before placing an alternative to avoid doubling the part.\n- Each sample can be opened through Sample Catalogue → Liquid Dawn → Edit sample.\n\n## Arrangement\n\nBars 1–16: cinematic march; 17–32: build; 33–64: first drop; 65–80: vocal breakdown; 81–112: final drop; 113–128: outro.\n\n## Files\n\nLiquid-Dawn.strudel.zip is a portable project backup with all required audio. Liquid-Dawn.wav is the full mix preview (created by Chrome verification). cuts.json records source times, boundary fades and each phrase's measured grid and anchors. samples/ contains individually usable WAVs.\n\n## Sources\n\nVocal and instrumental crops: your local StemKit separation of When It's Cold I'd Like To Die. Drums are original synthesis because the separated drum stem is near silent. Working crops use 8 ms boundary fades; sources are untouched.\n\nReference videos: https://www.youtube.com/watch?v=3h1vM0lIrpM and https://www.youtube.com/watch?v=dcmwqqzJubA (video playback was unavailable during research). Technical references: https://strudel.cc/learn/samples/ and https://strudel.cc/learn/effects/.\n\nRebuild: node --import tsx scripts/build-liquid-dawn.ts /path/to/stems .local/liquid-dawn\n`);
+await writeFile(join(out,'README.md'),`# When It's Cold — Liquid Dawn\n\n172 BPM · 128 bars · ${Math.round(128*bar)} seconds plus effect tail.\n\nOpen this project in local Studio and press Composition Play. Select any named tab and press tab Play to audition it alone. Your earlier composition is separate.\n\n## Explore the sounds\n\n- Vocal Syncopation: change named chops or move the 1s in their rhythms (0 means rest). Four bracketed bars alternate.\n- Vocal Hook / Vocal Answer: the original phrases at natural pace, each snapped to whole bars (hook 6, answer 5) as one-shot clips. Right-click a clip → Pace: half time / natural / double time for a one-click change, or Align… to Smart snap syllables, start at the first attack, or drag anchors; pitch and the audio files stay untouched.\n- Wide Saws: start with the brightness slider, then level.\n- Reese Bass replaces Warm Sub; Trance Pluck replaces Sparkle; Chopped Breaks replaces Liquid Drums. Remove/mute the original lane clip before placing an alternative to avoid doubling the part.\n- Each sample can be opened through Sample Catalogue → Liquid Dawn → Edit sample.\n\n## Arrangement\n\nBars 1–16: cinematic march; 17–32: build; 33–64: first drop; 65–80: vocal breakdown; 81–112: final drop; 113–128: outro.\n\n## Files\n\nLiquid-Dawn.strudel.zip is a portable project backup with all required audio. Liquid-Dawn.wav is the full mix preview (created by Chrome verification). cuts.json records source times, boundary fades and each phrase's measured grid and anchors. samples/ contains individually usable WAVs.\n\n## Sources\n\nVocal and instrumental crops: your local StemKit separation of When It's Cold I'd Like To Die. Drums are original synthesis because the separated drum stem is near silent. Working crops use 8 ms boundary fades; sources are untouched.\n\nReference videos: https://www.youtube.com/watch?v=3h1vM0lIrpM and https://www.youtube.com/watch?v=dcmwqqzJubA (video playback was unavailable during research). Technical references: https://strudel.cc/learn/samples/ and https://strudel.cc/learn/effects/.\n\nRebuild: node --import tsx scripts/build-liquid-dawn.ts /path/to/stems .local/liquid-dawn\n`);
 console.log(JSON.stringify({project:parsed.name,tabs:parsed.tabs.length,clips:parsed.clips.length,samples:assets.length,audioMB:[...audio.values()].reduce((n,b)=>n+b.length,0)/1e6,out}));

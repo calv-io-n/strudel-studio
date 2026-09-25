@@ -1,6 +1,6 @@
 import type {Asset,Clip} from '../shared/model';
 import {wavInfo} from '../shared/wav';
-import {clipAnchors,validateAnchors,sourceAtBeat,beatAtSource,endBeat,fitToBeats,smartSnap,withAnchors,type ClipAnchor} from '../shared/clip-timing';
+import {clipAnchors,validateAnchors,sourceAtBeat,beatAtSource,endBeat,fitToBeats,smartSnap,withAnchors,paceFit,phrasePace,startAtSource,type ClipAnchor,type PaceGrid} from '../shared/clip-timing';
 import {audioBlob} from './storage/workspace';
 import {audioJob} from './take-buffers';
 import type {Engine} from './engine';
@@ -19,7 +19,8 @@ export class AlignDialog {
   this.dialog.className='align-dialog';this.dialog.setAttribute('aria-label','Align');
   this.dialog.innerHTML=`<h2>Align</h2><p data-title></p>
 <div class="align-toolbar"><button type="button" data-play>Play with song</button><div role="group" aria-label="Compare timing"><button type="button" data-mode="original" aria-pressed="false">Original</button><button type="button" data-mode="aligned" aria-pressed="true">Aligned</button></div><label><input type="checkbox" data-suggestions checked> Suggest attacks</label></div>
-<div class="align-toolbar"><span>Fit phrase to</span><button type="button" data-fit="1">1 bar</button><button type="button" data-fit="2">2 bars</button><button type="button" data-fit="4">4 bars</button><button type="button" data-fit="8">8 bars</button><span class="align-spacer"></span><label>Grid <select data-snap-grid aria-label="Smart snap grid"><option value="1">Beat</option><option value=".5" selected>1/8</option><option value=".25">1/16</option></select></label><button type="button" data-snap>Smart snap</button><button type="button" data-undo disabled>Undo</button><button type="button" data-reset>Reset</button></div>
+<div class="align-toolbar"><span>Pace</span><div role="group" aria-label="Pace presets"><button type="button" data-pace=".5" title="Half time">½×</button><button type="button" data-pace=".75">¾×</button><button type="button" data-pace="1">Natural</button><button type="button" data-pace="1.5">1½×</button><button type="button" data-pace="2" title="Double time">2×</button></div><label>Bars <input data-fit-bars type="number" min=".25" max="64" step=".25" value="4"></label><button type="button" data-fit>Fit</button><label>snap to <select data-pace-grid aria-label="Pace snapping"><option value="bar" selected>bar</option><option value="beat">beat</option></select></label><button type="button" data-start-attack>Start at first attack</button></div>
+<div class="align-toolbar"><label>Grid <select data-snap-grid aria-label="Smart snap grid"><option value="1" selected>Beat</option><option value=".5">1/8</option><option value=".25">1/16</option></select></label><button type="button" data-snap>Smart snap</button><span class="align-spacer"></span><button type="button" data-undo disabled>Undo</button><button type="button" data-reset>Reset</button></div>
 <p>Drag an attack or anchor onto a beat. Double-click to add an anchor. Alt: free timing · Arrows: 1/16 note · Delete: remove anchor · Ctrl+Z: undo.</p>
 <div class="align-scroll"><div class="align-grid" tabindex="0" aria-label="Waveform and beat anchors"><canvas></canvas><div class="align-ruler"></div><div class="align-interval-error" hidden></div><div class="align-markers"></div><div class="align-playhead" hidden></div></div></div>
 <p data-status role="status">Loading audio…</p>
@@ -31,7 +32,9 @@ export class AlignDialog {
   this.el('[data-play]').onclick=()=>{if(this.playing||this.engine.busy){this.stop();}else{this.playing=true;this.el('[data-play]').textContent='Stop';void this.preview();}};
   for(const mode of ['original','aligned'])this.el(`[data-mode=${mode}]`).onclick=()=>{this.original=mode==='original';this.paintModes();if(this.playing)void this.preview();};
   this.el('[data-suggestions]').onchange=()=>this.draw();
-  for(const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-fit]'))button.onclick=()=>this.fit(Number(button.dataset.fit));
+  for(const button of this.dialog.querySelectorAll<HTMLButtonElement>('[data-pace]'))button.onclick=()=>this.pace(Number(button.dataset.pace));
+  this.el('[data-fit]').onclick=()=>this.fit(this.el<HTMLInputElement>('[data-fit-bars]').valueAsNumber);
+  this.el('[data-start-attack]').onclick=()=>this.startAttack();
   this.el('[data-snap]').onclick=()=>this.snap();
   this.el('[data-undo]').onclick=()=>this.undo();
   this.dialog.addEventListener('keydown',e=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'&&!this.applying){e.preventDefault();this.undo();}});
@@ -90,6 +93,19 @@ export class AlignDialog {
   try{const fitted=fitToBeats({start:this.clip.start,length:this.draft.length,anchors:this.draft.anchors},this.duration,this.bpm,bars*4);this.draft={anchors:fitted.anchors,length:fitted.length};this.selected=undefined;this.changed();this.status(`Fitted the phrase to ${bars} ${bars===1?'bar':'bars'} (${fitted.length*4} beats). Play with the song to check it.`);}
   catch(error){this.report(error);}
  }
+ private paceGrid(){return this.el<HTMLSelectElement>('[data-pace-grid]').value as PaceGrid;}
+ private pace(factor:number){
+  if(!this.draft||!this.clip)return;this.remember();
+  try{const paced=paceFit({start:this.clip.start,length:this.draft.length,anchors:this.draft.anchors},this.duration,this.bpm,factor,this.paceGrid());this.draft={anchors:paced.anchors,length:paced.length};this.selected=undefined;this.changed();this.status(`${paced.speed.toFixed(2)}× natural pace over ${paced.bars} ${paced.bars===1?'bar':'bars'}, pitch unchanged. Play with the song, then Smart snap to lock syllables.`);}
+  catch(error){this.history.pop();this.el<HTMLButtonElement>('[data-undo]').disabled=!this.history.length;this.report(error);}
+ }
+ private startAttack(){
+  if(!this.draft||!this.analysis)return;const first=this.draft.anchors[0],attack=this.analysis.attacks.find(a=>a>first.source+.005);
+  if(attack===undefined){this.status('No attack found after the current start.');return;}
+  this.remember();
+  try{this.draft.anchors=startAtSource(this.draft.anchors,attack);this.selected=attack;this.changed();this.status('The phrase now starts at its first attack, on the same beat.');}
+  catch(error){this.history.pop();this.el<HTMLButtonElement>('[data-undo]').disabled=!this.history.length;this.report(error);}
+ }
  private snap(){
   if(!this.draft||!this.analysis)return;
   const grid=Number(this.el<HTMLSelectElement>('[data-snap-grid]').value) as 1|.5|.25,result=smartSnap(this.analysis.attacks,this.draft.anchors,this.bpm,{grid});
@@ -140,6 +156,6 @@ export class AlignDialog {
   this.el('.align-ruler').innerHTML=Array.from({length:Math.ceil(beats*4)+1},(_,i)=>{const tick=i+origin*4;if(i/4>beats)return '';return `<span class="${tick%16===0?'beat':''}${i/4===clipEnd?' clip-end':''}" style="left:${i/4/beats*100}%">${tick%16===0?tick/16+1:''}</span>`;}).join('');
   const suggestions=this.el<HTMLInputElement>('[data-suggestions]').checked?this.analysis.attacks.filter(source=>!anchors.some(a=>a.source===source)).flatMap(source=>{const beat=beatAtSource(anchors,bpm,source);return beat===undefined||beat>beats?[]:[{source,beat,active:false}];}):[];
   this.el('.align-markers').innerHTML=[...anchors.map(a=>({...a,active:true})),...suggestions].map(a=>`<button type="button" class="align-anchor ${a.active?'active':'suggested'}" data-source="${a.source}" aria-pressed="${a.source===this.selected}" aria-label="${a.active?'Anchor':'Suggested attack'} at beat ${this.label(a.beat)}" style="left:${a.beat/beats*100}%"><span>${a.active?(a.source===anchors[0].source?'│':'◆'):'◇'}</span></button>`).join('');
-  this.el('[data-summary]').textContent=`${anchors.length} ${anchors.length===1?'anchor':'anchors'} · ${this.draft.length*4} beats`;
+  const pace=phrasePace(anchors,bpm);this.el('[data-summary]').textContent=`${anchors.length} ${anchors.length===1?'anchor':'anchors'} · ${this.draft.length*4} beats${pace!==undefined?` · ${pace.toFixed(2)}× natural pace · pitch preserved`:''}`;this.el<HTMLInputElement>('[data-fit-bars]').value=String(this.draft.length);
  }
 }

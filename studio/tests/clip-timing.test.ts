@@ -95,3 +95,28 @@ test('smart snap tolerance never exceeds a third of the grid interval',()=>{
  assert.equal(smartSnap([.56],base,bpm,{grid:.5}).snapped,1);
  assert.equal(smartSnap([.03],base,bpm,{grid:.25}).skipped,1); // would land on the first anchor's beat
 });
+
+import {startAtSource,phrasePace} from '../shared/clip-timing';
+test('starting a phrase at a later sample second keeps its beat and drops anchors it passes',()=>{
+ assert.deepEqual(startAtSource([{source:0,beat:0},{source:1,beat:2},{source:2,beat:4}],.5),[{source:.5,beat:0},{source:1,beat:2},{source:2,beat:4}]);
+ assert.deepEqual(startAtSource([{source:0,beat:1},{source:1,beat:2},{source:2,beat:4}],1.5),[{source:1.5,beat:1},{source:2,beat:4}]);
+ assert.deepEqual(startAtSource([{source:0,beat:0}],3),[{source:3,beat:0}]);
+ assert.throws(()=>startAtSource([{source:0,beat:0},{source:1,beat:2}],1),/before/);
+});
+test('phrase pace reports the stretched span as a speed factor against natural pace',()=>{
+ assert.equal(phrasePace([{source:0,beat:0}],bpm),undefined);
+ assert.equal(phrasePace([{source:0,beat:0},{source:2,beat:4}],bpm),1);   // 2 s → 4 beats at 120 = 2 s
+ assert.equal(phrasePace([{source:0,beat:0},{source:4,beat:4}],bpm),2);   // 4 s squeezed into 2 s plays twice as fast
+ assert.ok(Math.abs(phrasePace([{source:0,beat:0},{source:8.8,beat:24}],172)!-1.05)<.01);
+});
+
+import {paceFit} from '../shared/clip-timing';
+test('pace presets play a phrase at a speed factor and snap its length to whole bars or beats',()=>{
+ const phrase={start:8,length:8,anchors:[{source:0,beat:0}]},duration=8.8; // 8.8 s at 172 BPM = 25.2 beats
+ const natural=paceFit(phrase,duration,172,1,'bar');
+ assert.equal(natural.bars,6);assert.equal(natural.length,6);assert.deepEqual(natural.anchors,[{source:0,beat:0},{source:8.8,beat:24}]);assert.ok(Math.abs(natural.speed-1.051)<.005);
+ const half=paceFit(phrase,duration,172,.5,'bar');assert.equal(half.bars,12);assert.ok(Math.abs(half.speed-.526)<.005);
+ assert.equal(paceFit(phrase,duration,172,1,'beat').anchors[1].beat,25);
+ assert.throws(()=>paceFit(phrase,duration,172,2,'bar'),/Choose 13–50 beats/);
+ assert.equal(paceFit({start:0,length:1,anchors:[{source:1,beat:2}]},1.4,120,1,'beat').anchors[0].beat,2); // keeps the lead
+});

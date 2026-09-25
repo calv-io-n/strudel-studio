@@ -45,7 +45,7 @@ test('manual anchors, invalid stretches and cancellation leave the composition i
 test('Smart snap places attacks on the grid, fitting sets the clip length, and a tempo change re-renders',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await setup(page);await open(page);const dialog=page.locator('.align-dialog');
  await dialog.locator('[data-snap]').click();await expect(dialog.locator('[data-status]')).toContainText('3 attacks snapped');await expect(dialog.locator('.align-anchor.active')).toHaveCount(4);
- await dialog.locator('[data-fit="1"]').click();await expect(dialog.locator('.align-anchor.active')).toHaveCount(2);await expect(dialog.locator('[data-summary]')).toContainText('4 beats');
+ await dialog.locator('[data-fit-bars]').fill('1');await dialog.locator('[data-fit]').click();await expect(dialog.locator('.align-anchor.active')).toHaveCount(2);await expect(dialog.locator('[data-summary]')).toContainText('4 beats');
  await dialog.locator('[data-apply]').click();await expect(dialog).not.toBeVisible({timeout:20000});await page.locator('#save-now').click();
  await expect.poll(async()=>(await saved(page)).clips.find((c:any)=>c.id==='voice-clip').length).toBe(1);const fitted=(await saved(page)).clips.find((c:any)=>c.id==='voice-clip').anchors;expect(fitted[0]).toEqual({source:0,beat:0});expect(fitted[1].beat).toBe(4);expect(Math.abs(fitted[1].source-4)).toBeLessThan(.05);
  await expect(page.locator('[data-clip="voice-clip"] [data-clip-waveform]')).toHaveAttribute('data-ready','true');
@@ -53,4 +53,16 @@ test('Smart snap places attacks on the grid, fitting sets the clip length, and a
  const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64')));const first=audio.left.findIndex(v=>Math.abs(v)>.001);expect(tone220(audio.left.subarray(first,first+audio.rate*2),audio.rate)).toBeGreaterThan(.01);expect(Math.max(...audio.left.slice(first+Math.round(audio.rate*2.3)).map(Math.abs))).toBeLessThan(.001);
  await page.locator('#bpm').fill('100');await page.keyboard.press('Tab');await expect(page.locator('#bpm')).toHaveValue('100');
  await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(3000);await page.locator('#composition-stop').click();const retimed=await page.evaluate(()=>window.neonCapture.finish());expect(retimed.peak).toBeGreaterThan(.03);const again=decodeWav(new Uint8Array(Buffer.from(retimed.wav,'base64')));expect(tone220(again.left,again.rate)).toBeGreaterThan(.005);expect(errors).toEqual([]);
+});
+test('pace presets, the bars field, start at first attack and the timeline pace shortcut keep pitch and snap to bars',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await setup(page);await open(page);const dialog=page.locator('.align-dialog');
+ await dialog.locator('[data-pace="1"]').click();await expect(dialog.locator('[data-summary]')).toContainText('8 beats · 1.00×');
+ await dialog.locator('[data-pace=".5"]').click();await expect(dialog.locator('[data-summary]')).toContainText('16 beats · 0.50×');
+ await dialog.locator('[data-undo]').click();await expect(dialog.locator('[data-summary]')).toContainText('8 beats · 1.00×');
+ await dialog.locator('[data-start-attack]').click();const first=dialog.locator('.align-anchor.active').first();expect(Number(await first.getAttribute('data-source'))).toBeGreaterThan(.4);await expect(first).toHaveAttribute('aria-label',/beat 1.00/);
+ await dialog.locator('[data-apply]').click();await expect(dialog).not.toBeVisible({timeout:20000});await page.locator('#save-now').click();
+ await expect.poll(async()=>(await saved(page)).clips.find((c:any)=>c.id==='voice-clip').anchors?.[0].source).toBeGreaterThan(.4);expect((await saved(page)).clips.find((c:any)=>c.id==='voice-clip').length).toBe(2);
+ await page.locator('[data-clip="other-clip"]').click({button:'right'});await page.getByRole('menuitem',{name:'Pace: half time'}).click();await expect(page.locator('[data-clip="other-clip"]')).toContainText('16 beats');await expect(page.locator('[data-clip="other-clip"]')).toContainText('Aligned');
+ await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(2500);await page.locator('#composition-stop').click();const capture=await page.evaluate(()=>window.neonCapture.finish());expect(capture.peak).toBeGreaterThan(.03);
+ const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64')));expect(tone220(audio.left,audio.rate)).toBeGreaterThan(.005);expect(errors).toEqual([]);
 });

@@ -26,6 +26,8 @@ Baking aligned assets was rejected because every tweak added a WAV, tempo change
 
 Projects migrate v7→v8 purely: lead, offset and source offset on take clips become one anchor; the unreleased `sampleSpeed`, `sourceSampleId` and `warpSourceId` are dropped, and clips that already point at a warp-baked asset keep playing it at 1× (the one-shot check accepts an asset whose `extraction.assetId` is the tab's sample). Backups shrink because alignments no longer create assets. Stretching happens at playback preparation, so the first play after an alignment or tempo change waits for a render (bounded by the 60 s source limit and shared between duplicate clips). The sample editor only crops.
 
+Pacing is a first-class action: `paceFit` plays a phrase at a chosen speed factor (½×, ¾×, natural, 1½×, 2×) and snaps its length to whole bars or beats within the stretch limit; the dialog shows the resulting pace, and the timeline context menu offers the three common presets directly. Liquid Dawn ships its vocal phrases at natural pace snapped to bars rather than pre-snapped attacks.
+
 ## Validation and documentation
 
 Unit tests: `clip-timing.test.ts` (time map, trims, fits, Smart snap, playback window, tempo check), `anchor-render.test.ts` (pitch, joins, tail copy, exact 0.5×/2×), `model-migration.test.ts`. Browser: `align.spec.ts` (audition, non-destructive apply and reload, invalid intervals, Smart snap and fit, tempo re-render). Documentation: [setup](../setup.md#aligning-a-sample-to-the-song), [workspace](../workspace.md), [architecture/composition](../architecture/composition.md).

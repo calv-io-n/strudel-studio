@@ -1,5 +1,5 @@
 import { recordedTakePlacement } from '../shared/recorded-take';
-import { tempoChangeIssue } from '../shared/clip-timing';
+import { tempoChangeIssue, paceFit, withAnchors } from '../shared/clip-timing';
 import { AlignDialog } from './align-dialog';
 import { AssetSchema } from '../shared/model';
 import { ClipWaveforms } from './clip-waveforms';
@@ -1853,6 +1853,12 @@ const alignDialog=new AlignDialog(engine,clip=>{
  if(!canPlace(project.clips,clip))throw new Error('Use whole-beat increments and leave space between clips in the same track.');
  putClip(clip);notice('Alignment saved. The original sample is unchanged.');
 });
+function paceClip(id:string,pace:number){
+ editArrangement();const clip=project.clips.find(c=>c.id===id);if(!clip?.takeId)throw new Error('Choose a WAV audio clip.');
+ const paced=paceFit(clip,assetById(clip.takeId).duration??0,project.bpm,pace,'bar'),next=withAnchors({...clip,length:paced.length},paced.anchors);
+ if(project.clips.some(c=>c.id!==next.id&&c.trackId===next.trackId&&c.start<next.start+next.length&&next.start<c.start+c.length))throw new Error('The paced length overlaps another clip. Move the clip or shorten it first.');
+ putClip(next);notice(`${paced.speed.toFixed(2)}× natural pace over ${paced.bars} ${paced.bars===1?'bar':'bars'}, pitch unchanged. Open Align… to snap syllables.`);
+}
 function openAlignment(id:string){editArrangement();const clip=project.clips.find(c=>c.id===id);if(!clip?.takeId)throw new Error('Choose a WAV audio clip.');$('#clip-dialog').returnValue='cancel';$<HTMLDialogElement>('#clip-dialog').close();void alignDialog.open(clip,assetById(clip.takeId),project.bpm);}
 $('#clip-align').onclick=guard(()=>{if(editingClip)openAlignment(editingClip);});
 $('#clip-playback').onchange = () => {
@@ -1908,7 +1914,7 @@ function showContextMenu(target: HTMLElement, x: number, y: number, keyboard = f
     selector = `[data-clip="${id}"]`;
     actions = [
       action(clip.muted ? 'Unmute' : 'Mute', () => toggleClipMute(id)),
-      ...(clip.takeId?[action('Align…',()=>openAlignment(id),stopped)]:[]),
+      ...(clip.takeId?[action('Align…',()=>openAlignment(id),stopped),action('Pace: natural',()=>paceClip(id,1),stopped),action('Pace: half time',()=>paceClip(id,.5),stopped),action('Pace: double time',()=>paceClip(id,2),stopped)]:[]),
       action('Edit', () => openClip(id), stopped),
       action('Duplicate', () => duplicateClip(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : !duplicatePlacement(project.clips, clip, 'candidate') ? 'No room in this lane.' : undefined)),
       action('Open source pattern', () => switchTab(clip.tabId)),

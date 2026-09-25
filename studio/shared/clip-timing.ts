@@ -104,3 +104,30 @@ export function tempoChangeIssue(clips: { id: string; name?: string; takeId?: st
     catch { return `Clip ${clip.name ?? clip.id}: its stretch would leave the 0.5×–2× limit at ${bpm} BPM. Open Align… to adjust it first.`; }
   }
 }
+/** Speed of the anchored span against natural pace (2 = twice as fast); undefined for a lone anchor. */
+export function phrasePace(anchors: ClipAnchor[], bpm: number) {
+  if (anchors.length < 2) return;
+  const first = anchors[0], last = anchors[anchors.length - 1];
+  return (last.source - first.source) / ((last.beat - first.beat) * spb(bpm));
+}
+/** Start playback at a later sample second (an attack) while keeping the first anchor's beat; anchors it passes are dropped. */
+export function startAtSource(anchors: ClipAnchor[], source: number): ClipAnchor[] {
+  const first = anchors[0], last = anchors[anchors.length - 1];
+  if (anchors.length > 1 && source >= last.source) throw new Error('Start before the phrase ends.');
+  return [{ source, beat: first.beat }, ...anchors.slice(1).filter(a => a.source > source)];
+}
+export type PaceGrid = 'bar' | 'beat';
+/** Play the phrase at `pace` × natural speed, then snap its length to whole bars or beats; pitch is untouched. */
+export function paceFit(clip: TimedClip, duration: number, bpm: number, pace: number, grid: PaceGrid = 'bar') {
+  if (!Number.isFinite(pace) || pace <= 0) throw new Error('Choose a pace above zero.');
+  const first = clipAnchors(clip)[0], end = Math.min(duration, sourceAtBeat(clipAnchors(clip), bpm, clip.length * 4) ?? 0), seconds = end - first.source;
+  if (!(seconds > 0)) throw new Error('This clip has no audio in its playback window.');
+  const unit = grid === 'bar' ? 4 : 1, wanted = seconds / pace / spb(bpm);
+  // Nearest musical length inside the 0.5×–2× limit; refuse when that would miss the asked pace by more than a tenth.
+  const min = Math.ceil(seconds * bpm / 120 - 1e-8), max = Math.floor(seconds * bpm / 30 + 1e-8);
+  let beats = Math.max(unit, Math.round(wanted / unit) * unit);
+  if (beats > max) beats = Math.floor(max / unit) * unit; else if (beats < min) beats = Math.ceil(min / unit) * unit;
+  if (Math.abs(beats / wanted - 1) > .1) beats = Math.round(wanted / unit) * unit; // let fitToBeats explain the range
+  const fitted = fitToBeats(clip, duration, bpm, beats);
+  return { ...fitted, bars: beats / 4, speed: seconds / (beats * spb(bpm)) };
+}
