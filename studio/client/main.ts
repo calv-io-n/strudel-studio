@@ -1,11 +1,7 @@
 import { recordedTakePlacement } from '../shared/recorded-take';
 import { tempoChangeIssue } from '../shared/clip-timing';
-import { wavInfo } from '../shared/wav';
-import { VocalAligner } from './vocal-aligner';
+import { AlignDialog } from './align-dialog';
 import { AssetSchema } from '../shared/model';
-import { ClipAligner } from './clip-aligner';
-import { fitSampleToBeats, suggestedSampleFit } from '../shared/sample-timing';
-import {takeBuffer} from './take-buffers';
 import { ClipWaveforms } from './clip-waveforms';
 import { soundBindings, bindingAt, replaceBinding, type SoundBinding } from '../shared/sound-bindings';
 import { samplePlacement, singleSampleId } from '../shared/sample-placement';
@@ -204,7 +200,7 @@ app.innerHTML = `
   <div class="library-test"><span id="library-midi-status" role="status">Choose Live on a sound to play it from your controller</span><div id="library-keys" aria-label="Test keyboard" hidden>${libraryKeys}</div></div>
 </aside>
 <dialog id="edit-dialog"><form method="dialog"><h2 id="edit-title"></h2><label id="edit-label">Name<input id="edit-name" maxlength="80" required></label><p id="edit-description"></p><div class="form-row"><button type="button" value="cancel">Cancel</button><button type="submit" value="confirm" class="primary">Confirm</button></div></form></dialog>
-<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Position (beat)<input id="clip-start" step="1" type="number" min="1" max="16385" required></label><label>Duration (beats)<input id="clip-length" step="1" type="number" min="1" max="16384" required></label></div><label id="clip-playback-label" hidden>Sample playback<select id="clip-playback"><option value="once">Play once</option><option value="pattern">Repeat pattern</option></select></label><p id="clip-playback-help" hidden>Plays once at the selected sample speed. Extending adds silence; trimming shortens the playback window. Duplicate the clip to repeat it.</p><div id="clip-speed-controls" hidden><fieldset><legend>Vocal timing</legend><button type="button" id="clip-align-vocal" class="primary">Align vocal</button><p>Place syllables on beats and offbeats while listening with the song.</p><details><summary>Fit whole phrase length</summary><button id="clip-sync" type="button" class="primary">Fit phrase length</button><p id="clip-sync-hint"></p></details><p id="clip-fit-tempo"></p><div id="clip-align-preview" aria-label="Vocal alignment beat grid"></div><p>Drag the left handle to move the phrase. Drag the right handle to fit its end to a beat. Arrow keys move one beat.</p><details id="clip-fit-details"><summary>Adjust phrase length</summary><div class="form-row"><label>Fit length (beats)<input id="clip-fit-beats" type="number" min="1" max="16384" step="1" value="4"></label><button id="clip-fit" type="button">Fit to beats</button></div><div class="form-row" aria-label="Fit length presets"><button type="button" data-fit-beats="4">1 bar</button><button type="button" data-fit-beats="8">2 bars</button><button type="button" data-fit-beats="16">4 bars</button><button type="button" data-fit-beats="32">8 bars</button></div></details><p id="clip-fit-help" role="status">Fits the current audio phrase, removing empty space at the end. Pitch stays unchanged. Set Position above to choose its starting beat.</p></fieldset><details><summary>Manual sample speed</summary><label>Sample speed<input id="clip-speed" type="number" min="0.5" max="2" step="any" value="1"></label><p id="clip-speed-help">1× · original duration. Pitch stays unchanged. Use 1.5× or 2× for faster vocals.</p></details></div><details><summary>Source timing</summary><label>Source offset (cycles)<input id="clip-offset" type="number" min="0" max="4096" step="any"></label><p>Edges trim the playback window. Extending does not loop or stretch audio.</p></details><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
+<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Position (beat)<input id="clip-start" step="1" type="number" min="1" max="16385" required></label><label>Duration (beats)<input id="clip-length" step="1" type="number" min="1" max="16384" required></label></div><label id="clip-playback-label" hidden>Sample playback<select id="clip-playback"><option value="once">Play once</option><option value="pattern">Repeat pattern</option></select></label><p id="clip-playback-help" hidden>Plays once at the selected sample speed. Extending adds silence; trimming shortens the playback window. Duplicate the clip to repeat it.</p><div id="clip-audio-controls" hidden><fieldset><legend>Timing</legend><button type="button" id="clip-align" class="primary">Align…</button><p>Place syllables on beats, fit the phrase to bars, or Smart snap its attacks to the grid while listening with the song.</p></fieldset></div><details id="clip-offset-details"><summary>Source timing</summary><label>Source offset (cycles)<input id="clip-offset" type="number" min="0" max="4096" step="any"></label><p>Edges trim the playback window. Extending does not loop or stretch audio.</p></details><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>
 <input type="file" id="import-file" accept=".strudel,.str,.js" hidden><input id="backup-file" type="file" accept=".zip" hidden>`;
@@ -837,7 +833,7 @@ $('#chop-use').onclick=guard(async()=>{
     validateChopTarget();if(!asset && project.clips.some(c=>c.tabId===target.tabId&&c.playback==='once'))throw new Error('Choose a saved sample for a one-shot audio clip.');const change=replaceBinding(target.owner.code,target.binding!.id,target.binding!.sound,name);
     await engine.replaceSound(target.tabId!,target.binding!.id,target.binding!.sound,name);
     target.owner.view.dispatch({changes:change,userEvent:'input.sample',annotations:isolateHistory.of('full')});
-    if(asset){for(const clip of project.clips)if(clip.tabId===target.tabId&&clip.playback==='once'){clip.takeId=asset.id;clip.sourceSampleId=undefined;clip.warpSourceId=undefined;}if(!project.assetIds.includes(asset.id))project.assetIds.push(asset.id);}
+    if(asset){for(const clip of project.clips)if(clip.tabId===target.tabId&&clip.playback==='once'){clip.takeId=asset.id;delete clip.anchors;}if(!project.assetIds.includes(asset.id))project.assetIds.push(asset.id);}
     engine.syncSoundRevision(target.tabId!);dirty();renderChopSounds();replacingSound=false;setSounds(false);target.owner.view.focus();notice(engine.started?'Sound queued for the next cycle.':'Sound replaced.');
   }catch(error){$('#chop-status').textContent=(error as Error).message;throw error;}finally{replacingSound=false;$('#chop-use').disabled=false;}
 });
@@ -1777,7 +1773,7 @@ function renderComposition() {
   }
   $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" style="height:${trackRows.get(track.id)! * 84}px" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" style="height:${trackRows.get(track.id)! * 84}px" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
     const tab = project.tabs.find(t => t.id === c.tabId)!;
-    return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="top:${4 + clipRows.get(c.id)! * 84}px;left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · beat ${beatPosition(c.start)} · ${beatDuration(c.length)} beats${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${beatDuration(c.length)} beats${c.takeId ? ` · Once · ${c.sampleSpeed??1}×` : ' · Pattern'}${tab.tempoBpm ? ` · ${tab.tempoBpm} BPM` : ''}</small>${c.takeId?`<canvas class="clip-waveform" data-clip-waveform="${c.id}" role="img" aria-label="Loading sample waveform"></canvas>`:''}<span class="clip-resize clip-resize-left" data-resize="left" aria-hidden="true"></span><span class="clip-resize" data-resize="right" aria-hidden="true"></span></button>`;
+    return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="top:${4 + clipRows.get(c.id)! * 84}px;left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · beat ${beatPosition(c.start)} · ${beatDuration(c.length)} beats${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${beatDuration(c.length)} beats${c.takeId ? ` · Once${(c.anchors?.length??0)>1?' · Aligned':''}` : ' · Pattern'}${tab.tempoBpm ? ` · ${tab.tempoBpm} BPM` : ''}</small>${c.takeId?`<canvas class="clip-waveform" data-clip-waveform="${c.id}" role="img" aria-label="Loading sample waveform"></canvas>`:''}<span class="clip-resize clip-resize-left" data-resize="left" aria-hidden="true"></span><span class="clip-resize" data-resize="right" aria-hidden="true"></span></button>`;
   }).join('') || '<p class="lane-empty">Drag a pattern tab here, or right-click it → Add to composition</p>'}</div></div>`).join('');
   clipWaveforms.render(project.clips,assets,project.bpm);
   paintRecordingClip(); renderTransport(); renderRecording();
@@ -1823,17 +1819,6 @@ function putClip(clip: Clip) {
   project.clips = [...project.clips.filter(c => c.id !== clip.id), clip]; renderComposition(); dirty();
 }
 let editingClip: string | undefined;
-const clipAligner=new ClipAligner($('#clip-align-preview'),beat=>{
-  $('#clip-start').value=String(beat);renderClipAlignment();
-},beats=>{$('#clip-fit-beats').value=String(beats);fitEditingClip();});
-function renderClipAlignment(){
- const original=project.clips.find(c=>c.id===editingClip);if(!original||$('#clip-speed-controls').hidden)return;
- const clip=original.takeId?original:{...original,...placementFor(original.tabId)};
- const speed=Number($('#clip-speed').value);
- if(!Number.isFinite(speed)||speed<.5||speed>2||Number($('#clip-length').value)<1||Number($('#clip-start').value)<1)return;
- clipAligner.render({...clip,start:(Number($('#clip-start').value)-1)/4,length:Number($('#clip-length').value)/4,sourceOffset:Number($('#clip-offset').value),sampleSpeed:speed,takeLeadSeconds:(clip.takeLeadSeconds??0)*(clip.sampleSpeed??1)/speed},assets,project.bpm);
-}
-for(const selector of ['#clip-start','#clip-length','#clip-offset'])$(selector).addEventListener('input',renderClipAlignment);
 
 function openClip(id: string) {
   editArrangement(); const clip = project.clips.find(c => c.id === id)!; editingClip = id;
@@ -1841,17 +1826,8 @@ function openClip(id: string) {
   const eligible = clip.playback === 'once' || (!tab.audioAssetId && !!singleSampleId(editors.get(tab.id)?.code ?? tab.code) && !clip.takeId);
   $('#clip-playback-label').hidden = $('#clip-playback-help').hidden = !eligible;
   $('#clip-playback').value = clip.playback === 'once' ? 'once' : 'pattern';
-  $('#clip-speed-controls').hidden=!clip.takeId;$('#clip-speed').value=String(clip.sampleSpeed??1);$('#clip-speed').dataset.previous=String(clip.sampleSpeed??1);$('#clip-speed-help').textContent=`${clip.sampleSpeed??1}× · pitch preserved. Selections up to 60 seconds.`;
-  $('#clip-fit-beats').value=String(beatDuration(clip.length));
-  $('#clip-fit-details').removeAttribute('open');
-  $('#clip-sync').disabled=!clip.takeId;
-  try { const fit=suggestedSampleFit(clip,assetById(clip.takeId!).duration??0,project.bpm);
-    $('#clip-sync').textContent=`Fit length at ${project.bpm} BPM · ${fit.beats>=4?`${fit.beats/4} ${fit.beats===4?'bar':'bars'}`:`${fit.beats} beats`}`;
-    $('#clip-sync-hint').textContent='Suggested from phrase duration. Applies immediately, with pitch preserved. Right-click the clip to undo the length fit.';
-  } catch { $('#clip-sync').disabled=true;$('#clip-sync').textContent='Fit phrase length';$('#clip-sync-hint').textContent='Choose a WAV phrase to sync.'; }
-  $('#clip-fit-tempo').textContent=`${project.bpm} BPM · 4 beats per bar`;
-  $('#clip-fit-help').textContent='Fits the current audio phrase, removing empty space at the end. Pitch stays unchanged. Set Position above to choose its starting beat.';
-  $('#clip-lane').value = clip.trackId; $('#clip-start').value = String(beatPosition(clip.start)); $('#clip-length').value = String(beatDuration(clip.length)); $('#clip-offset').value = String(clip.sourceOffset ?? 0); $('#clip-mute').textContent = clip.muted ? 'Unmute' : 'Mute'; $('#clip-dialog').returnValue = ''; $('#clip-dialog').showModal();clipAligner.open(clip);renderClipAlignment();
+  $('#clip-audio-controls').hidden=!clip.takeId;$('#clip-offset-details').hidden=!!clip.takeId;
+  $('#clip-lane').value = clip.trackId; $('#clip-start').value = String(beatPosition(clip.start)); $('#clip-length').value = String(beatDuration(clip.length)); $('#clip-offset').value = String(clip.sourceOffset ?? 0); $('#clip-mute').textContent = clip.muted ? 'Unmute' : 'Mute'; $('#clip-dialog').returnValue = ''; $('#clip-dialog').showModal();
 }
 function placementFor(tabId: string) {
   const tab = project.tabs.find(t => t.id === tabId)!;
@@ -1871,73 +1847,18 @@ function duplicateClip(id: string) {
 function removeClip(id: string) {
   editArrangement(); project.clips = project.clips.filter(c => c.id !== id); renderComposition(); dirty();
 }
-let vocalOwner:Project|undefined;
-const vocalAligner=new VocalAligner(engine,async(original,source,warp,bytes,lead)=>{
- const check=()=>{editArrangement();if(project!==vocalOwner||project.bpm!==warp.bpm||JSON.stringify(project.clips.find(c=>c.id===original.id))!==JSON.stringify(original))throw new Error('The composition changed. Reopen vocal alignment.');};
- check();const id=crypto.randomUUID(),blob=new Blob([bytes],{type:'audio/wav'});
- const hash=await workspace.hash(bytes),sourceHash=source.contentHash??await workspace.hash(await(await workspace.audioBlob(source.id)).arrayBuffer());check();
- const asset=AssetSchema.parse({id,createdAt:new Date().toISOString(),label:`${source.label??'Vocal'} aligned`.slice(0,80),provider:'upload',format:'wav',personal:true,contentHash:hash,duration:warp.anchors.at(-1)!.beat*60/warp.bpm,source:{name:'aligned-vocal.wav',originalFormat:'wav'},
-  recording:source.recording,precision:{rate:warp.rate,channels:wavInfo(new Uint8Array(bytes)).channels,bits:32,working:'float32',originalAvailable:true},extraction:{name:source.label??'Vocal',assetId:source.id,hash:sourceHash,rate:warp.rate,startFrame:warp.anchors[0].frame,endFrame:warp.anchors.at(-1)!.frame,warp}});
- const next={...original,takeId:id,sourceSampleId:original.sourceSampleId??original.takeId,warpSourceId:source.id,sampleSpeed:1,sourceOffset:0,takeOffsetSeconds:0,takeLeadSeconds:lead};
- if(!canPlace(project.clips,next))throw new Error('Leave room for this clip in its track.');
- await workspace.write([{collection:'assets',key:id,value:asset},{collection:'audio',key:id,value:blob},{collection:'originals',key:id,value:blob}]);check();
- assets=[asset,...assets];await engine.registerAssets(assets);check();project.assetIds=[...new Set([...project.assetIds,id,source.id,original.takeId!])];putClip(next);renderAssets();notice('Vocal alignment saved. Original sample preserved.');
+const alignDialog=new AlignDialog(engine,clip=>{
+ editArrangement();
+ if(project.clips.some(c=>c.id!==clip.id&&c.trackId===clip.trackId&&c.start<clip.start+clip.length&&clip.start<c.start+c.length))throw new Error('The fitted length overlaps another clip. Shorten the fit or move the clip first.');
+ if(!canPlace(project.clips,clip))throw new Error('Use whole-beat increments and leave space between clips in the same track.');
+ putClip(clip);notice('Alignment saved. The original sample is unchanged.');
 });
-function openVocalAlignment(id:string){editArrangement();const clip=project.clips.find(c=>c.id===id);if(!clip?.takeId)throw new Error('Choose a WAV audio clip.');vocalOwner=project;$('#clip-dialog').returnValue='cancel';$<HTMLDialogElement>('#clip-dialog').close();void vocalAligner.open(clip,assetById(clip.takeId),project.bpm);}
-$('#clip-align-vocal').onclick=guard(()=>{if(editingClip)openVocalAlignment(editingClip);});
-const beforeTempoSync=new WeakMap<Clip,Clip>();
-let syncingClip=false;
-async function syncClipToTempo(clip:Clip){
- editArrangement();if(syncingClip)return;
- if(!clip.takeId)throw new Error('Choose an audio clip to sync.');
- const asset=assetById(clip.takeId),fit=suggestedSampleFit(clip,asset.duration??0,project.bpm);
- const {beats,...timing}=fit,next={...clip,...timing},bpm=project.bpm;
- if(!canPlace(project.clips,next))throw new Error('The suggested length overlaps another clip. Open Edit to choose a shorter fit.');
- syncingClip=true;$('#clip-sync').disabled=true;
- try{
-  notice(`Fitting phrase length at ${bpm} BPM…`);
-  await takeBuffer(engine.audioContext,asset,await workspace.audioBlob(asset.id),fit.sampleSpeed);
-  editArrangement();if(project.bpm!==bpm||!project.clips.includes(clip))throw new Error('The composition changed. Try syncing again.');
-  putClip(next);beforeTempoSync.set(next,clip);
-  if(editingClip===clip.id){$('#clip-dialog').returnValue='cancel';$<HTMLDialogElement>('#clip-dialog').close();}
-  notice(`Fitted to ${beats} beats at ${bpm} BPM. Right-click the clip to undo the length fit.`);
- }finally{syncingClip=false;$('#clip-sync').disabled=false;}
-}
-$('#clip-sync').onclick=guard(async()=>{const clip=project.clips.find(c=>c.id===editingClip);if(clip)await syncClipToTempo(clip);});
-function fitEditingClip() {
-  const clip=project.clips.find(c=>c.id===editingClip);
-  if(!clip)return;
-  try {
-    const audioClip=clip.takeId?clip:{...clip,...placementFor(clip.tabId)};
-    if(!audioClip.takeId)throw new Error('Choose a single audio sample to fit to beats.');
-    const beats=Number($('#clip-fit-beats').value);
-    const fitted=fitSampleToBeats(audioClip,assetById(audioClip.takeId).duration??0,project.bpm,beats);
-    $('#clip-speed').value=String(fitted.sampleSpeed);
-    $('#clip-length').value=String(beats);
-    $('#clip-offset').value=String(fitted.sourceOffset);
-    $('#clip-speed-help').textContent=`${fitted.sampleSpeed.toFixed(3)}× · pitch preserved`;
-    $('#clip-fit-help').textContent=`Ready: ${beats} beats (${(beats*60/project.bpm).toFixed(2)} seconds) at ${project.bpm} BPM. Save clip to apply.`;
-    renderClipAlignment();
-  } catch(error) { $('#clip-fit-help').textContent=error instanceof Error?error.message:String(error); }
-}
-$('#clip-fit').onclick=fitEditingClip;
-document.querySelectorAll<HTMLButtonElement>('[data-fit-beats]').forEach(button=>button.onclick=()=>{
-  $('#clip-fit-beats').value=button.dataset.fitBeats!;fitEditingClip();
-});
-$('#clip-speed').oninput=()=>{
-  const clip=project.clips.find(c=>c.id===editingClip),speed=Number($('#clip-speed').value);
-  if(!clip||!Number.isFinite(speed)||speed<.5||speed>2)return;
-  const ratio=(clip.sampleSpeed??1)/speed;
-  $('#clip-length').value=String(Math.max(1,Math.ceil(clip.length*4*ratio-1e-8)));
-  $('#clip-offset').value=String((clip.sourceOffset??0)*ratio);
-  $('#clip-speed-help').textContent=`${speed}× · pitch preserved · ${Number($('#clip-length').value)} beats. Selections up to 60 seconds.`;
-  renderClipAlignment();
-};
+function openAlignment(id:string){editArrangement();const clip=project.clips.find(c=>c.id===id);if(!clip?.takeId)throw new Error('Choose a WAV audio clip.');$('#clip-dialog').returnValue='cancel';$<HTMLDialogElement>('#clip-dialog').close();void alignDialog.open(clip,assetById(clip.takeId),project.bpm);}
+$('#clip-align').onclick=guard(()=>{if(editingClip)openAlignment(editingClip);});
 $('#clip-playback').onchange = () => {
   const clip = project.clips.find(c => c.id === editingClip);
-  $('#clip-speed-controls').hidden=$('#clip-playback').value!=='once';
+  $('#clip-audio-controls').hidden=$('#clip-playback').value!=='once';$('#clip-offset-details').hidden=$('#clip-playback').value==='once';
   if (clip && $('#clip-playback').value === 'once') { $('#clip-length').value = String(placementFor(clip.tabId).length * 4); $('#clip-offset').value = '0'; }
-  renderClipAlignment();
 };
 $('#clip-dialog').addEventListener('close', () => void guard(async () => {
   const action = $('#clip-dialog').returnValue, clip = project.clips.find(c => c.id === editingClip); if (!clip || action === 'cancel') return;
@@ -1950,11 +1871,10 @@ $('#clip-dialog').addEventListener('close', () => void guard(async () => {
     let playback = {};
     if (!$('#clip-playback-label').hidden) {
       if ($('#clip-playback').value === 'once' && !placementFor(clip.tabId).takeId) throw new Error('Choose Repeat pattern for a tab with multiple sounds or rhythmic transformations.');
-      playback = $('#clip-playback').value === 'once' ? { playback: 'once', takeId: clip.playback==='once'&&clip.takeId?clip.takeId:placementFor(clip.tabId).takeId } : { playback: 'pattern', takeId: undefined,sourceSampleId:undefined,warpSourceId:undefined, takeOffsetSeconds: undefined, takeLeadSeconds: undefined };
+      playback = $('#clip-playback').value === 'once' ? { playback: 'once', takeId: clip.playback==='once'&&clip.takeId?clip.takeId:placementFor(clip.tabId).takeId } : { playback: 'pattern', takeId: undefined, anchors: undefined };
     }
-    const speed=$('#clip-speed-controls').hidden?1:Number($('#clip-speed').value);if(!Number.isFinite(speed)||speed<.5||speed>2)throw new Error('Choose a sample speed from 0.5× to 2×.');
-    const next = { ...clip, ...playback, sampleSpeed:speed,takeLeadSeconds:(clip.takeLeadSeconds??0)*(clip.sampleSpeed??1)/speed, trackId: $('#clip-lane').value, start: (Number($('#clip-start').value) - 1) / 4, length: Number($('#clip-length').value) / 4, sourceOffset: Number($('#clip-offset').value) };
-    if(speed!==1 && next.takeId){notice('Preparing sample speed…');const asset=assetById(next.takeId);await takeBuffer(engine.audioContext,asset,await workspace.audioBlob(asset.id),speed);editArrangement();if(!project.clips.includes(clip))throw new Error('The clip changed while preparing its audio. Reopen it and try again.');}
+    const next: Clip = { ...clip, ...playback, trackId: $('#clip-lane').value, start: (Number($('#clip-start').value) - 1) / 4, length: Number($('#clip-length').value) / 4, sourceOffset: Number($('#clip-offset').value) };
+    if (next.takeId) delete next.sourceOffset; else delete next.anchors;
     putClip(next);notice('Clip saved.');
   }
 })());
@@ -1988,8 +1908,7 @@ function showContextMenu(target: HTMLElement, x: number, y: number, keyboard = f
     selector = `[data-clip="${id}"]`;
     actions = [
       action(clip.muted ? 'Unmute' : 'Mute', () => toggleClipMute(id)),
-      ...(clip.takeId?[action('Align vocal…',()=>openVocalAlignment(id),stopped),action(`Fit length at ${project.bpm} BPM`,()=>syncClipToTempo(clip),stopped)]:[]),
-      ...(beforeTempoSync.has(clip)?[action('Undo length fit',()=>putClip(beforeTempoSync.get(clip)!),stopped)]:[]),
+      ...(clip.takeId?[action('Align…',()=>openAlignment(id),stopped)]:[]),
       action('Edit', () => openClip(id), stopped),
       action('Duplicate', () => duplicateClip(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : !duplicatePlacement(project.clips, clip, 'candidate') ? 'No room in this lane.' : undefined)),
       action('Open source pattern', () => switchTab(clip.tabId)),

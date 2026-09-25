@@ -647,6 +647,8 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
 @media (prefers-reduced-motion: reduce) { .cm-editor .code-placeholder, .cm-editor .creating-code > span { animation: none; } }
 
 .midi-connection { font-size: 12px; min-width: 0; }
+#clip-audio-controls fieldset { min-width: 0; margin: 12px 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+#clip-audio-controls p { margin: 8px 0 0; font-size: 12px; color: var(--muted); }
 .midi-connection-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .midi-connection [data-midi-status] { color: var(--muted); }
 .midi-connection[data-connected=true] [data-midi-status]::before { content: '●'; color: var(--teal, #298f83); margin-right: 6px; }
@@ -660,3 +662,44 @@ dialog [data-destination-clip] { display: block; width: 100%; margin: 6px 0; tex
   #record-status { flex-basis: 100%; max-width: none; text-align: right; }
   #record-bar[data-mode=midi] .record-actions { grid-column: 1; grid-row: auto; }
 }
+
+/* Long arrangements scroll inside the timeline, without widening editor controls. */
+.drawer-bar, #drawer, #composition-content, #sequencer-scroll { min-width: 0; max-width: 100%; }
+#tabs { flex: 1 1 0; scrollbar-width: thin; }
+#composition-editor, #composition-close, .composition-toggle { flex-shrink: 0; }
+@media (max-width: 1200px) {
+  .topbar { flex-wrap: wrap; row-gap: 6px; height: auto; padding-block: 8px; }
+  .transport { order: 5; flex-basis: 100%; justify-content: center; margin: 0; }
+}
+@media (max-width: 760px) {
+  #tabs { flex: 1 1 100%; }
+}
+/* Sound destinations are part of the pattern, rather than another row of actions. */
+#chop-sounds { display:flex; flex:0 0 auto; gap:6px; overflow-x:auto; padding:8px 16px; border-bottom:1px solid var(--line); }
+#chop-sounds button { display:grid; flex:0 0 auto; gap:3px; text-align:left; max-width:210px; }
+#chop-sounds strong { font-size:12px; font-weight:500; }
+#chop-sounds span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:11px; color:var(--muted); }
+.chop-reference { text-decoration:underline dotted; text-underline-offset:4px; cursor:pointer; }
+.chop-reference:hover, .chop-reference:focus { background:var(--sel); }
+.chop-picker .asset > button:not(.asset-select), .chop-picker #assignment, .chop-picker #add-sounds { display:none; }
+.chop-picker .asset-options [data-edit-sample] { display:none; }
+#chop-audition { flex:none; border-bottom:1px solid var(--line); padding:0 24px 12px; }
+#chop-region { max-height:43vh; overflow:auto; }
+.chop-actions { display:flex; gap:8px; }
+#chop-status { font-size:12px; color:var(--muted); margin:6px 0; }
+.chop-picker #library-scroll { min-height:100px; }
+.embedded-sample-editor.sample-editor-page { position:static; padding:0; background:transparent; overflow:visible; }
+.embedded-sample-editor .sample-editor-content > header, .embedded-sample-editor h1, .embedded-sample-editor .sample-editor-intro, .embedded-sample-editor .sample-editor-open, .embedded-sample-editor .sample-editor-limits, .embedded-sample-editor .sample-editor-help, .embedded-sample-editor .sample-editor-save { display:none; }
+.embedded-sample-editor [data-wav-status] { min-height:0; padding:4px 0; font-size:11px; }
+.embedded-sample-editor .sample-editor-source { gap:8px; margin:4px 0; }
+.embedded-sample-editor .sample-editor-source h2 { font-size:13px; }
+.embedded-sample-editor .sample-editor-controls { margin:8px 0; gap:8px; }
+.embedded-sample-editor .sample-editor-controls input { width:95px; }
+.embedded-sample-editor .sample-editor-controls [data-wav-duration] { margin:0; }
+.chop-advanced { margin:8px 0; font-size:12px; }
+.chop-picker #catalogue-packs { display:none; }
+.clip { height:74px; }
+.lane { height:84px; }
+.clip strong, .clip small { position:relative; z-index:1; }
+.clip-waveform { position:absolute; left:0; bottom:3px; width:100%; height:32px; color:var(--pattern-color,var(--accent)); pointer-events:none; }
+
