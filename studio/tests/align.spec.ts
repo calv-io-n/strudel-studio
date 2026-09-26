@@ -66,3 +66,12 @@ test('pace presets, the bars field, start at first attack and the timeline pace 
  await page.evaluate(()=>window.neonCapture.start());await page.locator('#composition-play').click();await page.waitForTimeout(2500);await page.locator('#composition-stop').click();const capture=await page.evaluate(()=>window.neonCapture.finish());expect(capture.peak).toBeGreaterThan(.03);
  const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64')));expect(tone220(audio.left,audio.rate)).toBeGreaterThan(.005);expect(errors).toEqual([]);
 });
+test('seeking into an audio clip during playback keeps the sample audible',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));await setup(page);
+ await page.locator('#composition-play').click();await page.waitForTimeout(3100); // past the first clip's last burst (2.9 s); the next natural burst is at 4.5 s
+ const ruler=await page.locator('#ruler').boundingBox();
+ await page.evaluate(()=>window.neonCapture.start());
+ await page.mouse.click(ruler!.x+180+32,ruler!.y+ruler!.height/2); // seek back to cycle 0.5: the burst at 1.5 s sounds half a second later only if the take retriggers
+ await page.waitForTimeout(1000);const capture=await page.evaluate(()=>window.neonCapture.finish());await page.locator('#composition-stop').click();
+ const audio=decodeWav(new Uint8Array(Buffer.from(capture.wav,'base64')));expect(tone220(audio.left,audio.rate)).toBeGreaterThan(.005);expect(errors).toEqual([]);
+});

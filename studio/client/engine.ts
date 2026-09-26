@@ -533,14 +533,15 @@ export class Engine {
         }
         next.set(clip.id, takePattern(clip, prepared.asset, project.bpm, prepared.name, (clip.playback === 'once' || project.tabs.find(t => t.id === clip.tabId)?.audioAssetId) ? next.get(clip.tabId) : undefined));
       }
-      const takeId = project.tabs.find(t => t.id === target)?.audioAssetId;
+      const takeId = project.tabs.find(t => t.id === target)?.audioAssetId, takeNames = [...preparedTakes.values()].map(p => p.name);
       if (takeId) {
         const asset = await storedAsset(takeId);
-        const name = await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id));
+        const name = await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id)); takeNames.push(name);
         next.set(target, takePattern(takeTabClip(target, asset, cps), asset, project.bpm, name, next.get(target)));
         takeEnd = ((asset.duration ?? 0) + 3) * cps;
       }
       if (epoch !== this.epoch) return;
+      releaseTakeSounds(takeNames);
       let pattern = target === 'composition' ? arrangement(clips, next, this.mutes, () => this.jam?.tabId, new Map(project.tabs.map(t => [t.id, tempoRate(t, project.bpm)]))) : ratePattern(next.get(target)!, tempoRate(project.tabs.find(t => t.id === target)!, project.bpm));
       if (this.midiSection && target === 'composition') {
         const composed = pattern; const section = this.midiSection;
@@ -669,7 +670,7 @@ export class Engine {
     for (const number of this.notes.keys()) this.noteOff(number);
     this.voices.forEach((source) => { try { source.stop(); } catch { /* already ended */ } });
     this.compileAbort?.abort();this.clipPreview=undefined;if(this.previewTransport){this.transport=this.previewTransport;this.previewTransport=undefined;}
-    this.voices.clear(); releaseTakeSounds(); audio.getSuperdoughAudioController().reset(); audio.resetGlobalEffects();
+    this.voices.clear(); audio.getSuperdoughAudioController().reset(); audio.resetGlobalEffects();
     this.changed();
   }
   panic() { this.stop(); }

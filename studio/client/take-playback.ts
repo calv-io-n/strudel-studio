@@ -13,7 +13,8 @@ export function takeEffects(asset: Asset, project: Project) {
   return project.audioInput && project.audioInput.id === asset.recording?.inputId ? project.audioInput.appliedCode : asset.recording?.effectsCode ?? 'AUDIO';
 }
 const registeredTakes=new Set<string>();
-export function releaseTakeSounds(){for(const name of registeredTakes)audio.soundMap.setKey(name,undefined);registeredTakes.clear();}
+/** Drop registered take sounds except the ones a compile just prepared; a seek reuses the compiled pattern, so stop() must not release them. */
+export function releaseTakeSounds(keep: Iterable<string> = []) { const kept = new Set(keep); for (const name of registeredTakes) if (!kept.has(name)) { audio.soundMap.setKey(name, undefined); registeredTakes.delete(name); } }
 function shortHash(text: string) { let h = 0x811c9dc5; for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); }
 export function takeSoundName(id: string, variant = 'raw') { return `studio_take_${id.replaceAll('-', '')}_${variant === 'raw' ? 'raw' : shortHash(variant)}`; }
 /** Register one playable variant of a take: raw audio, or audio rendered for the clip's anchors at the project tempo. Returns the sound name. */
