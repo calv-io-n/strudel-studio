@@ -20,7 +20,7 @@ export function arrangement(clips: Clip[], patterns: Map<string, Pattern>, mutes
     const begin = Math.max(Number(state.span.begin), clip.start);
     const end = Math.min(Number(state.span.end), clip.start + clip.length);
     const pattern = patterns.get(clip.id) ?? patterns.get(clip.tabId);
-    const sourceOffset = clip.sourceOffset ?? 0;
+    const sourceOffset = clip.takeId ? 0 : clip.sourceOffset ?? 0;
     const rate = clip.takeId ? 1 : rates.get(clip.tabId) ?? 1;
     if (begin >= end || !pattern) return [];
     const offset = state.controls?.studioLoopOffset ?? 0;
@@ -58,8 +58,8 @@ export function loopRange(pattern: Pattern, begin: number, end: number): Pattern
 export class PatternTimeline {
   private versions: { cycle: number; pattern: Pattern }[] = [];
   reset(pattern: Pattern) { this.versions = [{ cycle: 0, pattern }]; }
-  queue(pattern: Pattern, scheduledThrough: number) {
-    const cycle = Math.floor(Math.max(0, scheduledThrough)) + 1;
+  queue(pattern: Pattern, scheduledThrough: number, boundary?: number) {
+    const cycle = boundary ?? Math.floor(Math.max(0, scheduledThrough)) + 1;
     this.versions = this.versions.filter(v => v.cycle < cycle);
     this.versions.push({ cycle, pattern });
     return cycle;

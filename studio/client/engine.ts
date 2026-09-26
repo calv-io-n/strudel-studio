@@ -1,8 +1,12 @@
+import { replaceBinding } from '../shared/sound-bindings';
+import { singleSampleId } from '../shared/sample-placement';
 import { installPreciseQueries } from '../shared/pattern-time';
+import { localSampleId } from '../shared/local-samples';
 import { optimizeRecordedMidi } from '../shared/optimize-midi';
 import { CountIn } from './count-in';
 import { tempoRate } from '../shared/tempo';
-import { prepareTake, takePattern, takeTabClip } from './take-playback';
+import { releaseTakeSounds, prepareTake, takePattern, takeTabClip } from './take-playback';
+import { clipAnchors, renderKey, validateAnchors } from '../shared/clip-timing';
 import { asset as storedAsset, audioBlob } from './storage/workspace';
 import { sampleUrl, releaseSampleUrls } from './storage/workspace';
 import { instrumentFor, validateInstrumentInput, MIDI_EDITOR, updateAppliedInstrumentSliders } from '../shared/midi-instrument';
@@ -282,6 +286,17 @@ export class Engine {
     mini.miniAllStrings();
     audio.registerSynthSounds(); audio.registerZZFXSounds();
     await core.evalScope(core, mini, tonal, audio, draw, fonts, {
+      samples: async (map: any, ...options: any[]) => {
+        if (map && typeof map === 'object' && !Array.isArray(map)) {
+          map = Object.fromEntries(await Promise.all(Object.entries(map).map(async ([key, urls]) => [key,
+            Array.isArray(urls) ? await Promise.all(urls.map(async url => {
+              const id = localSampleId(url, location.origin);
+              return id ? sampleUrl(id) : url;
+            })) : urls,
+          ])));
+        }
+        return audio.samples(map, ...options);
+      },
       studioMidiNote: () => new core.Pattern((state: any) => core.note(this.midiPitch).velocity(this.midiVelocity / 127).set({ studioMidiTarget: true }).query(state)),
       sliderWithID: (runtimeId: string, value: number) => {
         let from = Number(runtimeId.replace('slider_', ''));
@@ -419,27 +434,63 @@ export class Engine {
     }
     this.changed();
   }
+  syncSoundRevision(tabId:string) { const owner=this.editorFor(tabId);if(this.appliedCodes.get(tabId)===owner.code)this.applied.set(tabId,owner.revision); }
+  validateSoundReplacement(tabId:string,bindingId:string,previous:string) {
+    if (!this.started || (this.target !== 'composition' && this.target !== tabId)) return;
+    if(this.busy || this.midiSection || this.jam)throw new Error('Finish playback preparation or recording before replacing this sound.');
+    const applied=this.appliedCodes.get(tabId);
+    if(!applied)throw new Error('Stop playback to use this new sound binding.');
+    if(!bindingId.startsWith('const:') && this.editorFor(tabId).code!==applied)throw new Error('Stop playback to replace a literal sound with pending code edits.');
+    try { replaceBinding(applied,bindingId,previous,previous); } catch { throw new Error('Stop playback to use this new or changed sound binding.'); }
+  }
+  async replaceSound(tabId:string,bindingId:string,previous:string,next:string) {
+    this.validateSoundReplacement(tabId,bindingId,previous);
+    if(!this.started || (this.target!=='composition' && this.target!==tabId))return;
+    const versions=new Map(this.appliedCodes),code=versions.get(tabId)!;
+    const change=replaceBinding(code,bindingId,previous,next);
+    versions.set(tabId,code.slice(0,change.from)+next+code.slice(change.to));
+    const hex=/^studio_([a-f0-9]{32})$/i.exec(next)?.[1];
+    const takeId=hex?`${hex.slice(0,8)}-${hex.slice(8,12)}-${hex.slice(12,16)}-${hex.slice(16,20)}-${hex.slice(20)}`:undefined;
+    await this.compile(this.target!,true,false,versions,takeId?{tabId,takeId}:undefined);
+  }
+  private clipPreview?:Clip;
+  private previewTransport?:typeof this.transport;
+  private compileAbort?:AbortController;
+  /** Loop one clip with the composition using a draft of its timing; nothing is saved. */
+  async previewClip(draft:Clip){
+    if(this.busy)throw new Error('Wait for playback preparation.');
+    if(!draft.takeId)throw new Error('Choose an audio clip.');
+    validateAnchors(clipAnchors(draft),(await storedAsset(draft.takeId)).duration??0,this.project().bpm);
+    const updating=!!this.clipPreview&&this.started&&this.transport.begin===draft.start&&this.transport.end===draft.start+draft.length;
+    if(!updating){const previous=this.previewTransport??{...this.transport};this.stop();this.previewTransport=previous;this.transport={position:draft.start,begin:draft.start,end:draft.start+draft.length,loop:true};this.transportStart=draft.start;}
+    this.clipPreview=draft;
+    try{await this.compile('composition',updating);}catch(error){this.stop();throw error;}
+  }
   async apply() { if (this.started && this.target) await this.compile(this.target, true); }
-  private async compile(target: string, update: boolean, countIn = false) {
+  private async compile(target: string, update: boolean, countIn = false, versions?: Map<string,string>, replacement?:{tabId:string;takeId:string}) {
     if (this.compilingBusy) return;
     this.compilingBusy = true; this.changed();
-    const epoch = this.epoch;
-    const project = this.project();
+    const epoch = this.epoch, abort = this.compileAbort = new AbortController();
+    const project = this.project(), clipPreview=this.clipPreview;
     const ids = target === 'composition' ? [...new Set(project.clips.map(c => c.tabId))] : [target];
-    const clips = project.clips.map(c => ({ ...c }));
+    const clips = project.clips.map(original => {const c=clipPreview?.id===original.id?clipPreview:original;return ({ ...c, ...(replacement && c.tabId===replacement.tabId && c.playback==='once'?{takeId:replacement.takeId}:{}) });});
     const next = new Map<string, Pattern>(), codes = new Map<string, number>(), appliedCodes = new Map<string, string>();
     let cps = project.bpm / 240, takeEnd: number | undefined;
     try {
       if (!ids.length && !this.recordingTransport) throw new Error('Add a pattern to the composition first.');
       await this.unlock();
       for (const id of ids) {
-        if (target === 'composition' && !project.tabs.find(t => t.id === id)?.audioAssetId && clips.filter(c => c.tabId === id).every(c => !!c.takeId)) continue;
+        // Let the page paint Preparing and handle Stop between tab compilations.
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
+        if (epoch !== this.epoch) return;
+        if (target === 'composition' && !project.tabs.find(t => t.id === id)?.audioAssetId && clips.filter(c => c.tabId === id).every(c => !!c.takeId && c.playback !== 'once')) continue;
         const tab = project.tabs.find(t => t.id === id)!;
         if (epoch !== this.epoch) return;
         this.compositionCompile = target === 'composition';
         this.compiling = this.editorFor(id);
-        let code = this.compiling.code;
-        const revision = this.compiling.revision;
+        let code = versions?.get(id) ?? this.compiling.code;
+        const revision = code === this.compiling.code ? this.compiling.revision : -1;
+        this.instrumentCompileSliders=versions?reconcileSliders(code,[],undefined,this.appliedAnchors.get(id)??[]):undefined;
         const section = this.midiSection;
         if (section?.clip.tabId === id) {
           const d = section.destination;
@@ -467,18 +518,30 @@ export class Engine {
 
       }
       if (epoch !== this.epoch) return;
+      const preparedTakes = new Map<string, { asset: Awaited<ReturnType<typeof storedAsset>>; name: string }>();
       if (target === 'composition') for (const clip of clips.filter(c => c.takeId)) {
-        const asset = await storedAsset(clip.takeId!); await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id));
-        next.set(clip.id, takePattern(clip, asset, cps, project.tabs.find(t => t.id === clip.tabId)?.audioAssetId ? next.get(clip.tabId) : undefined));
+        if (epoch !== this.epoch) return;
+        const preparationKey=`${clip.takeId}:${renderKey(clipAnchors(clip), project.bpm)}`;
+        let prepared = preparedTakes.get(preparationKey);
+        if (!prepared) {
+          const asset = await storedAsset(clip.takeId!);
+          const sampleId = singleSampleId(versions?.get(clip.tabId) ?? this.editorFor(clip.tabId).code);
+          if (clip.playback === 'once' && sampleId !== clip.takeId && sampleId !== asset.extraction?.assetId) throw new Error('This one-shot clip needs a single sample. Switch its playback to Repeat pattern after editing its rhythm.');
+          const name = await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id), clip, abort.signal);
+          if (epoch !== this.epoch) return;
+          preparedTakes.set(preparationKey, prepared = { asset, name });
+        }
+        next.set(clip.id, takePattern(clip, prepared.asset, project.bpm, prepared.name, (clip.playback === 'once' || project.tabs.find(t => t.id === clip.tabId)?.audioAssetId) ? next.get(clip.tabId) : undefined));
       }
-      const takeId = project.tabs.find(t => t.id === target)?.audioAssetId;
+      const takeId = project.tabs.find(t => t.id === target)?.audioAssetId, takeNames = [...preparedTakes.values()].map(p => p.name);
       if (takeId) {
         const asset = await storedAsset(takeId);
-        await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id));
-        next.set(target, takePattern(takeTabClip(target, asset, cps), asset, cps, next.get(target)));
+        const name = await prepareTake(asset, project, this.audioContext, await audioBlob(asset.id)); takeNames.push(name);
+        next.set(target, takePattern(takeTabClip(target, asset, cps), asset, project.bpm, name, next.get(target)));
         takeEnd = ((asset.duration ?? 0) + 3) * cps;
       }
       if (epoch !== this.epoch) return;
+      releaseTakeSounds(takeNames);
       let pattern = target === 'composition' ? arrangement(clips, next, this.mutes, () => this.jam?.tabId, new Map(project.tabs.map(t => [t.id, tempoRate(t, project.bpm)]))) : ratePattern(next.get(target)!, tempoRate(project.tabs.find(t => t.id === target)!, project.bpm));
       if (this.midiSection && target === 'composition') {
         const composed = pattern; const section = this.midiSection;
@@ -502,7 +565,9 @@ export class Engine {
       if (epoch !== this.epoch) return;
       if (base) this.compositionBase = base;
       if (update) {
-        this.pendingCycle = this.patterns.queue(pattern, this.repl.scheduler.lastEnd);
+        const through=this.repl.scheduler.lastEnd,span=this.transport.end-this.transport.begin;
+        const boundary=clipPreview?(Math.floor(Math.max(0,through)/span)+1)*span:undefined;
+        this.pendingCycle = this.patterns.queue(pattern, through,boundary);
         // Applying a tempo change with lookahead needs a separate clock transition.
         // Keep the running tempo; new code tempo takes effect on the next Play.
       } else {
@@ -515,9 +580,9 @@ export class Engine {
         this.repl.state.pattern = live;
         await this.repl.scheduler.setPattern(live, true);
       }
-      this.applied = codes; for (const [id, code] of appliedCodes) { this.appliedCodes.set(id, code); this.appliedAnchors.set(id, structuredClone(this.editorFor(id).anchors)); this.appliedVersions.set(id, new Map(this.editorFor(id).liveVersions)); }
+      this.applied = codes; for (const [id, code] of appliedCodes) { this.appliedCodes.set(id, code); if (!versions || this.editorFor(id).code === code) { this.appliedAnchors.set(id, structuredClone(this.editorFor(id).anchors)); this.appliedVersions.set(id, new Map(this.editorFor(id).liveVersions)); } }
     } finally {
-      this.compiling = undefined;
+      this.compiling = undefined; this.instrumentCompileSliders=undefined;
       core.setTime(() => this.repl.scheduler.now());
       core.setCpsFunc(() => this.repl.scheduler.cps);
       core.setPattern(this.repl.state.pattern);
@@ -604,6 +669,7 @@ export class Engine {
     this.noteRequests.clear();
     for (const number of this.notes.keys()) this.noteOff(number);
     this.voices.forEach((source) => { try { source.stop(); } catch { /* already ended */ } });
+    this.compileAbort?.abort();this.clipPreview=undefined;if(this.previewTransport){this.transport=this.previewTransport;this.previewTransport=undefined;}
     this.voices.clear(); audio.getSuperdoughAudioController().reset(); audio.resetGlobalEffects();
     this.changed();
   }

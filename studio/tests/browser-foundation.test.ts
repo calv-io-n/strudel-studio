@@ -31,7 +31,7 @@ test('AUDIO accepts continuous controls and rejects computed, patterned, and sam
   const values = compileAudioEffects('AUDIO.gain(slider(0.5,0,1)).lpf(2000).room(0.2).delay(0.3)');
   assert.equal(values.gain, .5); assert.equal(values.lpf, 2000);
   for (const code of ['AUDIO.reverse()', 'AUDIO.gain("0 1")', 'AUDIO.gain(Math.random())', 'AUDIO["gain"](1)', 'AUDIO.pan(2)', 'const x = AUDIO']) assert.throws(() => compileAudioEffects(code));
-  assert.equal(parseProject({ ...newProject(), version: 5 }).version, 7);
+  assert.equal(parseProject({ ...newProject(), version: 5 }).version, 8);
 });
 
 test('legacy cleanup leaves personal audio, project JSON and provenance intact', async () => {

@@ -2,7 +2,7 @@ import { tempoRate, beatPosition, beatDuration } from '../shared/tempo';
 import type { Clip, Project } from '../shared/model';
 import { canPlace, snapPlacement, trimLeft } from '../shared/clips';
 
-export function installCompositionGestures(options: { project(): Project; blocked(): boolean; commit(clip: Clip): void; open(id: string): void; reveal(): void }) {
+export function installCompositionGestures(options: { project(): Project; placement?(tabId: string): Partial<Clip>; blocked(): boolean; commit(clip: Clip): void; open(id: string): void; reveal(): void }) {
   const scroll = document.querySelector<HTMLElement>('#sequencer-scroll')!;
   let suppressClick = false;
   document.addEventListener('click', e => {
@@ -16,7 +16,7 @@ export function installCompositionGestures(options: { project(): Project; blocke
     e.preventDefault(); const p = options.project(), original = p.clips.find(c => c.id === el.dataset.clip)!;
     const clip = { ...original }, index = p.tracks.findIndex(t => t.id === clip.trackId);
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') clip.trackId = p.tracks[index + (e.key === 'ArrowUp' ? -1 : 1)]?.id ?? clip.trackId;
-    else if (e.altKey) Object.assign(clip, trimLeft(original, original.start + (e.key === 'ArrowLeft' ? -1 : 1) * p.snap, original.takeId ? 1 : tempoRate(p.tabs.find(t => t.id === original.tabId)!, p.bpm), p.bpm / 240));
+    else if (e.altKey) Object.assign(clip, trimLeft(original, original.start + (e.key === 'ArrowLeft' ? -1 : 1) * p.snap, original.takeId ? 1 : tempoRate(p.tabs.find(t => t.id === original.tabId)!, p.bpm), p.bpm));
     else if (e.shiftKey) clip.length += (e.key === 'ArrowLeft' ? -1 : 1) * p.snap;
     else clip.start += (e.key === 'ArrowLeft' ? -1 : 1) * p.snap;
     if (canPlace(p.clips, clip)) { options.commit(clip); document.querySelector<HTMLElement>(`[data-clip="${clip.id}"]`)?.focus(); }
@@ -29,7 +29,7 @@ export function installCompositionGestures(options: { project(): Project; blocke
     const p = options.project(), original = p.clips.find(c => c.id === target.dataset.clip);
     const handle = (e.target as HTMLElement).closest<HTMLElement>('[data-resize]');
     const resize = handle?.dataset.resize === 'left' ? 'left' : !!handle;
-    const base: Clip = original ? { ...original } : { id: crypto.randomUUID(), tabId: target.dataset.tab!, trackId: p.tracks[0].id, start: 0, length: 4, muted: false };
+    const base: Clip = original ? { ...original } : { id: crypto.randomUUID(), tabId: target.dataset.tab!, trackId: p.tracks[0].id, start: 0, length: 4, muted: false, ...options.placement?.(target.dataset.tab!) };
     const offset = original ? e.clientX - target.getBoundingClientRect().left : 0;
     let x = e.clientX, y = e.clientY, active = false, candidate: Clip | undefined, frame = 0;
     const ghost = document.createElement('div'); ghost.className = 'clip drag-ghost'; ghost.dataset.color = target.dataset.color;
@@ -57,7 +57,7 @@ export function installCompositionGestures(options: { project(): Project; blocke
       candidate = undefined; ghost.hidden = !lane || (resize && lane.dataset.trackId !== base.trackId); guide.hidden = true;
       if (lane && (!resize || lane.dataset.trackId === base.trackId)) {
         const raw = resize ? base.start + (resize === 'left' ? 0 : base.length) + (x - e.clientX + scroll.scrollLeft - initialScroll) / 64 : (x - lane.getBoundingClientRect().left - offset) / 64;
-        const result = snapPlacement(p.clips, { ...base, trackId: lane.dataset.trackId! }, raw, p.snap, resize, base.takeId ? 1 : tempoRate(p.tabs.find(t => t.id === base.tabId)!, p.bpm), p.bpm / 240);
+        const result = snapPlacement(p.clips, { ...base, trackId: lane.dataset.trackId! }, raw, p.snap, resize, base.takeId ? 1 : tempoRate(p.tabs.find(t => t.id === base.tabId)!, p.bpm), p.bpm);
         candidate = canPlace(p.clips, result.clip) && (original || p.clips.length < 500) ? result.clip : undefined;
         lane.dataset.dropTarget = candidate ? 'valid' : 'invalid';
         hint = candidate ? `${name} · ${p.tracks.find(t => t.id === candidate!.trackId)!.name} · beat ${beatPosition(candidate.start)}` : `${name} · Cannot place here`;

@@ -1,3 +1,10 @@
+import { recordedTakePlacement } from '../shared/recorded-take';
+import { tempoChangeIssue, paceFit, withAnchors } from '../shared/clip-timing';
+import { AlignDialog } from './align-dialog';
+import { AssetSchema } from '../shared/model';
+import { ClipWaveforms } from './clip-waveforms';
+import { soundBindings, bindingAt, replaceBinding, type SoundBinding } from '../shared/sound-bindings';
+import { samplePlacement, singleSampleId } from '../shared/sample-placement';
 import { writePending, readPending } from './recovery';
 import { MidiConnections } from './midi-connections';
 import { recordingTarget, validateRecordingTarget, retainPatternOutput, placeNewPattern, type RecordingTarget } from '../shared/recording-target';
@@ -31,6 +38,7 @@ import { sampleInsertion, statementEnd } from '../shared/sample-insertion';
 import { assetReferences } from '../shared/asset-references';
 import { GitHubImports } from './github-imports';
 import { SampleImports } from './imports';
+import { SampleEditor } from './sample-editor';
 import { RecordingPanel } from './recording';
 import { effectBehavior } from './live-effects';
 import { PerformancePanel } from './performance';
@@ -108,6 +116,7 @@ app.innerHTML = `
       <p class="instrument-status"><span id="midi-assignment" role="status"></span><span id="instrument-state" role="status"></span><span id="preset-learn-status" role="status"></span></p>
     </div>
 
+    <div id="chop-sounds" aria-label="Pattern sounds" hidden></div>
     <div id="editor"></div>
     <div id="empty-editor" hidden><p>No open patterns</p><button id="open-patterns">Open a pattern</button></div>
     <div id="apply-pill" role="status" hidden><span class="dirty-dot" aria-hidden="true"></span>Unapplied edits<button id="evaluate" aria-label="Apply changes" hidden>Apply <kbd>${mod} ↵</kbd></button><button id="audio-apply" hidden>Apply effects</button></div>
@@ -131,6 +140,7 @@ app.innerHTML = `
     <label class="inline">Snap <select id="snap"><option value="1">4 beats</option><option value="0.5">2 beats</option><option value="0.25">1 beat</option></select></label>
     <button id="add-track" class="bare">Add track</button>
     <span id="arrangement-status" hidden>Edit while stopped · 4 beats per cycle</span>
+    <button id="composition-editor" class="bare">Show editor</button>
     <button id="composition-close" class="bare icon" aria-label="Close composition">✕</button>
   </div><div id="sequencer-scroll"><div id="sequencer"><div id="ruler"></div><div id="tracks"></div><div id="playhead" hidden></div></div></div></div>
 </section>
@@ -180,6 +190,7 @@ app.innerHTML = `
     <div class="library-filters"><label>Search sounds <input id="sound-search" type="search" placeholder="Name, tag, description, or pack"></label><select id="library-source" aria-label="Filter sound source"><option value="all">All sources</option><option value="builtin">Built-in</option><option value="upload">Imported</option><option value="recording">Recorded</option></select></div>
     <p id="library-destination" class="hint"></p>
   </div>
+  <section id="chop-audition" hidden><div id="chop-region"></div><p id="chop-status" role="status"></p><div class="chop-actions"><button id="chop-use" class="primary">Use sound</button><button id="chop-cancel">Cancel</button></div></section>
   <div id="library-scroll">
     <details id="add-sounds"><summary>Add sounds</summary><section id="sound-import" role="tabpanel" aria-label="Import sounds"><p class="hint">Bring samples and recorded takes into this browser’s library.</p></section></details>
     <div id="builtin-sounds" class="asset-list"></div>
@@ -189,7 +200,7 @@ app.innerHTML = `
   <div class="library-test"><span id="library-midi-status" role="status">Choose Live on a sound to play it from your controller</span><div id="library-keys" aria-label="Test keyboard" hidden>${libraryKeys}</div></div>
 </aside>
 <dialog id="edit-dialog"><form method="dialog"><h2 id="edit-title"></h2><label id="edit-label">Name<input id="edit-name" maxlength="80" required></label><p id="edit-description"></p><div class="form-row"><button type="button" value="cancel">Cancel</button><button type="submit" value="confirm" class="primary">Confirm</button></div></form></dialog>
-<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Position (beat)<input id="clip-start" step="1" type="number" min="1" max="16385" required></label><label>Duration (beats)<input id="clip-length" step="1" type="number" min="1" max="16384" required></label></div><details><summary>Source timing</summary><label>Source offset (cycles)<input id="clip-offset" type="number" min="0" max="4096" step="any"></label><p>Edges trim the playback window. Extending does not loop or stretch audio.</p></details><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
+<dialog id="clip-dialog"><form method="dialog"><h2>Clip</h2><label>Track<select id="clip-lane" aria-label="Track"></select></label><div class="form-row"><label>Position (beat)<input id="clip-start" step="1" type="number" min="1" max="16385" required></label><label>Duration (beats)<input id="clip-length" step="1" type="number" min="1" max="16384" required></label></div><label id="clip-playback-label" hidden>Sample playback<select id="clip-playback"><option value="once">Play once</option><option value="pattern">Repeat pattern</option></select></label><p id="clip-playback-help" hidden>Plays once from its anchors. Extending adds silence; trimming shortens the playback window. Duplicate the clip to repeat it.</p><div id="clip-audio-controls" hidden><fieldset><legend>Timing</legend><button type="button" id="clip-align" class="primary">Align…</button><p>Place syllables on beats, fit the phrase to bars, or Smart snap its attacks to the grid while listening with the song.</p></fieldset></div><details id="clip-offset-details"><summary>Source timing</summary><label>Source offset (cycles)<input id="clip-offset" type="number" min="0" max="4096" step="any"></label><p>Edges trim the playback window. Extending does not loop or stretch audio.</p></details><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="duplicate" formnovalidate>Duplicate</button><button value="source" formnovalidate>Open source pattern</button><button value="remove" formnovalidate>Remove</button><button value="mute" formnovalidate id="clip-mute">Mute</button><button value="save" class="primary">Save clip</button></div></form></dialog>
 <div id="notice" role="status" aria-live="polite"></div>
 <dialog id="slot-dialog"><form method="dialog"><h2>Add sound slot</h2><label>Name<input id="slot-name" pattern="[a-zA-Z][\\w-]{0,39}" value="texture" required></label><div class="form-row"><button value="cancel" formnovalidate>Cancel</button><button value="add" class="primary">Add slot</button></div></form></dialog>
 <input type="file" id="import-file" accept=".strudel,.str,.js" hidden><input id="backup-file" type="file" accept=".zip" hidden>`;
@@ -214,12 +225,15 @@ let assets: Asset[] = [];
 let devicePorts: string[] = [];
 let selectedAsset: string | undefined;
 let selectedSound: string | undefined;
-let libraryTarget: { owner: StudioEditor; code: string; from: number; to: number } | undefined;
+let libraryTarget: { owner: StudioEditor; code: string; from: number; to: number; binding?: SoundBinding; tabId?:string } | undefined;
 let libraryReturn: HTMLElement | undefined;
 let libraryMidi = false;
+let regionEditor: SampleEditor | undefined;
+let regionEpoch = 0;
+let replacingSound = false;
 const libraryNotes = new Set<string>();
-function stopLibraryNotes() { for (const key of libraryNotes) engine.performanceAudio.release(key); libraryNotes.clear(); }
-function selectLibrarySound(name: string) { stopLibraryNotes(); previewEpoch++; if (previewKey) engine.performanceAudio.release(previewKey); selectedSound = name; selectedAsset = assets.find(a => soundKey(a) === name)?.id; paintLibrarySelection(); }
+function stopLibraryNotes() { regionEditor?.stop(); for (const key of libraryNotes) engine.performanceAudio.release(key); libraryNotes.clear(); }
+function selectLibrarySound(name: string) { if(replacingSound)return;stopLibraryNotes(); previewEpoch++; if (previewKey) engine.performanceAudio.release(previewKey); selectedSound = name; selectedAsset = assets.find(a => soundKey(a) === name)?.id; paintLibrarySelection(); if(libraryTarget?.binding)void loadChopRegion(); }
 function paintMidiAssignment() {
   const config = instrumentFor(project);
   const name = instrumentSound(config.appliedCode);
@@ -282,9 +296,10 @@ function paintLibrarySelection() {
 }
 async function libraryNote(key: string, pitch: number, velocity: number, on: boolean) {
   const voice = `library-midi:${key}`;
-  if (!on) { libraryNotes.delete(voice); engine.performanceAudio.release(voice); return; }
+  if (!on) { if(regionEditor)void regionEditor.audition(voice,pitch,velocity,false,engine.audioContext,engine.performanceAudio.output); libraryNotes.delete(voice); engine.performanceAudio.release(voice); return; }
   if (!libraryMidi || !selectedSound) return;
   const name = selectedSound;
+  if(libraryTarget?.binding && selectedAsset){libraryNotes.add(voice);await engine.unlock();if(!libraryNotes.has(voice)||selectedSound!==name||!libraryTarget?.binding)return;if(regionEditor?.ready)await regionEditor.audition(voice,pitch,velocity,on,engine.audioContext,engine.performanceAudio.output);return;}
   libraryNotes.add(voice); await engine.unlock();
   if (!libraryNotes.has(voice) || !libraryMidi || selectedSound !== name) return;
   $('#library-midi-status').textContent = `Live · ${engine.soundEntries.find(s => s.name === name)?.label ?? name} · MIDI ${pitch}`;
@@ -349,7 +364,7 @@ function notice(message: string, error = false) {
   $('#notice').textContent = message; $('#notice').classList.toggle('error', error); $('#notice').classList.add('visible');
   clearTimeout(noticeTimer); noticeTimer = setTimeout(() => $('#notice').classList.remove('visible'), error ? 12000 : 5000);
 }
-function guard(fn: () => unknown | Promise<unknown>) { return async () => { try { await fn(); } catch (error) { notice(error instanceof Error ? error.message : 'Something went wrong', true); } }; }
+function guard(fn: () => unknown | Promise<unknown>) { return async () => { try { await fn(); } catch (error) { if ((error as Error)?.name === 'AbortError') return; notice(error instanceof Error ? error.message : 'Something went wrong', true); } }; }
 const editors = new Map<string, StudioEditor>();
 let editor: StudioEditor;
 let instrumentOpen = false;
@@ -374,7 +389,7 @@ function getEditor(id = project.activeTabId) {
     const liveVersions = new Map<string, number>();
     instance = new StudioEditor(root, tab, {
       sounds: () => engine.soundEntries, functions: () => id === AUDIO_EDITOR ? ['AUDIO', 'gain', 'pan', 'lpf', 'hpf', 'delay', 'delaytime', 'delayfeedback', 'room', 'slider'] : id === MIDI_EDITOR ? [...engine.functionNames, 'MIDI'] : engine.functionNames,
-      change: (live) => { for (const slider of instance?.sliders ?? []) engine.liveEffects.update(slider.id, instance!.values.get(slider.id) ?? slider.value); if (id === MIDI_EDITOR || id === AUDIO_EDITOR) { const config = id === AUDIO_EDITOR ? project.audioInput! : instrumentFor(project); config.code = instance!.code; config.anchors = instance!.anchors; const updates = new Map<string, number>(); for (const [key, version] of instance!.liveVersions) if (version !== liveVersions.get(key)) { liveVersions.set(key, version); updates.set(key, instance!.values.get(key)!); } updateAppliedInstrumentSliders(config, updates); if (id === AUDIO_EDITOR && updates.size) { try { liveInput.apply(config.appliedCode); } catch (error) { notice((error as Error).message, true); } } if (!live) paintMidiAssignment(); } if (!live) { if (id === activeEditorId()) renderSliders(); renderBindings(); renderTransport(); } dirty(live); },
+      change: (live) => { for (const slider of instance?.sliders ?? []) engine.liveEffects.update(slider.id, instance!.values.get(slider.id) ?? slider.value); if (id === MIDI_EDITOR || id === AUDIO_EDITOR) { const config = id === AUDIO_EDITOR ? project.audioInput! : instrumentFor(project); config.code = instance!.code; config.anchors = instance!.anchors; const updates = new Map<string, number>(); for (const [key, version] of instance!.liveVersions) if (version !== liveVersions.get(key)) { liveVersions.set(key, version); updates.set(key, instance!.values.get(key)!); } updateAppliedInstrumentSliders(config, updates); if (id === AUDIO_EDITOR && updates.size) { try { liveInput.apply(config.appliedCode); } catch (error) { notice((error as Error).message, true); } } if (!live) paintMidiAssignment(); } if (!live) { if (id === activeEditorId()) { renderSliders(); queueMicrotask(renderChopSounds); } renderBindings(); renderTransport(); } dirty(live); },
       value: (sliderId, value) => queueMidiSlider(instance!, sliderId, value),
       select: (sliderId) => { selectedSlider = sliderId; renderBindings(); },
       evaluate: () => void guard(() => id === AUDIO_EDITOR ? applyAudioInput() : id === MIDI_EDITOR ? applyMidiInstrument() : engine.started ? engine.apply() : startPlayback())(), stop: () => stopPlayback(),
@@ -597,7 +612,7 @@ async function previewRecordedAudio(id: string, testEffects = false) {
 }
 function renderTakeView() {
   const tab = project.tabs.find(t => t.id === project.activeTabId);
-  const id = tab?.audioAssetId ?? project.clips.find(c => c.tabId === tab?.id && c.takeId)?.takeId;
+  const id = tab?.audioAssetId ?? project.clips.find(c => c.tabId === tab?.id && c.takeId && c.playback !== 'once')?.takeId;
   const visible = !audioOpen && !instrumentOpen && !!tab && openTabs.has(tab.id) && !!id;
   takeView.hidden = !visible;
   if (!visible || !tab) return;
@@ -715,11 +730,7 @@ const recordingPanel = new RecordingPanel(engine, async asset => { project.asset
   const recording = asset.recording!, destination = recordingPanel.destination;
   if (!destination) throw new Error('Choose a recording destination before placing the retained audio.');
   const next = snapshot(), trackId = destination.trackId;
-  const rawExact = recording.offsetCycles - (recording.latencySeconds ?? 0) * project.bpm / 240, exact = Math.max(0, rawExact);
-  const takeOffsetSeconds = Math.max(0, -rawExact * 240 / project.bpm);
-  const start = Math.floor(exact * 4) / 4, lead = (exact - start) * 240 / project.bpm;
-  const length = Math.max(.25, Math.ceil((Math.max(0, (asset.duration ?? 0) - takeOffsetSeconds) + lead) * project.bpm / 240 * 4) / 4);
-  const clip = { id: destination.clipId, tabId: destination.tabId, trackId, start, length, takeId: asset.id, takeLeadSeconds: lead, takeOffsetSeconds, muted: false };
+  const clip = { id: destination.clipId, tabId: destination.tabId, trackId, takeId: asset.id, ...recordedTakePlacement(recording, asset.duration ?? 0, project.bpm), muted: false };
   if (!next.tracks.some(t => t.id === trackId) || !canPlace(next.clips, clip)) throw new Error('Audio retained in the library. The chosen track has no room; keep the take and free this destination before retrying.');
   if (next.tabs.length >= 50) throw new Error('Audio retained. Free a pattern before placing it.');
   next.tabs.push({ id: destination.tabId, name: asset.label || 'Audio take', audioAssetId: asset.id, code: `// Captured audio · natural speed and pitch.\ns("studio_${asset.id.replaceAll('-', '')}").gain(1)`, color: 'teal', anchors: [] });
@@ -781,9 +792,55 @@ $('#record-return').onclick = () => { const target = timelineRecording?.identity
 $('#record-audio-return').onclick = () => { const target = timelineRecording?.identity?.target ?? activeRecordingTarget; if (target?.kind === 'new' && !project.tabs.some(t => t.id === target.tabId)) { document.querySelector<HTMLButtonElement>(`[data-pending-tab="${target.tabId}"]`)?.click(); } else if (target) { switchTab(target.tabId); getEditor(target.tabId).revealRecording(true); } };
 $('#record-clear-note').onclick = () => { performancePanel.close(); renderRecording(); };
 $('#record-bar').append(recordingPanel.root);
-const sampleImports = new SampleImports(async asset => { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
+async function retainImportedSample(asset: Asset) { if (!project.assetIds.includes(asset.id)) project.assetIds.push(asset.id); assets = [asset, ...assets.filter(a => a.id !== asset.id)]; await engine.registerAssets(assets); selectedAsset = asset.id; selectedSound = soundKey(asset); renderAssets(); dirty(); }
+const sampleImports = new SampleImports(retainImportedSample, message => notice(message, true), () => selectedProjectName || project.name, () => persistSession());
+const sampleEditor = new SampleEditor(retainImportedSample, async asset => { libraryTarget = undefined; await useSound(soundKey(asset), asset); location.hash = '/'; routePage(); editor.view.focus(); }, () => project.bpm);
+document.body.append(sampleEditor.root);
+regionEditor = new SampleEditor(async asset => { assets=[asset,...assets.filter(a=>a.id!==asset.id)];await engine.registerAssets(assets); },async()=>{},()=>project.bpm);
+regionEditor.root.id='chop-region-editor';regionEditor.root.classList.add('embedded-sample-editor');
+$('#chop-region').append(regionEditor.root);
+const advanced=document.createElement('details');advanced.className='chop-advanced';advanced.innerHTML='<summary>Beat grid and click track</summary>';
+for(const field of regionEditor.root.querySelectorAll('fieldset'))advanced.append(field);
+regionEditor.root.querySelector('.sample-editor-save')!.before(advanced);
+function renderChopSounds(){
+  const root=$('#chop-sounds');if(!editor || audioOpen || instrumentOpen){root.hidden=true;return;}
+  const bindings=soundBindings(editor.code);root.hidden=!bindings.length;
+  root.innerHTML=bindings.map(b=>`<button class="bare" data-chop="${escape(b.id)}" title="Choose sound for ${escape(b.label)}"><strong>${escape(b.label)}</strong><span>${escape(assets.find(a=>soundKey(a)===b.sound)?.label ?? b.sound)}</span></button>`).join('');
+}
+function openChop(binding:SoundBinding){
+  if(captureActive())throw new Error('Finish recording before auditioning a replacement.');
+  libraryTarget={owner:editor,code:editor.code,from:binding.from,to:binding.to,binding,tabId:project.activeTabId};selectedSound=binding.sound;selectedAsset=assets.find(a=>soundKey(a)===binding.sound)?.id;
+  $('#sound-search').value='';$('#library-source').value='all';setSounds(true);
+}
+$('#chop-sounds').onclick=event=>void guard(()=>{const id=(event.target as HTMLElement).closest<HTMLElement>('[data-chop]')?.dataset.chop;const binding=soundBindings(editor.code).find(b=>b.id===id);if(binding)openChop(binding);})();
+async function loadChopRegion(){
+  const epoch=++regionEpoch;regionEditor!.reset();$('#chop-status').textContent='';$('#chop-use').textContent=`Use for ${libraryTarget?.binding?.label ?? 'sound'}`;
+  const asset=assets.find(a=>a.id===selectedAsset);regionEditor!.root.hidden=!asset;
+  $('#chop-use').disabled=true;
+  if(asset){if(asset.missing){$('#chop-status').textContent='This sample is missing. Recover it before use.';return;}try { const blob=await workspace.audioBlob(asset.id);if(epoch!==regionEpoch)return;await regionEditor!.open(blob,asset.label||asset.source?.name||'Sample',asset); } catch(error) { if(epoch===regionEpoch)$('#chop-status').textContent=(error as Error).message;return; }}
+  if(epoch!==regionEpoch)return;
+  try{validateChopTarget();$('#chop-use').disabled=!!asset&&!regionEditor!.ready;}catch(error){$('#chop-status').textContent=(error as Error).message;}
+}
+function validateChopTarget(){const t=libraryTarget;if(!t?.binding || !t.tabId || !editorsHas(t.owner) || t.owner.code!==t.code)throw new Error('The destination changed. Close the catalogue and select the chop again.');engine.validateSoundReplacement(t.tabId,t.binding.id,t.binding.sound);return t;}
+$('#chop-cancel').onclick=()=>setSounds(false);
+$('#chop-use').onclick=guard(async()=>{
+  if(replacingSound)return;replacingSound=true;$('#chop-use').disabled=true;
+  try{
+    const target=validateChopTarget();let asset=assets.find(a=>a.id===selectedAsset),name=selectedSound!;
+    if(asset){if(!regionEditor?.ready)throw new Error('Wait for the waveform to load.');if(!regionEditor.wholeSource)asset=await regionEditor.commitSelection();name=soundKey(asset);}
+    validateChopTarget();if(libraryTarget!==target)throw new Error('The destination changed. Select the chop again.');
+    if(asset)await engine.preload(asset);
+    validateChopTarget();if(!asset && project.clips.some(c=>c.tabId===target.tabId&&c.playback==='once'))throw new Error('Choose a saved sample for a one-shot audio clip.');const change=replaceBinding(target.owner.code,target.binding!.id,target.binding!.sound,name);
+    await engine.replaceSound(target.tabId!,target.binding!.id,target.binding!.sound,name);
+    target.owner.view.dispatch({changes:change,userEvent:'input.sample',annotations:isolateHistory.of('full')});
+    if(asset){for(const clip of project.clips)if(clip.tabId===target.tabId&&clip.playback==='once'){clip.takeId=asset.id;if(clip.anchors){delete clip.anchors;notice('Replaced the sample; its previous alignment was removed. Right-click the clip to align it again.');}}if(!project.assetIds.includes(asset.id))project.assetIds.push(asset.id);}
+    engine.syncSoundRevision(target.tabId!);dirty();renderChopSounds();replacingSound=false;setSounds(false);target.owner.view.focus();notice(engine.started?'Sound queued for the next cycle.':'Sound replaced.');
+  }catch(error){$('#chop-status').textContent=(error as Error).message;throw error;}finally{replacingSound=false;$('#chop-use').disabled=false;}
+});
+
+async function editLibrarySample(id: string) { location.hash = '/samples/edit'; routePage(); await sampleEditor.openAsset(assetById(id)); }
 const importPage = document.createElement('section'); importPage.id = 'sample-import-page'; importPage.hidden = true;
-importPage.innerHTML = `<header><a href="#/">← Back to Studio</a><span>YOUR SOUND LIBRARY</span></header><h1>Bring your own sounds.</h1><p>Import from a public GitHub repository, or choose files from your device. Selected sounds stay in this browser.</p><div class="import-columns"><div id="github-import-column"></div><div id="file-import-column"></div></div><section class="browser-storage"><h2>Saved on this device</h2><p id="storage-usage" role="status"></p><p>Browser data can be cleared. Download project backups to keep your music or move it to another device.</p><button id="persist-storage">Keep browser storage</button><button id="import-backup">Download current project backup</button></section>`;
+importPage.innerHTML = `<header><a href="#/">← Back to Studio</a><span>YOUR SOUND LIBRARY</span></header><h1>Bring your own sounds.</h1><p>Import from a public GitHub repository, or choose files from your device. Selected sounds stay in this browser.</p><p><a href="#/samples/edit">WAV editor → Select a region and save a sample</a></p><div class="import-columns"><div id="github-import-column"></div><div id="file-import-column"></div></div><section class="browser-storage"><h2>Saved on this device</h2><p id="storage-usage" role="status"></p><p>Browser data can be cleared. Download project backups to keep your music or move it to another device.</p><button id="persist-storage">Keep browser storage</button><button id="import-backup">Download current project backup</button></section>`;
 document.body.append(importPage);
 $('#file-import-column').append(sampleImports.root);
 $('#github-import-column').append(new GitHubImports(sampleImports, message => notice(message, true)).root);
@@ -794,9 +851,9 @@ async function updateStorageUsage() {
 }
 let focusGitHubImport = false;
 function routePage() {
-  const importing = location.hash === '#/samples/import';
-  if (importing) { setSounds(false); sheets.close(false); }
-  importPage.hidden = !importing; app.hidden = importing;
+  const importing = location.hash === '#/samples/import', editing = location.hash === '#/samples/edit';
+  if (importing || editing) { setSounds(false); sheets.close(false); }
+  importPage.hidden = !importing; app.hidden = importing || editing; sampleEditor.show(editing);
   if (importing) { void updateStorageUsage().catch(() => {}); importPage.querySelector('h1')!.setAttribute('tabindex', '-1'); if (focusGitHubImport) document.querySelector<HTMLElement>('#github-import-column input')?.focus(); else importPage.querySelector('h1')!.focus(); focusGitHubImport = false; }
 }
 window.addEventListener('hashchange', routePage);
@@ -862,6 +919,8 @@ function expressionActions(pos: number, x: number, y: number) {
     ], x, y, () => owner.view.contentDOM); return true;
   }
   if (instrumentOpen || audioOpen) return false;
+  const binding = bindingAt(editor.code,pos);
+  if(binding){void guard(()=>openChop(binding))();return true;}
   const token = soundToken(editor.code, pos);
   if (token) {
     libraryTarget = { owner: editor, code: editor.code, from: token.from, to: token.to }; selectedSound = editor.code.slice(token.from, token.to); selectedAsset = assets.find(a => soundKey(a) === selectedSound)?.id; $('#sound-search').value = ''; $('#library-source').value = 'all'; setSounds(true); return true;
@@ -883,13 +942,13 @@ function expressionActions(pos: number, x: number, y: number) {
 $('#editor').addEventListener('click', event => {
   if (!(event.target as HTMLElement).closest('.cm-content') || !editor.view.state.selection.main.empty) return;
   const pos = editor.view.posAtCoords({ x: event.clientX, y: event.clientY });
-  if (pos !== null && ((event.target as HTMLElement).closest('[data-input-function]') || soundToken(editor.code, pos))) expressionActions(pos, event.clientX, event.clientY + 12);
+  if (pos !== null && ((event.target as HTMLElement).closest('[data-input-function]') || bindingAt(editor.code,pos) || soundToken(editor.code, pos))) expressionActions(pos, event.clientX, event.clientY + 12);
 });
 $('#editor').addEventListener('keydown', event => {
   const target = event.target as HTMLElement;
-  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10') && !(target.matches('[data-input-function]') && ['Enter', ' '].includes(event.key))) return;
+  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10') && !(target.matches('[data-input-function], [data-chop-reference]') && ['Enter', ' '].includes(event.key))) return;
   const rect = target.getBoundingClientRect();
-  const pos = target.matches('[data-input-function]') ? editor.view.posAtDOM(target) : editor.view.state.selection.main.head;
+  const pos = target.matches('[data-input-function], [data-chop-reference]') ? editor.view.posAtDOM(target) : editor.view.state.selection.main.head;
   if (expressionActions(pos, rect.left, rect.bottom)) { event.preventDefault(); event.stopPropagation(); }
 });
 $('#tracks').addEventListener('pointerdown', event => { const id = (event.target as HTMLElement).closest<HTMLElement>('[data-clip]')?.dataset.clip; if (id) selectedMidiClip = id; });
@@ -1078,13 +1137,14 @@ function renderAssets() {
   const query = $('#sound-search').value.trim().toLowerCase(), source = $('#library-source').value;
   const matches = (values: unknown[]) => query.split(/\s+/).every(term => values.join(' ').toLowerCase().includes(term));
   const visibleAssets = assets.filter(a => source !== 'builtin' && (source === 'all' || a.provider === source || source === 'upload' && a.provider === 'github' || source === 'elevenlabs' && a.provider === 'fixture') && matches([soundLabel(a), a.description, a.prompt, ...(a.tags ?? []), a.pack?.name, a.pack?.folder, soundRepository(a)]));
+  if(libraryTarget?.binding){const pack=assets.find(a=>a.id===selectedAsset)?.pack?.id;visibleAssets.sort((a,b)=>Number(b.id===selectedAsset)-Number(a.id===selectedAsset)||Number(!!pack&&b.pack?.id===pack)-Number(!!pack&&a.pack?.id===pack));}
   const builtin = source === 'all' || source === 'builtin' ? engine.soundEntries.filter(e => !assets.some(a => soundKey(a) === e.name) && matches([e.name, e.label])) : [];
   const total = assets.length + engine.soundEntries.filter(e => !assets.some(a => soundKey(a) === e.name)).length, shown = visibleAssets.length + builtin.length;
   $('#asset-count').textContent = shown === total ? `${total} sound${total === 1 ? '' : 's'}` : `${shown} of ${total} sounds`;
-  $('#library-destination').textContent = libraryTarget ? `Replace “${libraryTarget.code.slice(libraryTarget.from, libraryTarget.to)}” · preview, then choose Swap` : 'Preview a sound, then insert it into your pattern.';
+  $('#library-destination').textContent = libraryTarget?.binding ? `Choose a sound for ${libraryTarget.binding.label}. Audition with MIDI, then confirm.` : libraryTarget ? `Replace “${libraryTarget.code.slice(libraryTarget.from, libraryTarget.to)}” · preview, then choose Swap` : 'Preview a sound, then insert it into your pattern.';
   const use = libraryTarget ? 'Swap' : 'Insert';
   $('#builtin-sounds').innerHTML = builtin.map(e => `<article class="asset ${selectedSound === e.name ? 'selected' : ''}"><button class="asset-select" data-select-sound="${escape(e.name)}"><span><strong>${escape(e.label)}</strong><small>Built-in · ${escape(e.name)}</small></span></button><button data-use-sound="${escape(e.name)}">${use}</button><button data-preview-sound="${escape(e.name)}" aria-label="Preview ${escape(e.label)}">▶</button><button data-assign-midi="${escape(e.name)}" aria-label="Assign ${escape(e.label)} to MIDI">Assign to MIDI</button><button data-live-sound="${escape(e.name)}" aria-pressed="${libraryMidi && selectedSound === e.name}" aria-label="Live ${escape(e.label)}" title="Play this sound from your MIDI controller or the test keys">Live</button></article>`).join('');
-  $('#assets').innerHTML = visibleAssets.map(a => `<article data-asset="${a.id}" class="asset ${selectedSound === soundKey(a) || a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span><strong>${escape(soundLabel(a))}</strong>${soundRepository(a) ? `<small class="sound-repository">GitHub · ${escape(soundRepository(a))}</small>` : ''}<small>${[escape(a.description || a.prompt), a.tags?.length ? escape(a.tags.join(', ')) : '', a.pack ? escape(a.pack.name) : '', a.missing ? 'Audio missing' : a.precision?.working === 'float32' ? 'Float working audio' : 'Legacy precision; original retained when available'].filter(Boolean).join(' · ')}</small></span></button>${a.missing ? `<button data-recover="${a.id}">Recover sound</button>` : ''}<button data-insert-existing="${a.id}" ${a.missing ? 'disabled' : ''}>${use}</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}" ${a.missing ? 'disabled' : ''}>▶</button><button data-assign-midi="${escape(soundKey(a))}" aria-label="Assign ${escape(soundLabel(a))} to MIDI" ${a.missing ? 'disabled' : ''}>Assign to MIDI</button><button data-live-sound="${escape(soundKey(a))}" aria-pressed="${libraryMidi && selectedSound === soundKey(a)}" aria-label="Live ${escape(soundLabel(a))}" title="Play this sound from your MIDI controller or the test keys" ${a.missing ? 'disabled' : ''}>Live</button><details class="asset-options"><summary aria-label="Options for ${escape(soundLabel(a))}">•••</summary><div><button data-rename-asset="${a.id}">Rename</button><button data-metadata="${a.id}">Tags and description</button>${a.pack ? `<button data-rename-pack="${a.pack.id}">Rename pack</button>` : ''}</div></details></article>`).join('') || (builtin.length ? '' : '<p class="empty">No matching sounds. Try another search or add sounds.</p>');
+  $('#assets').innerHTML = visibleAssets.map(a => `<article data-asset="${a.id}" class="asset ${selectedSound === soundKey(a) || a.id === selectedAsset ? 'selected' : ''}"><button data-select-asset="${a.id}" class="asset-select"><span><strong>${escape(soundLabel(a))}</strong>${soundRepository(a) ? `<small class="sound-repository">GitHub · ${escape(soundRepository(a))}</small>` : ''}<small>${[escape(a.description || a.prompt), a.tags?.length ? escape(a.tags.join(', ')) : '', a.pack ? escape(a.pack.name) : '', a.missing ? 'Audio missing' : a.precision?.working === 'float32' ? 'Float working audio' : 'Legacy precision; original retained when available'].filter(Boolean).join(' · ')}</small></span></button>${a.missing ? `<button data-recover="${a.id}">Recover sound</button>` : ''}<button data-insert-existing="${a.id}" ${a.missing ? 'disabled' : ''}>${use}</button><button data-preview="${a.id}" aria-label="Preview ${escape(soundLabel(a))}" ${a.missing ? 'disabled' : ''}>▶</button><button data-assign-midi="${escape(soundKey(a))}" aria-label="Assign ${escape(soundLabel(a))} to MIDI" ${a.missing ? 'disabled' : ''}>Assign to MIDI</button><button data-live-sound="${escape(soundKey(a))}" aria-pressed="${libraryMidi && selectedSound === soundKey(a)}" aria-label="Live ${escape(soundLabel(a))}" title="Play this sound from your MIDI controller or the test keys" ${a.missing ? 'disabled' : ''}>Live</button><details class="asset-options"><summary aria-label="Options for ${escape(soundLabel(a))}">•••</summary><div><button data-rename-asset="${a.id}">Rename</button><button data-metadata="${a.id}">Tags and description</button><button data-edit-sample="${a.id}" ${a.missing ? 'disabled' : ''}>Edit sample</button>${a.pack ? `<button data-rename-pack="${a.pack.id}">Rename pack</button>` : ''}</div></details></article>`).join('') || (builtin.length ? '' : '<p class="empty">No matching sounds. Try another search or add sounds.</p>');
   $('#assignment').hidden = !selectedAsset;
   paintLibrarySelection();
   $('#assign-target').innerHTML = project.controls.filter((c) => c.kind === 'pad' || c.kind === 'key').map((c) => `<option value="pad:${c.id}">${escape(c.label)} · Note ${c.number}</option>`).join('') + project.slots.map((s) => `<option value="slot:${s.name}">Sound slot: ${escape(s.name)}</option>`).join('');
@@ -1092,6 +1152,7 @@ function renderAssets() {
 $('#sound-search').oninput = renderAssets;
 $('#library-source').onchange = renderAssets;
 $('#builtin-sounds').onclick = e => { const el = (e.target as HTMLElement).closest<HTMLElement>('button'); if (!el) return; if (el.dataset.assignMidi) void guard(() => assignMidiSound(el.dataset.assignMidi!))(); else if (el.dataset.previewSound) void guard(() => previewSound(el.dataset.previewSound!))(); else if (el.dataset.useSound) void guard(() => useSound(el.dataset.useSound!))(); else if (el.dataset.liveSound) void guard(() => toggleLive(el.dataset.liveSound!))(); else if (el.dataset.selectSound) { selectLibrarySound(el.dataset.selectSound); } };
+$('#assets').addEventListener('click', e => { const editId = (e.target as HTMLElement).closest<HTMLElement>('[data-edit-sample]')?.dataset.editSample; if (editId) void guard(() => editLibrarySample(editId))(); });
 $('#assets').addEventListener('click', e => { const id = (e.target as HTMLElement).closest<HTMLElement>('[data-metadata]')?.dataset.metadata; if (id) void guard(() => editMetadata(id))(); });
 async function editMetadata(id: string) {
   const a = assetById(id), dialog = document.createElement('dialog');
@@ -1404,7 +1465,7 @@ function settleSlots(stopped = !engine.started) {
 }
 
 function startPlayback() { stopTakePreview(); if (engine.started && engine.diagnostics.target !== project.activeTabId) engine.stop(); return engine.evaluate(true, project.activeTabId, true); }
-function stopPlayback() { engine.countIn.cancel(); stopTakePreview(); if (preparingShared || timelineRecording?.pending || performancePanel.running) { void stopSharedRecording(); return; } liveInput.stop(); renderAudioInput(); midiComposition.finish(); document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
+function stopPlayback() { sampleEditor.stop(); engine.countIn.cancel(); stopTakePreview(); if (preparingShared || timelineRecording?.pending || performancePanel.running) { void stopSharedRecording(); return; } liveInput.stop(); renderAudioInput(); midiComposition.finish(); document.querySelectorAll('audio').forEach(audio => audio.pause()); void recordingPanel.stop(true); performancePanel.globalStop(); releaseNotes(); engine.stop(); settleSlots(true); renderComposition(); }
 function setCountIn(mode: MetronomeMode) {
   engine.countIn.mode = mode;
   try { localStorage.setItem('studio.count-in', mode); } catch { /* still works for this launch */ }
@@ -1431,6 +1492,7 @@ function restoreWorkspace() {
   if (!$('#sounds-panel').hidden) setSounds(false); setDrawer(saved.view === null ? undefined : 'composition');
 }
 function renderTabs() {
+  renderChopSounds();
   const visible = project.tabs.filter(t => openTabs.has(t.id));
   const patternSelected = !audioOpen && !instrumentOpen && visible.some(t => t.id === project.activeTabId);
   $('#input-tabs').innerHTML = `<button role="tab" id="tab-audio-input" aria-label="Audio input" aria-selected="${audioOpen}" tabindex="${audioOpen || (!instrumentOpen && !patternSelected) ? 0 : -1}" data-audio-tab><span class="meter-bars" aria-hidden="true"><i></i><i></i><i></i></span>Input</button><button role="tab" id="tab-midi-instrument" aria-label="MIDI instrument" aria-selected="${instrumentOpen}" aria-controls="editor-midi-instrument" tabindex="${instrumentOpen ? 0 : -1}" data-instrument-tab><span class="activity-dot" aria-hidden="true"></span>MIDI</button>`;
@@ -1450,6 +1512,7 @@ $('#open-patterns').onclick = () => commandPalette.show('Open ');function closeT
   if (!openTabs.size) $('#open-patterns').focus();
 }
 function switchTab(id: string) {
+  if (document.body.dataset.expanded === 'composition') document.body.dataset.expanded = '';
   stopTakePreview();
   instrumentOpen = false; audioOpen = false;
   openTabs.add(id); project.activeTabId = id; editor = getEditor(id); selectedSlider = undefined;
@@ -1483,7 +1546,7 @@ function createTab(name = `Pattern ${project.tabs.length + 1}`, code = '// Start
 }
 let lastTabClick: { id: string; at: number } | undefined;
 $('#tabs').addEventListener('keydown', e => { if (e.key !== 'F2') return; const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) { e.preventDefault(); void guard(() => renameTab(id))(); } });
-$('#tabs').onclick = e => { const close = (e.target as HTMLElement).closest<HTMLElement>('[data-close-tab]')?.dataset.closeTab; if (close) { closeTab(close); return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) { const repeated = e.detail > 0 && lastTabClick?.id === id && performance.now() - lastTabClick.at < 400; lastTabClick = { id, at: performance.now() }; if (repeated) { lastTabClick = undefined; void guard(() => renameTab(id))(); } else if (project.activeTabId !== id || instrumentOpen || audioOpen) switchTab(id); } };
+$('#tabs').onclick = e => { const close = (e.target as HTMLElement).closest<HTMLElement>('[data-close-tab]')?.dataset.closeTab; if (close) { closeTab(close); return; } const id = (e.target as HTMLElement).closest<HTMLElement>('[data-tab]')?.dataset.tab; if (id) { const repeated = e.detail > 0 && lastTabClick?.id === id && performance.now() - lastTabClick.at < 400; lastTabClick = { id, at: performance.now() }; if (repeated) { lastTabClick = undefined; void guard(() => renameTab(id))(); } else switchTab(id); } };
 $('#input-tabs').onclick = e => { if ((e.target as HTMLElement).closest('[data-audio-tab]')) openAudioInput(); if ((e.target as HTMLElement).closest('[data-instrument-tab]')) openMidiInstrument(); };
 $('#tabs').onkeydown = $('#input-tabs').onkeydown = e => {
   if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
@@ -1548,6 +1611,7 @@ $('#add-session').onclick = guard(addSession);
 async function insertSound(id: string) { const asset = assetById(id); await useSound(soundKey(asset), asset); }
 $('#insert-sound').onclick = guard(() => selectedAsset ? insertSound(selectedAsset) : undefined);
 function setSounds(open: boolean) {
+  if(!open && replacingSound)return;
   const wasOpen = !$('#sounds-panel').hidden;
   if (open) sheets.close(false);
   if (open && !wasOpen) libraryReturn = document.activeElement as HTMLElement;
@@ -1555,12 +1619,16 @@ function setSounds(open: boolean) {
   document.body.classList.toggle('sounds-open', open);
   for (const element of workspaceRegions()) element.inert = open;
 
+  $('#sounds-panel').classList.toggle('chop-picker',!!libraryTarget?.binding);
+  if(libraryTarget?.binding)$('#library-scroll').insertBefore($('#assets'),$('#builtin-sounds'));else $('#library-scroll').insertBefore($('#builtin-sounds'),$('#assets'));
+  $('#chop-audition').hidden = !libraryTarget?.binding;
   if (open) {
+    if(libraryTarget?.binding){libraryMidi=true;engine.releaseInputNotes();releaseNotes();void loadChopRegion();}
     void catalogue.refresh().catch(error => notice(error.message, true));
     if (!selectedSound) selectedSound = engine.soundEntries.find(s => s.name === 'triangle')?.name;
     renderAssets(); $('#sound-search').focus();
   } else {
-    libraryMidi = false; stopLibraryNotes(); previewEpoch++;
+    libraryMidi = false; stopLibraryNotes(); previewEpoch++;regionEpoch++;regionEditor?.reset();
     if (previewKey) engine.performanceAudio.release(previewKey);
     paintLibrarySelection(); libraryTarget = undefined;
     if (wasOpen) libraryReturn?.focus();
@@ -1583,6 +1651,7 @@ type DrawerView = 'composition';
 let drawerView: DrawerView | undefined;
 let drawerHeight = 300;
 function setDrawer(view?: DrawerView) {
+  if (!view && document.body.dataset.expanded === 'composition') document.body.dataset.expanded = '';
   drawerView = view; $('#drawer').hidden = !view; $('#composition-content').hidden = view !== 'composition';
   document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.setAttribute('aria-expanded', String(b.dataset.drawer === view)));
   document.body.classList.toggle('tools-open', !!view);
@@ -1598,6 +1667,7 @@ document.querySelectorAll<HTMLElement>('[data-drawer]').forEach(b => b.onclick =
   setDrawer(drawerView === b.dataset.drawer ? undefined : b.dataset.drawer as DrawerView);
 });
 $('#composition-close').onclick = () => setDrawer(undefined);
+$('#composition-editor').onclick = () => { takeCodeOpen.add(project.activeTabId); switchTab(project.activeTabId); editor.view.focus(); };
 $('#drawer-resize').onpointerdown = e => {
   const start = e.clientY, height = drawerHeight, handle = e.currentTarget as HTMLElement; handle.setPointerCapture(e.pointerId);
   handle.onpointermove = event => resizeDrawer(height + start - event.clientY);
@@ -1678,6 +1748,7 @@ midiComposition.range.addEventListener('input', () => renderComposition());
 midiComposition.range.addEventListener('click', e => { if ((e.target as HTMLElement).hasAttribute('data-midi-full')) renderComposition(); });
 function editArrangement() { if (midiComposition.running || midiComposition.pending || performancePanel.take?.state === 'capturing' || performancePanel.take?.notes.length) throw new Error('Resolve the MIDI take before editing the composition.'); if (timelineRecording?.pending) throw new Error('Finish recording before editing the composition.'); if (engine.started || engine.busy) throw new Error('Stop playback to edit the composition.'); }
 let selectedTrack: string | undefined;
+const clipWaveforms=new ClipWaveforms($('#sequencer-scroll'));
 function renderComposition() {
   midiComposition.refreshRange();
   if (!project.tracks.some(t => t.id === selectedTrack)) selectedTrack = project.tracks[0].id;
@@ -1700,10 +1771,11 @@ function renderComposition() {
     }
     trackRows.set(track.id, Math.max(1, ends.length));
   }
-  $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" style="height:${trackRows.get(track.id)! * 60}px" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" style="height:${trackRows.get(track.id)! * 60}px" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
+  $('#tracks').innerHTML = project.tracks.map((track, index) => `<div class="track-row"><div class="track-header" style="height:${trackRows.get(track.id)! * 84}px" data-track="${track.id}" aria-current="${track.id === selectedTrack}"><strong>${escape(track.name)}</strong><button data-track-mute="${track.id}" aria-label="${track.muted ? 'Unmute' : 'Mute'} ${escape(track.name)}" aria-pressed="${track.muted}">${track.muted ? 'Unmute' : 'Mute'}</button><button data-track-solo="${track.id}" aria-label="${project.soloTrackId === track.id ? 'Clear solo for' : 'Solo'} ${escape(track.name)}" aria-pressed="${project.soloTrackId === track.id}" title="Isolate this track; click again to restore the mix">Solo</button><button data-track-menu="${track.id}" aria-label="Actions for ${escape(track.name)}">•••</button></div><div class="lane" style="height:${trackRows.get(track.id)! * 84}px" data-track-id="${track.id}" data-lane="${index}" aria-label="${escape(track.name)}">${project.clips.filter(c => c.trackId === track.id).map(c => {
     const tab = project.tabs.find(t => t.id === c.tabId)!;
-    return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="top:${4 + clipRows.get(c.id)! * 60}px;left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · beat ${beatPosition(c.start)} · ${beatDuration(c.length)} beats${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${beatDuration(c.length)} beats${tab.tempoBpm ? ` · ${tab.tempoBpm} BPM` : ''}</small><span class="clip-resize clip-resize-left" data-resize="left" aria-hidden="true"></span><span class="clip-resize" data-resize="right" aria-hidden="true"></span></button>`;
+    return `<button class="clip" data-color="${tab.color}" data-muted="${isClipMuted(c, project.tracks, project.soloTrackId)}" data-clip="${c.id}" style="top:${4 + clipRows.get(c.id)! * 84}px;left:${c.start * 64}px;width:${c.length * 64}px" aria-label="${escape(tab.name)} · ${escape(track.name)} · beat ${beatPosition(c.start)} · ${beatDuration(c.length)} beats${isClipMuted(c, project.tracks, project.soloTrackId) ? ' · muted' : ''}"><strong>${escape(tab.name)}</strong><small>${isClipMuted(c, project.tracks, project.soloTrackId) ? 'Muted · ' : ''}${beatDuration(c.length)} beats${c.takeId ? ` · Once${(c.anchors?.length??0)>1?' · Aligned':''}` : ' · Pattern'}${tab.tempoBpm ? ` · ${tab.tempoBpm} BPM` : ''}</small>${c.takeId?`<canvas class="clip-waveform" data-clip-waveform="${c.id}" role="img" aria-label="Loading sample waveform"></canvas>`:''}<span class="clip-resize clip-resize-left" data-resize="left" aria-hidden="true"></span><span class="clip-resize" data-resize="right" aria-hidden="true"></span></button>`;
   }).join('') || '<p class="lane-empty">Drag a pattern tab here, or right-click it → Add to composition</p>'}</div></div>`).join('');
+  clipWaveforms.render(project.clips,assets,project.bpm);
   paintRecordingClip(); renderTransport(); renderRecording();
 }
 function paintRecordingClip() {
@@ -1747,12 +1819,22 @@ function putClip(clip: Clip) {
   project.clips = [...project.clips.filter(c => c.id !== clip.id), clip]; renderComposition(); dirty();
 }
 let editingClip: string | undefined;
+
 function openClip(id: string) {
   editArrangement(); const clip = project.clips.find(c => c.id === id)!; editingClip = id;
+  const tab = project.tabs.find(t => t.id === clip.tabId)!;
+  const eligible = clip.playback === 'once' || (!tab.audioAssetId && !!singleSampleId(editors.get(tab.id)?.code ?? tab.code) && !clip.takeId);
+  $('#clip-playback-label').hidden = $('#clip-playback-help').hidden = !eligible;
+  $('#clip-playback').value = clip.playback === 'once' ? 'once' : 'pattern';
+  $('#clip-audio-controls').hidden=!clip.takeId;$('#clip-offset-details').hidden=!!clip.takeId;
   $('#clip-lane').value = clip.trackId; $('#clip-start').value = String(beatPosition(clip.start)); $('#clip-length').value = String(beatDuration(clip.length)); $('#clip-offset').value = String(clip.sourceOffset ?? 0); $('#clip-mute').textContent = clip.muted ? 'Unmute' : 'Mute'; $('#clip-dialog').returnValue = ''; $('#clip-dialog').showModal();
 }
+function placementFor(tabId: string) {
+  const tab = project.tabs.find(t => t.id === tabId)!;
+  return samplePlacement({ ...tab, code: editors.get(tabId)?.code ?? tab.code }, assets, project.bpm);
+}
 function addToComposition(tabId: string) {
-  editArrangement(); const clip: Clip = { id: crypto.randomUUID(), tabId, trackId: selectedTrack ?? project.tracks[0].id, muted: false, start: Math.max(0, ...project.clips.filter(c => c.trackId === (selectedTrack ?? project.tracks[0].id)).map(c => c.start + c.length)), length: 4 };
+  editArrangement(); const clip: Clip = { id: crypto.randomUUID(), tabId, trackId: selectedTrack ?? project.tracks[0].id, muted: false, start: Math.max(0, ...project.clips.filter(c => c.trackId === (selectedTrack ?? project.tracks[0].id)).map(c => c.start + c.length)), ...placementFor(tabId) };
   putClip(clip); setDrawer('composition'); openClip(clip.id);
 }
 function duplicateClip(id: string) {
@@ -1765,17 +1847,45 @@ function duplicateClip(id: string) {
 function removeClip(id: string) {
   editArrangement(); project.clips = project.clips.filter(c => c.id !== id); renderComposition(); dirty();
 }
-$('#clip-dialog').addEventListener('close', () => void guard(() => {
+const alignDialog=new AlignDialog(engine,clip=>{
+ editArrangement();
+ if(project.clips.some(c=>c.id!==clip.id&&c.trackId===clip.trackId&&c.start<clip.start+clip.length&&clip.start<c.start+c.length))throw new Error('The fitted length overlaps another clip. Shorten the fit or move the clip first.');
+ if(!canPlace(project.clips,clip))throw new Error('Use whole-beat increments and leave space between clips in the same track.');
+ putClip(clip);notice('Alignment saved. The original sample is unchanged.');
+});
+function paceClip(id:string,pace:number){
+ editArrangement();const clip=project.clips.find(c=>c.id===id);if(!clip?.takeId)throw new Error('Choose a WAV audio clip.');
+ const paced=paceFit(clip,assetById(clip.takeId).duration??0,project.bpm,pace,'bar'),next=withAnchors({...clip,length:paced.length},paced.anchors);
+ if(project.clips.some(c=>c.id!==next.id&&c.trackId===next.trackId&&c.start<next.start+next.length&&next.start<c.start+c.length))throw new Error('The paced length overlaps another clip. Move the clip or shorten it first.');
+ putClip(next);notice(`${paced.speed.toFixed(2)}× natural pace over ${paced.bars} ${paced.bars===1?'bar':'bars'}, pitch unchanged. Open Align… to snap syllables.`);
+}
+function openAlignment(id:string){editArrangement();const clip=project.clips.find(c=>c.id===id);if(!clip?.takeId)throw new Error('Choose a WAV audio clip.');$('#clip-dialog').returnValue='cancel';$<HTMLDialogElement>('#clip-dialog').close();void alignDialog.open(clip,assetById(clip.takeId),project.bpm);}
+$('#clip-align').onclick=guard(()=>{if(editingClip)openAlignment(editingClip);});
+$('#clip-playback').onchange = () => {
+  const clip = project.clips.find(c => c.id === editingClip);
+  $('#clip-audio-controls').hidden=$('#clip-playback').value!=='once';$('#clip-offset-details').hidden=$('#clip-playback').value==='once';
+  if (clip && $('#clip-playback').value === 'once') { $('#clip-length').value = String(placementFor(clip.tabId).length * 4); $('#clip-offset').value = '0'; }
+};
+$('#clip-dialog').addEventListener('close', () => void guard(async () => {
   const action = $('#clip-dialog').returnValue, clip = project.clips.find(c => c.id === editingClip); if (!clip || action === 'cancel') return;
   if (action === 'source') { switchTab(clip.tabId); return; }
   if (action === 'mute') { toggleClipMute(clip.id); return; }
   editArrangement();
   if (action === 'duplicate') duplicateClip(clip.id);
   else if (action === 'remove') removeClip(clip.id);
-  else if (action === 'save') putClip({ ...clip, trackId: $('#clip-lane').value, start: (Number($('#clip-start').value) - 1) / 4, length: Number($('#clip-length').value) / 4, sourceOffset: Number($('#clip-offset').value) });
+  else if (action === 'save') {
+    let playback = {};
+    if (!$('#clip-playback-label').hidden) {
+      if ($('#clip-playback').value === 'once' && !placementFor(clip.tabId).takeId) throw new Error('Choose Repeat pattern for a tab with multiple sounds or rhythmic transformations.');
+      playback = $('#clip-playback').value === 'once' ? { playback: 'once', takeId: clip.playback==='once'&&clip.takeId?clip.takeId:placementFor(clip.tabId).takeId } : { playback: 'pattern', takeId: undefined, anchors: undefined };
+    }
+    const next: Clip = { ...clip, ...playback, trackId: $('#clip-lane').value, start: (Number($('#clip-start').value) - 1) / 4, length: Number($('#clip-length').value) / 4, sourceOffset: Number($('#clip-offset').value) };
+    if (next.takeId) delete next.sourceOffset; else { delete next.anchors; delete next.takeId; }
+    putClip(next);notice('Clip saved.');
+  }
 })());
-$('#bpm').onchange = guard(() => { editArrangement(); if (recordingPanel.pending) throw new Error('Resolve the audio take before changing tempo.'); const bpm = Number($('#bpm').value); if (!Number.isFinite(bpm) || bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); project.bpm = bpm; syncProjectTempo(); dirty(); });
-installCompositionGestures({ reveal: () => setDrawer('composition'), project: () => project, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
+$('#bpm').onchange = guard(() => { editArrangement(); if (recordingPanel.pending) throw new Error('Resolve the audio take before changing tempo.'); const bpm = Number($('#bpm').value); if (!Number.isFinite(bpm) || bpm < 20 || bpm > 300) throw new Error('Tempo must be between 20 and 300 BPM.'); const issue = tempoChangeIssue(project.clips.map(c => ({ ...c, name: project.tabs.find(t => t.id === c.tabId)?.name })), takeId => assets.find(a => a.id === takeId)?.duration ?? Infinity, bpm); if (issue) { $('#bpm').value = String(project.bpm); throw new Error(issue); } project.bpm = bpm; syncProjectTempo(); dirty(); });
+installCompositionGestures({ reveal: () => setDrawer('composition'), project: () => project, placement: placementFor, blocked: () => engine.started || engine.busy, commit: clip => void guard(() => putClip(clip))(), open: id => void guard(() => openClip(id))() });
 
 const contextMenu = new ContextMenu();
 function showContextMenu(target: HTMLElement, x: number, y: number, keyboard = false) {
@@ -1804,6 +1914,7 @@ function showContextMenu(target: HTMLElement, x: number, y: number, keyboard = f
     selector = `[data-clip="${id}"]`;
     actions = [
       action(clip.muted ? 'Unmute' : 'Mute', () => toggleClipMute(id)),
+      ...(clip.takeId?[action('Align…',()=>openAlignment(id),stopped),action('Pace: natural',()=>paceClip(id,1),stopped),action('Pace: half time',()=>paceClip(id,.5),stopped),action('Pace: double time',()=>paceClip(id,2),stopped)]:[]),
       action('Edit', () => openClip(id), stopped),
       action('Duplicate', () => duplicateClip(id), stopped || (project.clips.length >= 500 ? 'Clip limit reached (500).' : !duplicatePlacement(project.clips, clip, 'candidate') ? 'No room in this lane.' : undefined)),
       action('Open source pattern', () => switchTab(clip.tabId)),
@@ -1811,7 +1922,7 @@ function showContextMenu(target: HTMLElement, x: number, y: number, keyboard = f
     ];
   } else {
     const id = item.dataset.asset!; selector = `[data-select-asset="${id}"]`;
-    actions = [action('Preview', () => previewSound(soundKey(assetById(id)))), action('Insert into pattern', () => insertSound(id)), action('Rename', () => renameSound(id))];
+    actions = [action('Preview', () => previewSound(soundKey(assetById(id)))), action('Insert into pattern', () => insertSound(id)), action('Rename', () => renameSound(id)), action('Edit sample', () => editLibrarySample(id), assetById(id).missing ? 'Restore missing audio first.' : undefined)];
   }
   contextMenu.open(actions, x, y, () => document.querySelector<HTMLElement>(selector) ?? document.querySelector<HTMLElement>('[role=tab][aria-selected=true]'));
   return true;
@@ -1888,6 +1999,7 @@ function commands(): Command[] {
   return [
     ...project.tabs.filter(t => !openTabs.has(t.id)).map(t => command(`Open ${t.name}`, () => { switchTab(t.id); editor.view.focus(); }, { color: t.color, hint: 'Closed', keywords: 'pattern file open', defaultResult: true, pattern: true })),
     command('Open pattern tab', () => commandPalette.show('', true), { defaultResult: true, priority: 0, keywords: 'closed files tabs' }),
+    command('WAV editor', () => { location.hash = '/samples/edit'; routePage(); }, { keywords: 'audio sample trim crop chop wav', defaultResult: true, priority: 6 }),
     command('Import GitHub Samples', () => { focusGitHubImport = true; if (location.hash === '#/samples/import') routePage(); else location.hash = '/samples/import'; }, { defaultResult: true, priority: 7, keywords: 'repository repo pack sounds import' }),
     command('Audio input', () => openSheet('audio'), { defaultResult: true, priority: 3, keywords: 'microphone device settings', hint: typeof navigator.mediaDevices?.getUserMedia === 'function' ? undefined : 'Microphone requires a supported browser and secure connection' }),
     command('Export pattern code', exportCode, { keywords: 'download strudel file save', disabled: !pattern ? 'Open a pattern first' : undefined }),

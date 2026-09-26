@@ -49,7 +49,7 @@ export function wavDuration(bytes: ArrayBuffer) {
   return duration;
 }
 
-const ImportMetadata = z.object({ recoverId: z.string().uuid().optional(), name: z.string().min(1).max(1000), label: z.string().trim().min(1).max(80), originalFormat: z.enum(['wav', 'mp3', 'ogg', 'flac']), pack: AssetSchema.shape.pack.optional(), source: AssetSchema.shape.source.optional(), provider: z.enum(['upload', 'github']).default('upload'), precision: AssetSchema.shape.precision });
+const ImportMetadata = z.object({ extraction: AssetSchema.shape.extraction, recoverId: z.string().uuid().optional(), name: z.string().min(1).max(1000), label: z.string().trim().min(1).max(80), originalFormat: z.enum(['wav', 'mp3', 'ogg', 'flac']), pack: AssetSchema.shape.pack.optional(), source: AssetSchema.shape.source.optional(), provider: z.enum(['upload', 'github']).default('upload'), precision: AssetSchema.shape.precision });
 export async function importSample(input: unknown, original: ArrayBuffer, wav: ArrayBuffer) {
   const m = ImportMetadata.parse(input); if (!original.byteLength || original.byteLength > 64_000_000) throw new Error('Original file exceeds 64 MB.'); const duration = wavDuration(wav), contentHash = await hash(original);
   return exclusive(async () => {
@@ -57,7 +57,7 @@ export async function importSample(input: unknown, original: ArrayBuffer, wav: A
     if (m.recoverId && existing && !existing.missing) throw new Error('This sound already has audio.');
     if (m.recoverId && existing?.contentHash && existing.contentHash !== contentHash) throw new Error('Choose the original file to recover this sound.');
     if (existing && !existing.missing) { const kept = { ...existing, personal: true }; await write([{ collection: 'assets', key: kept.id, value: kept }]); return { asset: kept, reused: true }; }
-    const a = AssetSchema.parse(existing ? { ...existing, missing: undefined } : { id: m.recoverId ?? crypto.randomUUID(), createdAt: new Date().toISOString(), label: m.label, provider: m.provider, personal: true, precision: m.precision, duration, format: 'wav', contentHash, pack: m.pack, source: { ...m.source, name: m.name, originalFormat: m.originalFormat } });
+    const a = AssetSchema.parse(existing ? { ...existing, missing: undefined } : { id: m.recoverId ?? crypto.randomUUID(), createdAt: new Date().toISOString(), label: m.label, provider: m.provider, personal: true, extraction: m.extraction, precision: m.precision, duration, format: 'wav', contentHash, pack: m.pack, source: { ...m.source, name: m.name, originalFormat: m.originalFormat } });
     if (a.format === 'mp3' && m.originalFormat !== 'mp3') throw new Error('Restore the original MP3 file.');
     await write([{ collection: 'assets', key: a.id, value: a }, { collection: 'audio', key: a.id, value: new Blob([a.format === 'mp3' ? original : wav], { type: a.format === 'mp3' ? 'audio/mpeg' : 'audio/wav' }) }, { collection: 'originals', key: a.id, value: new Blob([original]) }]);
     return { asset: a, reused: !!existing };

@@ -9,6 +9,9 @@ test('clip duplication finds the first fitting gap in its own lane', () => {
   assert.deepEqual(duplicatePlacement(clips, original, 'copy'), clip('copy', 8));
   assert.deepEqual(clips.map(c => c.id), ['later', 'blocked', 'a', 'other-lane']);
   assert.equal(duplicatePlacement([clip('end', 4096)], clip('end', 4096), 'copy'), undefined);
+  const anchored = { ...clip('v', 0), takeId: '77777777-7777-4777-a777-777777777777', anchors: [{ source: 0, beat: 0 }, { source: 1, beat: 3 }] };
+  const copy = duplicatePlacement([anchored], anchored, 'copy')!;
+  assert.deepEqual(copy.anchors, anchored.anchors); assert.notEqual(copy.anchors, anchored.anchors); assert.notEqual(copy.anchors![0], anchored.anchors[0]);
 });
 
 test('snapping chooses valid nearby edges and grid positions without changing length', async () => {

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { ANCHOR_LIMIT, anchorsWellFormed } from './clip-timing';
 
 const byte = z.number().int().min(0).max(127);
 const id = z.string().min(1).max(100);
@@ -21,6 +22,7 @@ export const AssetSchema = z.object({
   precision: z.object({ rate: z.number().int().positive(), channels: z.number().int().min(1).max(64), bits: z.number().int().optional(), working: z.enum(['float32', 'legacy']), originalAvailable: z.boolean() }).optional(),
   catalogue: z.object({ packId: z.string().uuid(), revision: z.string(), path: z.string(), hash: z.string() }).optional(),
   personal: z.boolean().optional(),
+  extraction: z.object({ name: z.string().max(1000), assetId: z.string().uuid().optional(), hash: z.string().regex(/^[a-f0-9]{64}$/), rate: z.number().int().positive(), startFrame: z.number().int().nonnegative(), endFrame: z.number().int().positive() }).refine(v => v.endFrame > v.startFrame, 'Invalid extraction region').optional(),
   missing: z.boolean().optional(),
 });
 export type Asset = z.infer<typeof AssetSchema>;
@@ -81,13 +83,26 @@ export const TabSchema = OldTabSchema.extend({ color: z.enum(palette), audioAsse
 export type Tab = z.infer<typeof TabSchema>;
 export const TrackSchema = z.object({ id: tabId, name: z.string().trim().min(1).max(80), muted: z.boolean() });
 const cycle = z.number().min(0).max(4096).multipleOf(.25);
-export const ClipSchema = z.object({ id: tabId, tabId, trackId: tabId, start: cycle, length: cycle.min(.25), sourceOffset: z.number().min(0).max(4096).optional(), takeId: z.string().uuid().optional(), takeLeadSeconds: z.number().nonnegative().optional(), takeOffsetSeconds: z.number().nonnegative().optional(), muted: z.boolean() });
+const LegacyClipSchema = z.object({ id: tabId, tabId, trackId: tabId, start: cycle, length: cycle.min(.25), sourceOffset: z.number().min(0).max(4096).optional(), takeId: z.string().uuid().optional(), sourceSampleId: z.string().uuid().optional(), warpSourceId: z.string().uuid().optional(), playback: z.enum(['once', 'pattern']).optional(), sampleSpeed: z.number().min(.5).max(2).optional(), takeLeadSeconds: z.number().nonnegative().optional(), takeOffsetSeconds: z.number().nonnegative().optional(), muted: z.boolean() });
+type LegacyClip = z.infer<typeof LegacyClipSchema>;
+export const ClipAnchorSchema = z.object({ source: z.number().nonnegative(), beat: z.number().nonnegative() });
+/** Audio clips map sample seconds to clip beats through anchors (see clip-timing.ts); pattern clips keep sourceOffset. */
+export const ClipSchema = LegacyClipSchema.omit({ sourceSampleId: true, warpSourceId: true, sampleSpeed: true, takeLeadSeconds: true, takeOffsetSeconds: true })
+  .extend({ anchors: z.array(ClipAnchorSchema).min(1).max(ANCHOR_LIMIT).optional() })
+  .refine(c => !c.anchors || anchorsWellFormed(c.anchors), 'Clip anchors must be ordered');
 export type Clip = z.infer<typeof ClipSchema>;
+/** Seconds-based take timing (v7) becomes one anchor; unreleased speed/warp fields are dropped. */
+export function migrateClip({ sourceSampleId, warpSourceId, sampleSpeed, takeLeadSeconds, takeOffsetSeconds, ...clip }: LegacyClip, bpm: number): Clip {
+  if (!clip.takeId) return clip;
+  const { sourceOffset, ...rest } = clip, cps = bpm / 240, speed = sampleSpeed ?? 1, lead = takeLeadSeconds ?? 0, shift = (sourceOffset ?? 0) / cps;
+  const source = (takeOffsetSeconds ?? 0) + Math.max(0, shift - lead) * speed, beat = Math.max(0, lead - shift) * bpm / 60;
+  return source || beat ? { ...rest, anchors: [{ source, beat }] } : rest;
+}
 export const ProjectV3Schema = LegacyProjectSchema.omit({ code: true, anchors: true, version: true }).extend({
   sessionId: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/).refine(name => name !== 'recovery').optional(),
   version: z.literal(3), tabs: z.array(TabSchema).min(1).max(50), activeTabId: id,
   soloTrackId: tabId.optional(), tracks: z.array(TrackSchema).min(1).max(16), snap: z.union([z.literal(1), z.literal(.5), z.literal(.25)]),
-  clips: z.array(ClipSchema).max(500), bpm: z.number().min(20).max(300),
+  clips: z.array(LegacyClipSchema).max(500), bpm: z.number().min(20).max(300),
 }).superRefine((p, ctx) => {
   const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
   const tabs = new Set(p.tabs.map(t => t.id)), tracks = new Set(p.tracks.map(t => t.id));
@@ -114,7 +129,12 @@ export const ProjectV7Schema = z.object({ ...ProjectV6Schema.shape, version: z.l
   if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
   if (p.tabs.some(t => t.audioAssetId && t.tempoBpm !== undefined)) ctx.addIssue({ code: 'custom', message: 'Recorded audio keeps its natural rate; remove its pattern tempo override.' });
 });
-export type Project = z.infer<typeof ProjectV7Schema>;
+export const ProjectV8Schema = z.object({ ...ProjectV7Schema.shape, version: z.literal(8), clips: z.array(ClipSchema).max(500) }).superRefine((p, ctx) => {
+  const result = ProjectV7Schema.safeParse({ ...p, version: 7 });
+  if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
+  if (p.clips.some(c => c.anchors && !c.takeId)) ctx.addIssue({ code: 'custom', message: 'Only audio clips carry anchors' });
+});
+export type Project = z.infer<typeof ProjectV8Schema>;
 
 const migrateV2 = (p: z.infer<typeof ProjectV2Schema>) => ({ ...p, version: 3 as const, tracks: defaultTracks(), snap: 1 as const,
   tabs: p.tabs.map((t, i) => ({ ...t, color: palette[i % palette.length] })),
@@ -125,16 +145,17 @@ const OlderProjectSchema = z.union([ProjectV3Schema, ProjectV2Schema.transform(m
   bindings: p.bindings.map(b => b.target.kind === 'slider' ? { ...b, target: { ...b.target, tabId: 'pattern-1' } } : b),
 }))]).pipe(ProjectV3Schema);
 const PreviousProjectSchema = z.union([ProjectV5Schema, ProjectV4Schema.transform(p => ({ ...p, version: 5 as const })), OlderProjectSchema.transform(p => ({ ...p, version: 5 as const, assetIds: [] as string[] }))]);
-export const ProjectSchema = z.union([ProjectV7Schema, z.union([ProjectV6Schema, PreviousProjectSchema]).transform(p => ({ ...p, version: 7 as const }))]).transform((p, ctx) => {
-  const result = ProjectV7Schema.safeParse(p);
+const migrateV7 = (p: z.infer<typeof ProjectV7Schema>) => ({ ...p, version: 8 as const, clips: p.clips.map(c => migrateClip(c, p.bpm)) });
+export const ProjectSchema = z.union([ProjectV8Schema, z.union([ProjectV7Schema, z.union([ProjectV6Schema, PreviousProjectSchema]).transform(p => ({ ...p, version: 7 as const }))]).transform(migrateV7)]).transform((p, ctx) => {
+  const result = ProjectV8Schema.safeParse(p);
   if (result.success) return result.data;
   for (const issue of result.error.issues) ctx.addIssue({ code: 'custom', message: issue.message, path: issue.path });
   return z.NEVER;
 });
-export const PROJECT_FORMAT = 7;
+export const PROJECT_FORMAT = 8;
 /** Why a project payload was rejected, with field paths from the schema that matches its declared version instead of the union's generic message. */
 export function describeProjectIssues(value: unknown) {
-  const schema = (value as { version?: unknown } | null)?.version === 7 ? ProjectV7Schema : (value as { version?: unknown } | null)?.version === 6 ? ProjectV6Schema : (value as { version?: unknown } | null)?.version === 4 ? ProjectV4Schema : ProjectV5Schema;
+  const schema = (value as { version?: unknown } | null)?.version === 8 ? ProjectV8Schema : (value as { version?: unknown } | null)?.version === 7 ? ProjectV7Schema : (value as { version?: unknown } | null)?.version === 6 ? ProjectV6Schema : (value as { version?: unknown } | null)?.version === 4 ? ProjectV4Schema : ProjectV5Schema;
   const result = schema.safeParse(value);
   if (result.success) return 'Project format rejected';
   const seen = new Set<string>();
@@ -153,7 +174,7 @@ export type Job = { id: string; state: 'running' | 'complete' | 'failed'; asset?
 
 export const defaultCode = `// Click slider() and choose Bind MIDI control.\nsetCpm(120/4)\n\n$beat: note("c2*4").s("triangle")\n  .decay(0.12).sustain(0)\n  .gain(slider(0.45, 0, 1, 0.01))\n\n$bass: note("<a2 f2 c3 g2>")\n  .s("sawtooth")\n  .lpf(slider(900, 100, 6000, 10))\n  .gain(0.18)\n\n// Open Sample library to import and insert a sample.\n`;
 export function newProject(): Project {
-  return { version: 7, assetIds: [], tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
+  return { version: 8, assetIds: [], tracks: defaultTracks(), snap: 1, name: 'Untitled project', tabs: [{ id: 'pattern-1', name: 'Pattern 1', code: defaultCode, anchors: [], color: 'blue' }], activeTabId: 'pattern-1', clips: [], bpm: 120, bindings: [],
     profiles: [ { id: 'virtual', name: 'Virtual controller', port: 'studio:virtual', enabled: true },
       { id: 'external', name: 'External MIDI input', port: 'studio:input', enabled: true } ],
     slots: [{ name: 'bass', assets: [], active: null }],

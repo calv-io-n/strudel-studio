@@ -55,8 +55,8 @@ export function paintCaptureFeedback(views: CaptureView[], editors: Map<string, 
     const lane = document.querySelector<HTMLElement>(`[data-track-id="${view.trackId}"]`); if (!lane) continue;
     let region = lane.querySelector<HTMLElement>(`[data-pending-region="${view.tabId}"]`);
     if (!region) { region = document.createElement('div'); region.className = 'clip pending-region'; region.dataset.pendingRegion = region.dataset.pendingFor = view.tabId; if (view.kind === 'new-pattern') region.id = 'recording-clip'; lane.append(region); }
-    const rows = view.kind === 'new-pattern' ? Math.max(1, Math.ceil((parseFloat(lane.style.height) || 60) / 60)) : 0;
-    if (rows) { region.style.top = `${4 + rows * 60}px`; lane.style.minHeight = `${(rows + 1) * 60}px`; }
+    const rows = view.kind === 'new-pattern' ? Math.max(1, Math.ceil((parseFloat(lane.style.height) || 84) / 84)) : 0;
+    if (rows) { region.style.top = `${4 + rows * 84}px`; lane.style.minHeight = `${(rows + 1) * 84}px`; }
     region.style.left = `${view.start * 64}px`; region.style.width = `${Math.max(.25, (view.end ?? view.start) - view.start) * 64}px`;
     if (region.textContent !== view.label) region.textContent = view.label;
   }

@@ -13,7 +13,7 @@ async function setup(page: Page) {
   await page.goto('/'); await expect(page.locator('#saved-projects')).toHaveValue('Neon-Drive'); await page.locator('[data-play-target=tab]').click();
   await page.locator('#palette-open').click(); await page.locator('#command-palette input').fill('MIDI & on-screen controller'); await page.keyboard.press('Enter');
   await page.locator('#midi-settings-connection [data-midi-enable]').click(); await expect(page.locator('#midi-settings-connection [data-midi-status]')).toContainText('MIDI ·'); await page.keyboard.press('Escape');
-  await page.getByRole('tab',{name:'Lead',exact:true}).click();
+  await page.getByRole('tab',{name:'Lead',exact:true}).click(); await page.locator('[data-play-target=tab]').click();
   await page.locator('#save-now').click(); await expect(page.locator('#saved-state')).toHaveText('Saved in this browser');
 }
 async function saved(page:Page) { return page.evaluate(async()=> {const db=await new Promise<IDBDatabase>(resolve=>{const r=indexedDB.open('strudel-studio');r.onsuccess=()=>resolve(r.result);});return new Promise<any>(resolve=>{const r=db.transaction('projects').objectStore('projects').get('Neon-Drive');r.onsuccess=()=>{resolve(r.result);db.close();};});});}

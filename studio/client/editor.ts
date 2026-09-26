@@ -1,3 +1,4 @@
+import { soundBindings } from '../shared/sound-bindings';
 import { highlightingFor } from '@codemirror/language';
 import { highlightCode } from '@lezer/highlight';
 import type { CaptureView } from '../shared/capture-state';
@@ -211,6 +212,10 @@ export class StudioEditor {
       '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': { background: 'var(--sel)' },
     })])] });
     this.view.dispatch({ effects: StateEffect.appendConfig.of([this.destinationField, cueField, EditorStateFilter, this.editLock.of(EditorState.readOnly.of(false))]) });
+    const soundDescription=(name:string)=>{try{return callbacks.sounds().find(s=>s.name===name)?.label??name;}catch{return name;}};
+    const soundMarks = (state: EditorState) => Decoration.set(soundBindings(state.doc.toString()).flatMap(binding => binding.references.map(ref => Decoration.mark({class:'chop-reference', attributes:{'data-chop-reference':binding.id, title:`${binding.label} · ${soundDescription(binding.sound)} · choose sound`, role:'button', tabindex:'0', 'aria-label':`Choose sound for ${binding.label}`}}).range(ref.from,ref.to))),true);
+    this.view.dispatch({effects:StateEffect.appendConfig.of(StateField.define<DecorationSet>({create:soundMarks,update:(marks,tr)=>tr.docChanged?soundMarks(tr.state):marks,provide:field=>EditorView.decorations.from(field)}))});
+
     this.onSelect = callbacks.select;
   }
   setAppearance(dark: boolean) {
